@@ -1,0 +1,320 @@
+<template>
+  <main class="step3-layout">
+    <!-- YouTube Popup -->
+    <div v-if="showVideoPopup" class="video-popup-overlay" @click="closeVideoPopup">
+      <div class="video-popup-container" @click.stop>
+        <iframe width="100%" height="100%" :src="'https://www.youtube.com/embed/' + videoId + '?autoplay=1'"
+          frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture;"
+          allowfullscreen>
+        </iframe>
+        <button class="close-btn" @click="closeVideoPopup">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="head-section">
+      <ProgressBar :startColor="[51, 27, 39]" :endColor="[222, 20, 86]" :items="items" :with_transition="true"
+        type="percent" :percent="currentStep / (steps.length) * 100" />
+      <div class="top-line">
+        <div class="p">{{ sectionTitle }}</div>
+        <img
+          v-if="topLineImage"
+          :src="topLineImage"
+          alt="Top line image"
+          @error="handleImageError"
+        >
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main">
+      <div class="content-songs">
+        <div class="bg-image">
+          <div class="image-blur"></div>
+        </div>
+        <div class="content">
+         <slot :active-tab="activeTab"></slot> 
+        </div>
+      </div>
+
+      <div class="column2">
+        <div class="video" @click="openVideoPopup">
+          <div class="youtube">
+            <img src="@/assets/icons/Play.png" alt="YouTube Play Icon">
+          </div>
+        </div>
+        <Tabs class="tabs" :active-tab="activeTab" @update-tab="$emit('update-tab', $event)" @back="$emit('back')" />
+      </div>
+    </div>
+  </main>
+</template>
+
+<script setup>
+import { ref, computed } from 'vue';
+import ProgressBar from '@/zoundr/components/ProgressBar.vue';
+import Tabs from '@/components/uploadPngSteps/Upload2/tabs.vue';
+
+// YouTube Popup functionality
+const showVideoPopup = ref(false);
+const videoId = ref('WPni755-Krg');
+
+const openVideoPopup = () => {
+  showVideoPopup.value = true;
+  document.body.style.overflow = 'hidden';
+};
+
+const closeVideoPopup = () => {
+  showVideoPopup.value = false;
+  document.body.style.overflow = '';
+};
+
+// Props
+const props = defineProps({
+  currentStep: { type: Number, required: true },
+  steps: { type: Array, default: () => ['0', '1', '2', '3', '4'] },
+  sectionTitle: { type: [String, Object], default: 'Dein Neue Single' },
+  topLineImage: { type: [String, null], default: null },
+  activeTab: { type: String, default: 'infos' },
+});
+
+// Emits
+const emit = defineEmits(['back', 'update-tab']);
+
+// Items for ProgressBar
+const items = computed(() => {
+  return props.steps.map((_, index) => ({
+    id: index,
+    completed: index < props.currentStep,
+  }));
+});
+
+// Handle image load error
+const handleImageError = (event) => {
+  console.error('Image failed to load:', event.target.src);
+  event.target.src = '/icons/top-line/lossless.png';
+};
+</script>
+
+<style lang="scss" scoped>
+.step3-layout {
+  display: flex;
+  flex-direction: column;
+  background-color: #1B1C20;
+  height: calc(100dvh - 71px - 50px);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* YouTube Popup Styles */
+.video-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.video-popup-container {
+  position: relative;
+  width: 80%;
+  max-width: 1000px;
+  aspect-ratio: 16/9;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.video-popup-container iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.close-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--Strawberry, #DE1456);
+}
+
+.close-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Head Section */
+.head-section {
+  display: flex;
+  width: 100%;
+  padding: 20px 30px 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.top-line {
+  display: flex;
+  height: 14px;
+  justify-content: space-between;
+  align-items: center;
+  align-self: stretch;
+}
+
+.top-line .p {
+  color: #FFF;
+  font-family: Heebo;
+  font-size: 20px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.top-line img {
+  width: 33px;
+  height: 32px;
+  display: block;
+}
+
+/* Main Content */
+.main {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  padding: 0 30px 52px;
+  gap: 0;
+}
+
+.content-songs {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1 0 0;
+  border-radius: 20px;
+  position: relative;
+  height: 100%;
+  background: #26282D;
+  overflow: hidden;
+}
+
+.bg-image {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  aspect-ratio: 1/1;
+  background: url('@/assets/images/bg-img.png') lightgray 50% / cover no-repeat;
+}
+
+.bg-image .image-blur {
+  flex: 1 0 0;
+  align-self: stretch;
+  background: rgba(38, 40, 45, 0.80);
+  backdrop-filter: blur(10px);
+}
+
+.content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 20px;
+}
+
+.column2 {
+  display: flex;
+  width: 240px;
+  height: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  flex-shrink: 0;
+}
+
+.column2 .video {
+  display: flex;
+  height: 143px;
+  padding: 0 0 20px 20px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+  flex-shrink: 0;
+  align-self: stretch;
+  aspect-ratio: 240/143;
+}
+
+.video .youtube {
+  display: flex;
+  width: 220px;
+  height: 123px;
+  padding: 39px 83px;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  aspect-ratio: 220/123;
+  border-radius: 20px;
+  background: var(--Main-Colors-Slate, #26282D);
+  cursor: pointer;
+}
+
+.video .youtube:hover {
+  transition: 0.3s ease;
+  border: 1px solid var(--move);
+}
+
+.video .youtube:hover img {
+  filter: brightness(0) invert(1);
+}
+
+.tabs {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1 0 0;
+  align-self: stretch;
+}
+</style>

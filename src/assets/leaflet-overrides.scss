@@ -1,0 +1,8 @@
+// src/assets/leaflet-overrides.scss
+@import 'leaflet/dist/leaflet.css';
+
+/* أي تعديلات إضافية على Leaflet إذا أردت */
+.leaflet-container {
+  font-size: 14px;
+  /* أي تخصيصات أخرى */
+}

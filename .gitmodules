@@ -1,0 +1,3 @@
+[submodule "src/zoundr"]
+	path = src/zoundr
+	url = git@gitlab.com:zoundr/lib.git

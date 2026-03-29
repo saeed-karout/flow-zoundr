@@ -1,0 +1,118 @@
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans&display=swap');
+
+*{
+    box-sizing: border-box;
+ 
+}
+ :root {
+      --primary: #1B1C20;
+      --secondary: #26282D;
+      --move: #DE1456;
+      --selvar: #6A6C6D;
+      --icon: #3A3E42;
+      --dark-red:#990033;
+      --Strawberry:#D15;
+
+      --Main-Colors-Slate: #26282D;
+  --Main-Colors-Slate-Dark: #1B1C20;
+  --Main-Colors-Dove: #6A6C6D;
+  --Main-Colors-Slate-Light: #3A3E42;
+      
+    }
+body{
+    margin: 0;
+    background: #1B1C20;
+    font-family: 'Heebo';
+    scrollbar-width: none;
+}
+html{
+    scrollbar-width: none;
+}
+p, h3{
+    margin: 0;
+}
+a{
+    text-decoration: none;
+}
+
+.weight-7{
+    font-weight: 700;
+}
+
+@font-face {
+    font-family: 'zoundr-zicons';
+    src: url('@/zoundr/assets/fonts/zoundr-zicons.ttf');
+}
+
+@font-face {
+    font-family: 'Heebo';
+    src: url('@/zoundr/assets/fonts/Heebo-Thin.ttf');
+    font-weight: 100;
+}
+@font-face {
+    font-family: 'Heebo';
+    src: url('@/zoundr/assets/fonts/Heebo-ExtraLight.ttf');
+    font-weight: 200;
+}
+@font-face {
+    font-family: 'Heebo';
+    src: url('@/zoundr/assets/fonts/Heebo-Light.ttf');
+    font-weight: 300;
+}
+@font-face {
+    font-family: 'Heebo';
+    src: url('@/zoundr/assets/fonts/Heebo-Regular.ttf');
+    font-weight: 400;
+}
+@font-face {
+    font-family: 'Heebo';
+    src: url('@/zoundr/assets/fonts/Heebo-Medium.ttf');
+    font-weight: 500;
+}
+@font-face {
+    font-family: 'Heebo';
+    src: url('@/zoundr/assets/fonts/Heebo-SemiBold.ttf');
+    font-weight: 600;
+}
+@font-face {
+    font-family: 'Heebo';
+    src: url('@/zoundr/assets/fonts/Heebo-Bold.ttf');
+    font-weight: 700;
+}
+@font-face {
+    font-family: 'Heebo';
+    src: url('@/zoundr/assets/fonts/Heebo-ExtraBold.ttf');
+    font-weight: 800;
+}
+@font-face {
+    font-family: 'Heebo';
+    src: url('@/zoundr/assets/fonts/Heebo-Black.ttf');
+    font-weight: 900;
+}
+
+.primary-btn , .secondary-btn {
+    font: normal normal 400 16px/15px Heebo;
+    text-transform: uppercase;
+    letter-spacing: 0px;
+    color: #FFF!important;
+    border:none;
+    border-radius: 5px;
+    padding: 11px 20px 10px 20px;
+    text-decoration: none;
+    text-align: center;
+
+    &:hover {
+        background-color: #990033;
+    }
+    &:disabled {
+        background-color: #6a6c6d!important
+    }
+}
+
+.primary-btn {
+    background-color: #DD1155;
+}
+
+.secondary-btn {
+    background-color: #3A3E42;
+}
