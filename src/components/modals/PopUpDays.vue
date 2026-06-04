@@ -1,16 +1,15 @@
-```vue
 <template>
   <div v-if="showPopup" class="popup-overlay">
     <div class="popup">
       <div class="top-line">
-        <div class="title">Dein Release Datum ist {{ selectedDate }}!</div>
+        <div class="title">Dein Release Datum ist {{ formatGermanDate(selectedDate) }}!</div>
         <div class="subtitle">Das sind nur {{ daysDifference }} {{ daysDifference === 1 ? 'Tag' : 'Tage' }}!</div>
         <div class="description">
           Bitte beachte, dass wir aufgrund der Store Guidelines in Text, Audio und Cover nicht garantieren
           können, dass Dein Release zu diesem Datum in jedem Store verfügbar sein wird.
         </div>
         <div class="p">Wir empfehlen Dir, Dein Releasedatum auf <br>
-          <span>{{ recommendedDate }}</span> zu ändern (mindestens 14 Tage ab heute).
+          <span>{{ formatGermanDate(recommendedDate) }}</span> zu ändern.
         </div>
       </div>
       <div class="buttons">
@@ -26,7 +25,7 @@
 </template>
 
 <script setup>
-defineProps({
+const props = defineProps({
   showPopup: { type: Boolean, required: true },
   selectedDate: { type: String, required: true },
   recommendedDate: { type: String, required: true },
@@ -34,6 +33,50 @@ defineProps({
 });
 
 defineEmits(['update-date', 'close']);
+
+// دالة لتنسيق التاريخ بالصيغة الألمانية (DD.MM.YYYY)
+const formatGermanDate = (dateString) => {
+  if (!dateString) return '';
+  
+  // إذا كان التاريخ بالفعل بصيغة string
+  let date;
+  
+  // التعامل مع صيغ مختلفة من التواريخ
+  if (dateString.includes('-')) {
+    // صيغة YYYY-MM-DD
+    date = new Date(dateString);
+  } else if (dateString.includes('/')) {
+    // صيغة DD/MM/YY أو YY/MM/DD
+    const parts = dateString.split('/');
+    if (parts[0].length === 4) {
+      // صيغة YYYY/MM/DD
+      date = new Date(parts[0], parts[1] - 1, parts[2]);
+    } else {
+      // صيغة DD/MM/YY
+      const year = 2000 + parseInt(parts[2]);
+      date = new Date(year, parts[1] - 1, parts[0]);
+    }
+  } else if (dateString.includes('.')) {
+    // صيغة DD.MM.YYYY
+    const parts = dateString.split('.');
+    date = new Date(parts[2], parts[1] - 1, parts[0]);
+  } else {
+    // محاولة تحويل مباشر
+    date = new Date(dateString);
+  }
+  
+  // تحقق إذا كان التاريخ صالح
+  if (isNaN(date.getTime())) {
+    return dateString; // أرجع النص الأصلي إذا فشل التحويل
+  }
+  
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const year = date.getFullYear();
+  
+  // صيغة ألمانية: DD.MM.YYYY
+  return `${day}.${month}.${year}`;
+};
 </script>
 
 <style lang="scss" scoped>
@@ -52,7 +95,7 @@ defineEmits(['update-date', 'close']);
 
 .popup {
   display: flex;
-  width: 560px;
+  width: 580px;
   padding: 52px 32px 40px 32px;
   flex-direction: column;
   align-items: flex-end;
@@ -79,7 +122,7 @@ defineEmits(['update-date', 'close']);
   font-size: 28px;
   font-style: normal;
   font-weight: 700;
-  line-height: 1;
+  line-height: .7;
   text-transform: uppercase;
 }
 
@@ -90,7 +133,7 @@ defineEmits(['update-date', 'close']);
   font-size: 28px;
   font-style: normal;
   font-weight: 700;
-  line-height: 1;
+  line-height: .7;
   text-transform: uppercase;
 }
 
@@ -102,7 +145,7 @@ defineEmits(['update-date', 'close']);
   font-size: 18px;
   font-style: normal;
   font-weight: 300;
-  line-height: 130%;
+  line-height: 1.2;
 }
 
 .p {
@@ -113,7 +156,7 @@ defineEmits(['update-date', 'close']);
   font-size: 18px;
   font-style: normal;
   font-weight: 700;
-  line-height: 130%;
+  line-height: 1.2;
 }
 
 .p span {
@@ -122,7 +165,7 @@ defineEmits(['update-date', 'close']);
   font-size: 18px;
   font-style: normal;
   font-weight: 700;
-  line-height: 1;
+  line-height: .7;
 }
 
 .buttons {
@@ -151,7 +194,7 @@ defineEmits(['update-date', 'close']);
   font-size: 16px;
   font-style: normal;
   font-weight: 400;
-  line-height: 1;
+  line-height: .7;
   text-transform: uppercase;
 }
 
@@ -173,7 +216,7 @@ defineEmits(['update-date', 'close']);
   font-size: 16px;
   font-style: normal;
   font-weight: 400;
-  line-height: 1;
+  line-height: .7;
   text-transform: uppercase;
 }
 
@@ -183,4 +226,3 @@ defineEmits(['update-date', 'close']);
   background: var(--dark-red);
 }
 </style>
-```

@@ -52,6 +52,7 @@
             :active-tab="activeTab"
             :server-cover-url="serverCoverUrl"
             :release-uuid="releaseStore.currentReleaseId"
+            :selected-date="selectedDate"
             @next="nextStep"
             @release-created="handleReleaseCreated"
             @cover-updated="handleCoverUpdated"
@@ -75,6 +76,7 @@
           :section-title="sectionTitle"
           :restrict-overflow="true"
           :showNewRight2="showNewRight2"
+          
           :current-view="currentView"
           :topLineImage="topLineImage"
           :server-cover-url="serverCoverUrl"
@@ -100,6 +102,7 @@
             :active-tab="activeTab"
             :server-cover-url="serverCoverUrl"
             :release-uuid="releaseStore.currentReleaseId"
+            :selected-date="selectedDate"
             @next="nextStep"
             @release-created="handleReleaseCreated"
             @cover-updated="handleCoverUpdated"
@@ -124,6 +127,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useReleaseStore } from '@/stores/release';
 import apiRequest from '@/lib/apiRequest';
 import { storage_url } from '@/constants';
+import dayjs from 'dayjs';
 
 import StepLayout from '@/components/layouts/Layout-releases.vue';
 import Upload2Layout from '@/components/layouts/PreReleaseLayout.vue';
@@ -168,39 +172,32 @@ const draftRelease = ref(null);
 const serverCoverUrl = ref(null);
 const showPupUpStart = ref(false);
 const releaseUuidFromUrl = ref(null);
+const selectedDate = ref(null); // إضافة selectedDate
 
 // ========== TITLE TRACKING ==========
-// متغير لتتبع العنوان الحالي
 const currentTitle = ref(props.title || '');
 const previousBaseTitle = ref('');
 
-// دالة معالجة تحديث العنوان
 const handleTitleUpdate = (newTitle) => {
   console.log('📝 تحديث العنوان:', newTitle);
   currentTitle.value = newTitle;
   
-  // تحديث draftRelease إذا كان موجوداً
   if (draftRelease.value) {
     draftRelease.value.title = newTitle;
   }
   
-  // إرسال الحدث للأعلى
   emit('update:title', newTitle);
 };
 
-// معالجة حدث release-updated
 const handleReleaseUpdated = (data) => {
   console.log('📦 UploadPNG: استقبال حدث release-updated:', data);
   
-  // تحديث draftRelease بالبيانات الجديدة
   if (data?.data && draftRelease.value) {
-    // دمج البيانات الجديدة مع القديمة
     draftRelease.value = {
       ...draftRelease.value,
       ...data.data
     };
     
-    // تحديث currentTitle إذا كان العنوان موجوداً في البيانات
     if (data.data.title) {
       currentTitle.value = data.data.title;
       console.log('📝 تحديث currentTitle من release-updated:', data.data.title);
@@ -210,7 +207,6 @@ const handleReleaseUpdated = (data) => {
   }
 };
 
-// Title mapping
 const titleMap = {
   single: 'DEINE NEUE SINGLE',
   'extended player': 'DEINE NEUE EP',
@@ -219,41 +215,29 @@ const titleMap = {
 
 const stepSuffixes = {
   0: '',
-  1: ' – Metas',
+  1: ' ',
   2: ' – Metas',
   3: ' – Songs',
   4: ' – Shops',
   5: ' – Publish',
 };
 
-// ========== COMPUTED SECTION TITLE ==========
 const sectionTitle = computed(() => {
   let baseTitle = '';
   
-  // في الخطوة 3 (صفحة الأغاني)، نعرض عنوان الأغنية إذا كان موجوداً
   if (currentStep.value === 3) {
-    // محاولة الحصول على عنوان الأغنية من عدة مصادر
     const songTitle = releaseStore.currentSongTitle || 
                      (draftRelease.value?.songs?.[0]?.title) || 
                      'NEUER SONG';
     baseTitle = songTitle;
-    
-    // للتشخيص
-    if (baseTitle !== previousBaseTitle.value) {
-      console.log('🎵 الخطوة 3 - عرض عنوان الأغنية:', baseTitle);
-    }
   } 
-  // في باقي الخطوات، نعرض عنوان الـ Release
   else {
-    // استخدام currentTitle أولاً
     baseTitle = currentTitle.value?.trim();
     
-    // إذا لم يكن currentTitle موجوداً، استخدم draftRelease.title
     if (!baseTitle && draftRelease.value?.title) {
       baseTitle = draftRelease.value.title.trim();
     }
     
-    // إذا لم يكن موجوداً، استخدم العنوان الافتراضي
     if (!baseTitle) {
       baseTitle = titleMap[releaseStore.releaseType] || 'DEINE NEUE SINGLE';
     }
@@ -262,7 +246,6 @@ const sectionTitle = computed(() => {
   const suffix = stepSuffixes[currentStep.value] || '';
   const fullTitle = baseTitle + suffix;
   
-  // للتشخيص - سجل فقط عندما يتغير baseTitle
   if (baseTitle !== previousBaseTitle.value) {
     console.log('📋 sectionTitle recomputed:', {
       step: currentStep.value,
@@ -276,16 +259,18 @@ const sectionTitle = computed(() => {
   
   return fullTitle;
 });
-// ============================================
 
 // ========== READ STEP FROM QUERY ==========
-// قراءة step من query parameters عند التحميل
 onMounted(async () => {
   console.log('🚀 UploadPNG mounted, route path:', route.path);
   console.log('📍 route.query:', route.query);
   console.log('📍 route.params:', route.params);
   
-  // قراءة step من query parameters
+  setTimeout(() => {
+    showPupUpStart.value = true;
+    console.log('🎉 تم فتح PupUpStart');
+  }, 500);
+  
   const stepParam = route.query.step;
   if (stepParam) {
     const parsedStep = parseInt(stepParam);
@@ -295,19 +280,16 @@ onMounted(async () => {
     }
   }
   
-  // إذا كان هناك songUuid، تأكد أن currentStep = 3
   const hasSongUuid = !!(props.songUuid || route.params.songUuid || route.query.song);
   if (hasSongUuid) {
     console.log('🎵 يوجد songUuid، تعيين currentStep إلى 3');
     currentStep.value = 3;
   }
   
-  // ========== PROVIDE ==========
   provide('nextStep', nextStep);
   provide('currentStep', currentStep);
-  provide('updateTitle', handleTitleUpdate); // توفير دالة تحديث العنوان
+  provide('updateTitle', handleTitleUpdate);
   console.log('📢 [UploadPNG] nextStep provided to children');
-  // =============================
   
   if (route.path === '/create-release' && !props.releaseUuid && !releaseUuidFromUrl.value) {
     console.log('📋 مسار /create-release فقط - عرض اختيار نوع الـ Release');
@@ -329,7 +311,6 @@ onMounted(async () => {
     extractReleaseUuidFromUrl();
   }
   
-  // لا تعيد تعيين currentStep إذا كان هناك songUuid
   if (!hasSongUuid) {
     currentStep.value = props.currentStep || 1;
   }
@@ -378,12 +359,10 @@ const nextStep = async () => {
     currentStep.value += 1;
     console.log('📢 [UploadPNG] Step increased from', oldStep, 'to', currentStep.value);
     
-    // إذا كنا ننتقل من الخطوة 3، امسح عنوان الأغنية
     if (oldStep === 3 && currentStep.value === 4) {
       releaseStore.clearSongUuid();
     }
     
-    // إرسال الحدث للأعلى أيضاً
     emit('next');
     
     await nextTick();
@@ -396,7 +375,6 @@ const nextStep = async () => {
     return false;
   }
 };
-// ========================================
 
 const useSubLayout = computed(() => isInSubLayoutMode.value);
 
@@ -408,7 +386,6 @@ const currentComponent = computed(() => {
   return getComponentByStep(currentStep.value);
 });
 
-// Methods
 const getComponentByStep = (step) => {
   switch (step) {
     case 1: return UploadComponent;
@@ -420,7 +397,6 @@ const getComponentByStep = (step) => {
   }
 };
 
-// استخراج releaseUuid من الرابط
 const extractReleaseUuidFromUrl = () => {
   const pathParts = route.path.split('/');
   const releaseIndex = pathParts.indexOf('releases');
@@ -444,6 +420,51 @@ const extractReleaseUuidFromUrl = () => {
   return false;
 };
 
+// دالة مساعدة لملء البيانات
+const fillReleaseData = (release) => {
+  releaseUuid.value = release.uuid;
+  releaseStore.setReleaseType(release.release_type);
+  releaseStore.setCurrentReleaseId(release.uuid);
+
+  const isNewRelease = route.query.new === 'true';
+  
+  if (!isNewRelease) {
+    searchQuery2.value = release.title || '';
+    searchQuery3.value = release.subtitle || '';
+    
+    // تعيين selectedDate
+    selectedDate.value = release.release_date 
+      ? dayjs(release.release_date).format('DD/MM/YY') 
+      : null;
+    console.log('📅 UploadPNG: تم تعيين selectedDate:', selectedDate.value);
+    
+    releasePrice.value = release.release_price || '';
+    songPrice.value = release.price_per_song || '';
+    mainGenre.value = release.main_genre || '';
+    subGenre.value = release.sub_genre || '';
+    labelName.value = release.label || '';
+    productionYear.value = release.production_year || '';
+    cLineYear.value = release.c_line_year || '';
+    cLineName.value = release.c_line_name || '';
+    pLineYear.value = release.p_line_year || '';
+    pLineName.value = release.p_line_name || '';
+    gtin.value = release.GTIN || '';
+    catalogNumber.value = release.catalog_number || '';
+    
+    console.log('📝 تم ملء البيانات من المسودة:', release.uuid);
+  } else {
+    console.log('🆕 Release جديد، لا نقوم بملء البيانات القديمة');
+    resetAllFields();
+  }
+
+  if (release.cover) {
+    serverCoverUrl.value = `${storage_url}/${release.cover}`;
+    localUploadedImage.value = serverCoverUrl.value;
+  }
+
+  console.log('تم استرجاع المسودة. UUID:', releaseUuid.value);
+};
+
 // دالة جلب المسودة - معدلة
 const fetchRelease = async () => {
   isLoadingDraft.value = true;
@@ -458,17 +479,14 @@ const fetchRelease = async () => {
         releaseStore.setReleaseType(release.release_type);
         releaseStore.setCurrentReleaseId(release.uuid);
         
-        // تحديث currentTitle
         if (release.title) {
           currentTitle.value = release.title;
         }
         
-        // لا تغير currentStep إذا كان هناك songUuid
         const hasSongUuid = !!(props.songUuid || releaseStore.songUuid || route.query.song || route.params.songUuid);
         
         if (release.cover) {
           serverCoverUrl.value = `${storage_url}/${release.cover}`;
-          // فقط غير currentStep إلى 2 إذا لم يكن هناك songUuid
           if (!hasSongUuid && currentStep.value === 1) {
             currentStep.value = 2;
           }
@@ -479,6 +497,13 @@ const fetchRelease = async () => {
         }
         
         showTypeSelection.value = false;
+        
+        // تعيين selectedDate
+        selectedDate.value = release.release_date 
+          ? dayjs(release.release_date).format('DD/MM/YY') 
+          : null;
+        console.log('📅 UploadPNG: تم تعيين selectedDate من props:', selectedDate.value);
+        
         console.log('✅ تم تحميل Release من props:', release.uuid);
       }
       return;
@@ -494,17 +519,14 @@ const fetchRelease = async () => {
         releaseStore.setReleaseType(release.release_type);
         releaseStore.setCurrentReleaseId(release.uuid);
         
-        // تحديث currentTitle
         if (release.title) {
           currentTitle.value = release.title;
         }
         
-        // لا تغير currentStep إذا كان هناك songUuid
         const hasSongUuid = !!(props.songUuid || releaseStore.songUuid || route.query.song || route.params.songUuid);
         
         if (release.cover) {
           serverCoverUrl.value = `${storage_url}/${release.cover}`;
-          // فقط غير currentStep إلى 2 إذا لم يكن هناك songUuid
           if (!hasSongUuid && currentStep.value === 1) {
             currentStep.value = 2;
           }
@@ -515,6 +537,13 @@ const fetchRelease = async () => {
         }
         
         showTypeSelection.value = false;
+        
+        // تعيين selectedDate
+        selectedDate.value = release.release_date 
+          ? dayjs(release.release_date).format('DD/MM/YY') 
+          : null;
+        console.log('📅 UploadPNG: تم تعيين selectedDate من الرابط:', selectedDate.value);
+        
         console.log('✅ تم تحميل Release من الرابط:', release.uuid);
       }
       return;
@@ -552,14 +581,12 @@ const fetchRelease = async () => {
       releaseStore.setReleaseType(latestDraft.release_type);
       releaseStore.setCurrentReleaseId(latestDraft.uuid);
       
-      // تحديث currentTitle
       if (latestDraft.title) {
         currentTitle.value = latestDraft.title;
       }
       
       console.log('✅ تم تحميل آخر مسودة:', latestDraft.uuid);
       
-      // لا تغير currentStep إذا كان هناك songUuid
       const hasSongUuid = !!(props.songUuid || releaseStore.songUuid || route.query.song || route.params.songUuid);
       
       if (latestDraft.cover) {
@@ -573,6 +600,12 @@ const fetchRelease = async () => {
         }
       }
       
+      // تعيين selectedDate
+      selectedDate.value = latestDraft.release_date 
+        ? dayjs(latestDraft.release_date).format('DD/MM/YY') 
+        : null;
+      console.log('📅 UploadPNG: تم تعيين selectedDate من آخر مسودة:', selectedDate.value);
+      
       showTypeSelection.value = false;
     }
   } catch (err) {
@@ -582,39 +615,32 @@ const fetchRelease = async () => {
   }
 };
 
-// عند اختيار نوع الـ Release
 const selectReleaseType = (type) => {
   console.log('📌 تم اختيار نوع الـ Release:', type);
   releaseStore.setReleaseType(type);
   showTypeSelection.value = false;
 };
 
-// معالجة حدث release-created - معدلة
 const handleReleaseCreated = async (data) => {
   console.log('📦 UploadPNG: استقبال حدث release-created:', data);
   
   if (data?.releaseId) {
-    // تحديث الـ store
     releaseStore.currentReleaseId = data.releaseId;
     
-    // تحديث رابط الصورة إذا وجدت
     if (data.coverUrl) {
       serverCoverUrl.value = data.coverUrl;
     }
     
     console.log('🔗 تم تحديث releaseId:', data.releaseId);
     
-    // تحديث الرابط
     await router.replace(`/create-release/${data.releaseId}`);
     console.log('🔗 تم تحديث الرابط إلى:', `/create-release/${data.releaseId}`);
     
-    // تحديث draftRelease
     try {
       const response = await apiRequest.get(`/releases/${data.releaseId}`);
       if (response.data?.data) {
         draftRelease.value = response.data.data;
         
-        // تحديث currentTitle
         if (response.data.data.title) {
           currentTitle.value = response.data.data.title;
         }
@@ -625,20 +651,14 @@ const handleReleaseCreated = async (data) => {
       console.error('❌ فشل جلب تفاصيل الـ Release بعد الإنشاء:', err);
     }
     
-    // إخفاء شاشة اختيار النوع
     showTypeSelection.value = false;
     
-    // تغيير currentStep فقط إذا لم يكن هناك songUuid
     const hasSongUuid = !!(releaseStore.songUuid || props.songUuid || route.query.song || route.params.songUuid);
     
     if (!hasSongUuid) {
       console.log('🔄 تغيير currentStep من', currentStep.value, 'إلى 2');
       currentStep.value = 2;
-      
-      // إرسال حدث next للأب
       emit('next');
-      
-      // تحديث الواجهة
       await nextTick();
       console.log('✅ تم الانتقال إلى الخطوة 2, currentStep الآن:', currentStep.value);
     } else {
@@ -647,7 +667,6 @@ const handleReleaseCreated = async (data) => {
   }
 };
 
-// معالجة حدث cover-updated
 const handleCoverUpdated = (data) => {
   console.log('🖼️ UploadPNG: استقبال حدث cover-updated:', data);
   if (data?.coverUrl) {
@@ -670,6 +689,72 @@ const handleTabUpdate = (tabId) => activeTab.value = tabId;
 const closePupUpStart = () => {
   showPupUpStart.value = false;
   document.body.style.overflow = '';
+};
+
+// ========== إضافة المتغيرات المفقودة ==========
+const localUploadedImage = ref(null);
+const searchQuery2 = ref('');
+const searchQuery3 = ref('');
+const releasePrice = ref('');
+const songPrice = ref('');
+const mainGenre = ref('');
+const subGenre = ref('');
+const gtin = ref('');
+const catalogNumber = ref('');
+const labelName = ref('');
+const productionYear = ref('');
+const cLineYear = ref('');
+const cLineName = ref('');
+const pLineYear = ref('');
+const pLineName = ref('');
+const isForm2Selected = ref(false);
+const isForm3Selected = ref(false);
+const isForm4Selected = ref(false);
+const isReleasePriceSelected = ref(false);
+const isSongPriceSelected = ref(false);
+const isMainGenreSelected = ref(false);
+const isSubGenreSelected = ref(false);
+const isForm6Selected = ref(false);
+const isForm7Selected = ref(false);
+const isForm8Selected = ref(false);
+const isForm9Selected = ref(false);
+const isForm10Selected = ref(false);
+const isForm11Selected = ref(false);
+const isForm3Active = ref(false);
+const isForm6Active = ref(false);
+const isForm7Active = ref(false);
+const isSubGenreEnabled = ref(false);
+const daysDifference = ref(0);
+const showPopup = ref(false);
+
+const resetAllFields = () => {
+  searchQuery2.value = '';
+  searchQuery3.value = '';
+  selectedDate.value = null;
+  releasePrice.value = '';
+  songPrice.value = '';
+  mainGenre.value = '';
+  subGenre.value = '';
+  labelName.value = '';
+  productionYear.value = '';
+  cLineYear.value = '';
+  cLineName.value = '';
+  pLineYear.value = '';
+  pLineName.value = '';
+  gtin.value = '';
+  catalogNumber.value = '';
+  isForm2Selected.value = false;
+  isForm3Selected.value = false;
+  isForm4Selected.value = false;
+  isForm3Active.value = false;
+  isForm6Active.value = false;
+  isForm7Active.value = false;
+  isForm6Selected.value = false;
+  isForm7Selected.value = false;
+  isForm8Selected.value = false;
+  isForm9Selected.value = false;
+  isForm10Selected.value = false;
+  isForm11Selected.value = false;
 };
 
 // Watchers
@@ -776,11 +861,9 @@ watch(() => route.params.songUuid, (newSongUuid, oldSongUuid) => {
   }
 }, { immediate: true });
 
-// تعديل watcher لـ currentStep
 watch(() => currentStep.value, (newStep, oldStep) => {
   console.log('[UploadPNG] currentStep تغير من', oldStep, 'إلى', newStep);
   
-  // فقط امسح songUuid عندما ننتقل من 3 إلى 4
   if (newStep === 4 && oldStep === 3 && releaseStore.songUuid) {
     console.log('🗑️ مسح songUuid عند الانتقال من 3 إلى 4');
     releaseStore.clearSongUuid();
@@ -790,14 +873,12 @@ watch(() => currentStep.value, (newStep, oldStep) => {
     router.replace({ query: currentQuery });
   }
   
-  // إذا انتقلنا من 3 إلى 2 (وهذا لا يجب أن يحدث)، نحتاج للتحقق
   if (newStep === 2 && oldStep === 3 && releaseStore.songUuid) {
     console.log('⚠️ اكتشاف انتقال غير طبيعي من 3 إلى 2 مع وجود songUuid، إعادة التعيين إلى 3');
     currentStep.value = 3;
   }
 });
 
-// Watch for query.step changes
 watch(() => route.query.step, (newStep) => {
   if (newStep) {
     const parsedStep = parseInt(newStep);
@@ -808,13 +889,10 @@ watch(() => route.query.step, (newStep) => {
   }
 });
 
-// Watch for route.params changes
 watch(() => route.params, (newParams) => {
   console.log('📍 route.params تغير:', newParams);
 }, { deep: true });
 
-// ========== WATCHERS FOR TITLE ==========
-// مراقبة تغيير العنوان في draftRelease
 watch(() => draftRelease.value?.title, (newTitle) => {
   if (newTitle && newTitle !== currentTitle.value) {
     console.log('🔄 تحديث currentTitle من draftRelease.title:', newTitle);
@@ -822,7 +900,6 @@ watch(() => draftRelease.value?.title, (newTitle) => {
   }
 });
 
-// مراقبة تغيير props.title
 watch(() => props.title, (newTitle) => {
   if (newTitle !== currentTitle.value) {
     console.log('🔄 تحديث currentTitle من props:', newTitle);
@@ -830,16 +907,13 @@ watch(() => props.title, (newTitle) => {
   }
 });
 
-// مراقبة تغيير عنوان الأغنية في الـ store
 watch(() => releaseStore.currentSongTitle, (newTitle) => {
   if (newTitle && currentStep.value === 3) {
     console.log('🎵 تحديث عنوان الأغنية من store:', newTitle);
-    // force recompute of sectionTitle
     previousBaseTitle.value = '';
   }
 });
 
-// مراقبة تغييرات العنوان وإرسالها للأعلى
 watch(currentTitle, (newTitle, oldTitle) => {
   if (newTitle !== oldTitle) {
     console.log('📝 currentTitle تغير:', { old: oldTitle, new: newTitle });
@@ -847,17 +921,11 @@ watch(currentTitle, (newTitle, oldTitle) => {
   }
 });
 
-// راقب releaseStore.releaseType لتحديث sectionTitle
 watch(() => releaseStore.releaseType, () => {
   console.log('🔄 releaseType changed, forcing sectionTitle update');
-  previousBaseTitle.value = ''; // إعادة تعيين للتشخيص
+  previousBaseTitle.value = '';
 });
-// ========================================
 </script>
-
-
-
-
 
 <style lang="scss" scoped>
 .step-manager {

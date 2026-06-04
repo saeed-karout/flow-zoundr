@@ -369,7 +369,6 @@ watch(serverCoverUrl, (newUrl) => {
 });
 </script>
 
-<!-- باقي الـ style كما هو -->
 
 <style lang="scss" scoped>
 /* نفس الـ style الموجود في الكود الأصلي */

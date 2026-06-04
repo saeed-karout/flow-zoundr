@@ -24,11 +24,13 @@
     </div>
 
     <div class="main" :class="{ 
-      'full-height': showNewRight2 || showFinalPage || isUpload3Active, 
+      'full-height': (showNewRight2 || showFinalPage || isUpload3Active) && currentStep !== 2 && currentStep !== 1, 
       'final-page-active': showFinalPage,
-      'upload3-height': isUpload3Active
+      'upload3-height': isUpload3Active,
+      'content-full-height': showNewRight2 || showFinalPage
     }"
       :style="backgroundImage && currentStep === 1 ? { backgroundImage: `url(${backgroundImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}">
+
       <div class="Head">
         <ProgressBar :startColor="[51, 27, 39]" :endColor="[222, 20, 86]" :items="items" :with_transition="true"
           type="percent" :percent="currentStep / (steps.length) * 100" />
@@ -267,6 +269,23 @@ main.restrict-overflow {
   // min-height: 100%;
   height: 100%;
   transition: min-height 0.5s ease, height 0.5s ease;
+}
+
+.main.content-full-height {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  
+  .content-wrapper {
+    flex: 1; // يأخذ كل المساحة المتبقية
+    display: flex;
+  }
+  
+  .content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 /* ارتفاع خاص لـ Upload3 */

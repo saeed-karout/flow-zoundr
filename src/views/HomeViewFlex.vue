@@ -130,7 +130,7 @@ import apiRequest from "@/lib/apiRequest";
 import { storage_url } from "@/constants";
 import shadows from "@/assets/icons/dashboard/user/shadow.png";
 import EinnahmenChart from "@/components/Dashboard/EinnahmenChart.vue";
-import Start from "@/components/Dashboard/Start.vue"; // استيراد مكون Start
+import Start from "@/components/Dashboard/Start.vue"; 
 
 const router = useRouter();
 const questionModalRef = ref(null);
@@ -138,7 +138,7 @@ const settings = ref({});
 const isLoading = ref(false);
 const errorMessage = ref(null);
 const releases = ref([]);
-const isDataLoaded = ref(false); // لتتبع اكتمال تحميل البيانات
+const isDataLoaded = ref(false); 
 
 const contactImageUrl = computed(() => {
   return settings.value.contact_image
@@ -148,10 +148,6 @@ const contactImageUrl = computed(() => {
 
 // تحديد ما إذا كان يجب عرض مكون Start
 const showStartComponent = computed(() => {
-  // عرض Start فقط إذا:
-  // 1. تم تحميل البيانات بالكامل (isDataLoaded = true)
-  // 2. لا توجد Releases
-  // 3. لا يوجد خطأ في التحميل (اختياري)
   return isDataLoaded.value && releases.value.length === 0;
 });
 

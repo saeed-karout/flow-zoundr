@@ -1,9 +1,7 @@
-```vue
 <template>
   <div class="calendar-picker">
     <div class="calendar1">
       <div class="top-row">
-        <div class="von">Bis:</div>
         <div class="month">
           <div class="arrow-left" @click="prevMonth">
             <svg xmlns="http://www.w3.org/2000/svg" width="7" height="12" viewBox="0 0 7 12" fill="none">
@@ -25,7 +23,6 @@
         <div v-for="(day, index) in calendarDays" :key="index" :class="['cal-day', {
             'this-month': day.isCurrentMonth,
             'past-day': isPastDay(day),
-            'active': isDayActive(day),
             'selected': isDaySelected(day),
             'Current_day': isCurrentDay(day)
           }]" @click="selectDay(day)">
@@ -37,18 +34,61 @@
 </template>
 
 <script setup>
-  import { ref, computed } from 'vue';
+  import { ref, computed, watch, onMounted } from 'vue';
   
   const props = defineProps({
-    initialDate: { type: Date, default: () => new Date() },
+    modelValue: { type: String, default: null }
   });
   
-  const emit = defineEmits(['select']);
+  const emit = defineEmits(['select', 'update:modelValue']);
   
   const weekDays = ['m', 'd', 'm', 'd', 'f', 's', 's'];
-  const currentDate = ref(new Date(props.initialDate));
-  const tempSelectedDay = ref(null);
-  const selectedDay = ref(null);
+  
+  const parseSelectedDate = (dateString) => {
+    if (!dateString) return null;
+    const parts = dateString.split('/');
+    if (parts.length !== 3) return null;
+    const day = parseInt(parts[0]);
+    const month = parseInt(parts[1]) - 1;
+    let year = parseInt(parts[2]);
+    if (year < 100) year = 2000 + year;
+    return new Date(year, month, day);
+  };
+  
+  const formatDateToYYYYMMDD = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
+  const currentDate = ref(new Date());
+  const selectedDayValue = ref(null);
+  
+  const initSelectedDate = () => {
+    console.log('📅 CalendarPicker: initSelectedDate, modelValue:', props.modelValue);
+    if (props.modelValue && props.modelValue.trim()) {
+      const date = parseSelectedDate(props.modelValue);
+      if (date) {
+        selectedDayValue.value = formatDateToYYYYMMDD(date);
+        console.log('📅 CalendarPicker: selectedDayValue set to:', selectedDayValue.value);
+        currentDate.value = new Date(date.getFullYear(), date.getMonth(), 1);
+      }
+    }
+    // لا تقم بتعيين null أبداً هنا
+  };
+  
+  // مراقبة التغييرات - فقط عندما تكون القيمة الجديدة صالحة
+  watch(() => props.modelValue, (newVal) => {
+    if (newVal && newVal.trim()) {
+      console.log('📅 CalendarPicker: modelValue changed to:', newVal);
+      initSelectedDate();
+    }
+  }, { immediate: true });
+  
+  onMounted(() => {
+    initSelectedDate();
+  });
   
   const currentMonth = computed(() => currentDate.value.getMonth());
   const currentYear = computed(() => currentDate.value.getFullYear());
@@ -101,38 +141,40 @@
   const isPastDay = (day) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    return day.date < today && day.isCurrentMonth;
-  };
-  
-  const isDayActive = (day) => {
-    if (!day.isCurrentMonth) return false;
-    const dateStr = day.date.toISOString().split('T')[0];
-    return tempSelectedDay.value === dateStr;
+    const dayDate = new Date(day.date);
+    dayDate.setHours(0, 0, 0, 0);
+    return dayDate < today && day.isCurrentMonth;
   };
   
   const isDaySelected = (day) => {
     if (!day.isCurrentMonth) return false;
-    const dateStr = day.date.toISOString().split('T')[0];
-    return selectedDay.value === dateStr;
+    const dateStr = formatDateToYYYYMMDD(day.date);
+    const isSelected = selectedDayValue.value === dateStr;
+    if (isSelected) {
+      console.log('✅ اليوم المحدد:', day.date.getDate(), 'التاريخ:', dateStr);
+    }
+    return isSelected;
   };
   
   const selectDay = (day) => {
     if (!day.isCurrentMonth || isPastDay(day)) return;
-    const dateStr = day.date.toISOString().split('T')[0];
-    tempSelectedDay.value = dateStr;
-    selectedDay.value = dateStr;
     
-    // إرسال التاريخ بصيغة DD/MM/YY للعرض فقط
+    const dateStr = formatDateToYYYYMMDD(day.date);
+    selectedDayValue.value = dateStr;
+    console.log('📅 CalendarPicker: تم اختيار يوم جديد, selectedDayValue:', selectedDayValue.value);
+    
     const displayDate = formatDateForDisplay(day.date);
     console.log('📅 CalendarPicker: إرسال تاريخ للعرض:', displayDate);
+    
+    // إرسال الأحداث
+    emit('update:modelValue', displayDate);
     emit('select', displayDate);
   };
   
-  // دالة لعرض التاريخ بصيغة DD/MM/YY
   const formatDateForDisplay = (date) => {
     const day = String(date.getDate()).padStart(2, '0');
     const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = String(date.getFullYear()).slice(-2); // آخر رقمين فقط
+    const year = String(date.getFullYear()).slice(-2);
     return `${day}/${month}/${year}`;
   };
   
@@ -143,7 +185,7 @@
   const nextMonth = () => {
     currentDate.value = new Date(currentYear.value, currentMonth.value + 1, 1);
   };
-  </script>
+</script>
 
 <style lang="scss" scoped>
 .calendar-picker {
@@ -166,19 +208,6 @@
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  align-self: stretch;
-}
-
-.calendar1 .top-row .von {
-  color: var(--Main-Colors-White, #FFF);
-  text-align: center;
-  font-family: Heebo;
-  font-size: 14px;
-  font-style: normal;
-  font-weight: 300;
-  line-height: 0.8;
-  letter-spacing: 0.7px;
-  text-transform: uppercase;
   align-self: stretch;
 }
 
@@ -312,7 +341,8 @@
   cursor: pointer;
 
   &:hover {
-    background: rgba(221, 17, 85, 0.3);
+    background: var(--Strawberry);
+    color: white;
   }
 }
 
@@ -321,22 +351,8 @@
   cursor: no-drop;
 }
 
-.calendar1 .calender-1 .active {
-  background: rgba(221, 17, 85, 0.8);
-  color: white;
-  font-family: Heebo;
-  font-size: 18px;
-  font-style: normal;
-  font-weight: 700;
-  line-height: 0.7;
-  letter-spacing: 0.9px;
-  text-transform: uppercase;
-  position: relative;
-}
-
 .calendar1 .calender-1 .selected {
   background: rgba(221, 17, 85, 0.8);
   color: white;
 }
 </style>
-```

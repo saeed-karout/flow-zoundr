@@ -629,6 +629,7 @@ onMounted(() => {
     overflow-y: auto;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.1);
+    scrollbar-width: none;
 }
 
 .search-result-item {

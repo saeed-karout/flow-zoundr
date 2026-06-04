@@ -1,6 +1,10 @@
 <template>
   <div class="upload"
-       :style="{ gap: showNewRight || showNewRight2 ? '24px' : '', alignItems: showNewRight || showNewRight2 ? 'start' : 'center', height: showNewRight2 ? 'auto' : '100%' }">
+        :style="{ 
+         gap: showNewRight || showNewRight2 ? '24px' : '', 
+         alignItems: showNewRight || showNewRight2 ? 'start' : 'center', 
+         height: showNewRight2 || showFinalPage ? 'auto' : '100%' 
+       }">
     <!-- Video Popup -->
     <VideoPopup :show="showVideoPopup" :videoId="videoId" @close="closeVideoPopup" />
 
@@ -183,7 +187,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { debounce } from '@/utils/debounce';
 import apiRequest from '@/lib/apiRequest';
@@ -210,7 +214,7 @@ const props = defineProps({
   title: { type: String, default: '' },
 });
 
-// Define emits - أضفنا 'release-updated'
+// Define emits
 const emit = defineEmits(['update:title', 'next', 'update:showNewRight2', 'cover-updated', 'release-updated']);
 
 // دالة الانتقال للخطوة التالية
@@ -320,6 +324,10 @@ const showFinalPage = ref(false);
 const isSubGenreEnabled = ref(false);
 const daysDifference = ref(0);
 
+// ========== إضافة ref للـ form4Container ==========
+const form4Container = ref(null);
+// =================================================
+
 // Mock data
 const mockData = [
   { id: '1', name: 'Digger Barnes', type: 'artist', image: '/icon/icon-picture.jpg' },
@@ -334,8 +342,51 @@ const mockData = [
   { id: '10', name: 'David Miller', type: 'artist', image: '/icon/icon-picture.jpg' },
 ];
 
-// ========== جلب المسودة + ملء الحقول + تعيين UUID (معدل) ==========
+// ========== دوال إغلاق الكالندر المحسنة ==========
+const closeCalendar = () => {
+  if (isCalendarVisible.value) {
+    console.log('🔒 إغلاق الكالندر');
+    isCalendarVisible.value = false;
+    isInputFocused.value = false;
+    
+    // فرض إعادة التصيير
+    nextTick();
+  }
+};
+
+// دالة للتعامل مع النقر خارج الكالندر
+const handleClickOutside = (event) => {
+  if (isCalendarVisible.value && form4Container.value && !form4Container.value.contains(event.target)) {
+    console.log('🔒 إغلاق الكالندر - نقر خارجي على form4Container');
+    closeCalendar();
+  }
+};
+
+// دالة للتعامل مع النقر في أي مكان في الصفحة
+const handleGlobalClick = (event) => {
+  if (isCalendarVisible.value) {
+    const calendarElement = document.querySelector('.calendar-picker');
+    const inputElement = document.querySelector('.form4 .input-field');
+    const playDarkElement = document.querySelector('.form4 .play-dark');
+    
+    const isClickOnCalendar = calendarElement && calendarElement.contains(event.target);
+    const isClickOnInput = inputElement && inputElement.contains(event.target);
+    const isClickOnPlayDark = playDarkElement && playDarkElement.contains(event.target);
+    
+    if (!isClickOnCalendar && !isClickOnInput && !isClickOnPlayDark) {
+      console.log('🔒 إغلاق الكالندر - نقر خارجي (global)');
+      closeCalendar();
+    }
+  }
+};
+// ===============================================
+
+// ========== جلب المسودة + ملء الحقول + تعيين UUID ==========
 onMounted(async () => {
+  // إضافة مستمعات الأحداث لإغلاق الكالندر
+  document.addEventListener('click', handleGlobalClick);
+  document.addEventListener('click', handleClickOutside);
+  
   try {
     // التحقق مما إذا كان هذا Release جديد (من query parameter)
     const isNewRelease = route.query.new === 'true';
@@ -397,6 +448,14 @@ onMounted(async () => {
     console.error('فشل جلب المسودات:', err);
   }
 });
+
+onUnmounted(() => {
+  // إزالة مستمعات الأحداث
+  document.removeEventListener('click', handleGlobalClick);
+  document.removeEventListener('click', handleClickOutside);
+  document.body.style.overflow = '';
+});
+// ============================================================
 
 // دالة مساعدة لإعادة تعيين جميع الحقول
 const resetAllFields = () => {
@@ -485,7 +544,6 @@ const fillReleaseData = (release) => {
     console.log('📝 Initial previous values set');
   }, 500);
 };
-// ============================================================
 
 // Handle file selection from ImageUpload
 const handleFileSelected = (file) => {
@@ -820,14 +878,19 @@ watch(selectedDate, (newDate) => {
   showPopup.value = diffInDays >= 0 && diffInDays < 14;
 }, { immediate: true });
 
+// ========== دالة معالجة اختيار التاريخ من الكالندر (معدلة) ==========
 const handleDateSelect = (formattedDate) => {
   if (!formattedDate || typeof formattedDate !== 'string') {
     return;
   }
 
+  console.log('📅 Parent: استلام تاريخ من الكالندر:', formattedDate);
+  
+  // تحديث التاريخ
   selectedDate.value = formattedDate.trim();
   isForm4Selected.value = true;
 
+  // حساب الفرق في الأيام
   const selected = dayjs(formattedDate, 'DD/MM/YY');
   if (!selected.isValid()) {
     return;
@@ -844,9 +907,19 @@ const handleDateSelect = (formattedDate) => {
 
   showPopup.value = diffInDays >= 0 && diffInDays < 14;
 
-  isInputFocused.value = false;
-  isCalendarVisible.value = false;
+  // إغلاق الكالندر - استخدام setTimeout للتأكد من أن الحدث لا يتعارض
+  setTimeout(() => {
+    isCalendarVisible.value = false;
+    isInputFocused.value = false;
+    console.log('🔒 Parent: تم إغلاق الكالندر بعد التأخير');
+  }, 50);
+   nextTick(() => {
+    isCalendarVisible.value = false;
+    isInputFocused.value = false;
+  });
 };
+// ===================================================================
+
 
 const updateToRecommendedDate = () => {
   selectedDate.value = recommendedDate.value;
@@ -1058,9 +1131,6 @@ watch([searchQuery2, searchQuery3, selectedDate, releasePrice, songPrice, mainGe
 }, { deep: true, immediate: true });
 </script>
 
-
-
-
 <style lang="scss" scoped>
 * {
   margin: 0;
@@ -1080,6 +1150,18 @@ img[alt] {
   position: relative;
   // height: 100%;
   gap: 110px;
+}
+
+// 🆕 Left Section - ارتفاع طبيعي فقط
+.left-section {
+  flex-shrink: 0; // لا ينكمش
+  height: auto; // ارتفاع طبيعي حسب المحتوى
+}
+
+.right2-full-height {
+  flex: 1; // يأخذ المساحة المتبقية
+  min-height: 0; // مهم لتفعيل flex: 1 مع overflow
+  height: 100%; // ارتفاع كامل
 }
 
 .button-arrow-top {
