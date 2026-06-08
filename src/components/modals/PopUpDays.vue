@@ -1,27 +1,29 @@
 <template>
-  <div v-if="showPopup" class="popup-overlay">
-    <div class="popup">
-      <div class="top-line">
-        <div class="title">Dein Release Datum ist {{ formatGermanDate(selectedDate) }}!</div>
-        <div class="subtitle">Das sind nur {{ daysDifference }} {{ daysDifference === 1 ? 'Tag' : 'Tage' }}!</div>
-        <div class="description">
-          Bitte beachte, dass wir aufgrund der Store Guidelines in Text, Audio und Cover nicht garantieren
-          können, dass Dein Release zu diesem Datum in jedem Store verfügbar sein wird.
+  <Teleport to="body">
+    <div v-if="showPopup" class="popup-overlay" @click="$emit('close')">
+      <div class="popup" @click.stop>
+        <div class="top-line">
+          <div class="title">Dein Release Datum ist {{ formatGermanDate(selectedDate) }}!</div>
+          <div class="subtitle">Das sind nur {{ daysDifference }} {{ daysDifference === 1 ? 'Tag' : 'Tage' }}!</div>
+          <div class="description">
+            Bitte beachte, dass wir aufgrund der Store Guidelines in Text, Audio und Cover nicht garantieren
+            können, dass Dein Release zu diesem Datum in jedem Store verfügbar sein wird.
+          </div>
+          <div class="p">Wir empfehlen Dir, Dein Releasedatum auf <br>
+            <span>{{ formatGermanDate(recommendedDate) }}</span> zu ändern.
+          </div>
         </div>
-        <div class="p">Wir empfehlen Dir, Dein Releasedatum auf <br>
-          <span>{{ formatGermanDate(recommendedDate) }}</span> zu ändern.
-        </div>
-      </div>
-      <div class="buttons">
-        <div class="button-primary" @click="$emit('close')">
-          <div class="p">Nein Danke!</div>
-        </div>
-        <div class="button-secondary" @click="$emit('update-date', recommendedDate)">
-          <div class="p">Ja, bitte ändern!</div>
+        <div class="buttons">
+          <div class="button-primary" @click="$emit('close')">
+            <div class="p">Nein Danke!</div>
+          </div>
+          <div class="button-secondary" @click="$emit('update-date', recommendedDate)">
+            <div class="p">Ja, bitte ändern!</div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -90,7 +92,7 @@ const formatGermanDate = (dateString) => {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
+  z-index: 9999;
 }
 
 .popup {

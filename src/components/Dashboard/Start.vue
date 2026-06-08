@@ -40,7 +40,6 @@ const goToDashboard = () => {
   padding: 20px;
   border-radius: 20px;
   
-  cursor: pointer;
  
 }
 
@@ -54,6 +53,8 @@ const goToDashboard = () => {
 
 .item:hover .image img {
   filter: brightness(0) invert(1); // Match Dashboard.vue hover effect
+  cursor: pointer;
+
 }
 
 .text {

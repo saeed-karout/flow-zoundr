@@ -38,45 +38,46 @@
     </div>
 
     <!-- Right Section -->
-    <RightSection v-if="!showNewRight && !showNewRight2" 
-                  :artistInputs="artistInputs"
-                  :showSearchResults="showSearchResults" 
-                  :filteredSearchResults="filteredSearchResults"
-                  :searchQuery2="searchQuery2" 
-                  :searchQuery3="searchQuery3" 
-                  :selectedDate="selectedDate"
-                  :isForm2Selected="isForm2Selected" 
-                  :isForm3Selected="isForm3Selected" 
-                  :isForm4Selected="isForm4Selected"
-                  :isForm3Active="isForm3Active" 
-                  :isHoveredForm2="isHoveredForm2" 
-                  :isHoveredForm3="isHoveredForm3"
-                  :isHoveredForm4="isHoveredForm4" 
-                  :isInputFocused="isInputFocused" 
-                  :isCalendarVisible="isCalendarVisible"
-                  :iconPlay="iconPlay" 
-                  :searchResultStyle="searchResultStyle" 
-                  :isSlidingUp="isSlidingUp"
-                  @update:artistInputs="artistInputs = $event" 
-                  @update:showSearchResults="showSearchResults = $event"
-                  @update:searchQuery2="searchQuery2 = $event; emit('update:title', $event)"
-                  @update:searchQuery3="searchQuery3 = $event" 
-                  @update:selectedDate="handleDateSelect($event)"
-                  @update:isForm2Selected="isForm2Selected = $event" 
-                  @update:isForm3Selected="isForm3Selected = $event"
-                  @update:isForm4Selected="isForm4Selected = $event" 
-                  @toggleForm3="toggleForm3"
-                  @update:isHoveredForm2="isHoveredForm2 = $event" 
-                  @update:isHoveredForm3="isHoveredForm3 = $event"
-                  @update:isHoveredForm4="isHoveredForm4 = $event" 
-                  @update:isInputFocused="isInputFocused = $event"
-                  @update:isCalendarVisible="isCalendarVisible = $event" 
-                  @openVideoPopup="openVideoPopup"
-                  @addArtistInput="addArtistInput" 
-                  @removeArtistInput="removeArtistInput"
-                  @selectSearchResult="selectSearchResult" 
-                  @updateSearchResults="updateSearchResults" />
-
+  <RightSection 
+    v-if="!showNewRight && !showNewRight2" 
+    :artistInputs="artistInputs"
+    :showSearchResults="showSearchResults" 
+    :filteredSearchResults="filteredSearchResults"
+    :searchQuery2="searchQuery2" 
+    :searchQuery3="searchQuery3" 
+    :selectedDate="selectedDate"
+    :isForm2Selected="isForm2Selected" 
+    :isForm3Selected="isForm3Selected" 
+    :isForm4Selected="isForm4Selected"
+    :isForm3Active="isForm3Active" 
+    :isHoveredForm2="isHoveredForm2" 
+    :isHoveredForm3="isHoveredForm3"
+    :isHoveredForm4="isHoveredForm4" 
+    :isInputFocused="isInputFocused" 
+    :isCalendarVisible="isCalendarVisible"
+    :iconPlay="iconPlay" 
+    :searchResultStyle="searchResultStyle" 
+    :isSlidingUp="isSlidingUp"
+    @update:artistInputs="artistInputs = $event" 
+    @update:showSearchResults="showSearchResults = $event"
+    @update:searchQuery2="searchQuery2 = $event; emit('update:title', $event)"
+    @update:searchQuery3="searchQuery3 = $event" 
+    @update:selectedDate="handleDateSelect"
+    @update:isForm2Selected="isForm2Selected = $event" 
+    @update:isForm3Selected="isForm3Selected = $event"
+    @update:isForm4Selected="isForm4Selected = $event" 
+    @toggleForm3="toggleForm3"
+    @update:isHoveredForm2="isHoveredForm2 = $event" 
+    @update:isHoveredForm3="isHoveredForm3 = $event"
+    @update:isHoveredForm4="isHoveredForm4 = $event" 
+    @update:isInputFocused="isInputFocused = $event"
+    @update:isCalendarVisible="isCalendarVisible = $event" 
+    @openVideoPopup="openVideoPopup"
+    @addArtistInput="addArtistInput" 
+    @removeArtistInput="removeArtistInput"
+    @selectSearchResult="selectSearchResult" 
+    @updateSearchResults="updateSearchResults" 
+/>
     <!-- New Right Section -->
     <NewRightSection v-if="showNewRight" 
                      :releasePrice="releasePrice" 
@@ -188,7 +189,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { debounce } from '@/utils/debounce';
 import apiRequest from '@/lib/apiRequest';
 import { useReleaseStore } from '@/stores/release';
@@ -204,6 +205,8 @@ import NewRight2Section from './NewRight2Section.vue';
 import PopUpDays from '../../../components/modals/PopUpDays.vue';
 
 const route = useRoute();
+const router = useRouter(); // <-- أضف هذا
+const releaseStore = useReleaseStore();
 
 // Define props
 const props = defineProps({
@@ -212,10 +215,14 @@ const props = defineProps({
   sectionTitle: { type: [String, Object], default: 'Cover Vorschau' },
   uploadedImage: { type: String, default: null },
   title: { type: String, default: '' },
+  skipCreation: { type: Boolean, default: false },
+  pendingReleaseType: { type: String, default: null },
+   editMode: { type: String, default: null },
+  isEditSongMode: { type: Boolean, default: false }
 });
 
 // Define emits
-const emit = defineEmits(['update:title', 'next', 'update:showNewRight2', 'cover-updated', 'release-updated']);
+const emit = defineEmits(['update:title', 'next', 'update:showNewRight2', 'cover-updated', 'release-updated', 'release-created']);
 
 // دالة الانتقال للخطوة التالية
 const handleNextStep = () => {
@@ -256,12 +263,15 @@ const closeVideoPopup = () => {
 const localUploadedImage = ref(null);
 const serverCoverUrl = ref(null);
 const releaseUuid = ref(null);
-const releaseStore = useReleaseStore();
 
 // حالة الرفع
 const isUploading = ref(false);
 const uploadProgress = ref(0);
 const pendingCoverFile = ref(null);
+const errorMessage = ref(''); // <-- أضف هذا
+
+// متغير لتتبع ما إذا تم إنشاء الـ Release بالفعل
+const isReleaseCreated = ref(false);
 
 // Form states
 const artistInputs = ref([{ searchQuery: '', isHovered: false, isFocused: false, isSelected: false }]);
@@ -278,6 +288,7 @@ const gtin = ref('');
 const catalogNumber = ref('');
 const labelName = ref('');
 const productionYear = ref('');
+const isCreatingRelease = ref(false);
 const cLineYear = ref('');
 const cLineName = ref('');
 const pLineYear = ref('');
@@ -348,8 +359,6 @@ const closeCalendar = () => {
     console.log('🔒 إغلاق الكالندر');
     isCalendarVisible.value = false;
     isInputFocused.value = false;
-    
-    // فرض إعادة التصيير
     nextTick();
   }
 };
@@ -379,7 +388,6 @@ const handleGlobalClick = (event) => {
     }
   }
 };
-// ===============================================
 
 // ========== جلب المسودة + ملء الحقول + تعيين UUID ==========
 onMounted(async () => {
@@ -387,35 +395,14 @@ onMounted(async () => {
   document.addEventListener('click', handleGlobalClick);
   document.addEventListener('click', handleClickOutside);
   
+  // في وضع التخطي، لا نقوم بجلب أي مسودة
+  if (props.skipCreation) {
+    console.log('⏭️ وضع التخطي نشط - لن يتم جلب أي مسودة');
+    resetAllFields();
+    return;
+  }
+  
   try {
-    // التحقق مما إذا كان هذا Release جديد (من query parameter)
-    const isNewRelease = route.query.new === 'true';
-    
-    if (isNewRelease) {
-      console.log('🆕 هذا Release جديد، لا تقم بتحميل بيانات قديمة');
-      
-      // فقط قم بتعيين releaseUuid من المتجر أو props
-      if (releaseStore.currentReleaseId) {
-        releaseUuid.value = releaseStore.currentReleaseId;
-        console.log('📦 تم تعيين releaseUuid من المتجر:', releaseUuid.value);
-      } else if (props.releaseUuid) {
-        releaseUuid.value = props.releaseUuid;
-        releaseStore.setCurrentReleaseId(props.releaseUuid);
-        console.log('📦 تم تعيين releaseUuid من props:', releaseUuid.value);
-      }
-      
-      // تعيين القيم الافتراضية الفارغة
-      resetAllFields();
-      
-      // تحديث القيم السابقة
-      setTimeout(() => {
-        updatePreviousValues();
-        console.log('📝 Initial previous values set (new release)');
-      }, 500);
-      
-      return;
-    }
-    
     // محاولة الحصول على releaseUuid من المتجر أولاً (للتعديل)
     if (releaseStore.currentReleaseId) {
       releaseUuid.value = releaseStore.currentReleaseId;
@@ -455,7 +442,6 @@ onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside);
   document.body.style.overflow = '';
 });
-// ============================================================
 
 // دالة مساعدة لإعادة تعيين جميع الحقول
 const resetAllFields = () => {
@@ -501,35 +487,26 @@ const fillReleaseData = (release) => {
   releaseStore.setReleaseType(release.release_type);
   releaseStore.setCurrentReleaseId(release.uuid);
 
-  // التحقق مما إذا كان هذا Release جديد (من query parameter)
-  const isNewRelease = route.query.new === 'true';
+  // ملء الحقول من المسودة (للتعديل)
+  searchQuery2.value = release.title || '';
+  searchQuery3.value = release.subtitle || '';
+  selectedDate.value = release.release_date 
+    ? dayjs(release.release_date).format('DD/MM/YY') 
+    : null;
+  releasePrice.value = release.release_price || '';
+  songPrice.value = release.price_per_song || '';
+  mainGenre.value = release.main_genre || '';
+  subGenre.value = release.sub_genre || '';
+  labelName.value = release.label || '';
+  productionYear.value = release.production_year || '';
+  cLineYear.value = release.c_line_year || '';
+  cLineName.value = release.c_line_name || '';
+  pLineYear.value = release.p_line_year || '';
+  pLineName.value = release.p_line_name || '';
+  gtin.value = release.GTIN || '';
+  catalogNumber.value = release.catalog_number || '';
   
-  if (!isNewRelease) {
-    // ملء الحقول من المسودة (للتعديل)
-    searchQuery2.value = release.title || '';
-    searchQuery3.value = release.subtitle || '';
-    selectedDate.value = release.release_date 
-      ? dayjs(release.release_date).format('DD/MM/YY') 
-      : null;
-    releasePrice.value = release.release_price || '';
-    songPrice.value = release.price_per_song || '';
-    mainGenre.value = release.main_genre || '';
-    subGenre.value = release.sub_genre || '';
-    labelName.value = release.label || '';
-    productionYear.value = release.production_year || '';
-    cLineYear.value = release.c_line_year || '';
-    cLineName.value = release.c_line_name || '';
-    pLineYear.value = release.p_line_year || '';
-    pLineName.value = release.p_line_name || '';
-    gtin.value = release.GTIN || '';
-    catalogNumber.value = release.catalog_number || '';
-    
-    console.log('📝 تم ملء البيانات من المسودة:', release.uuid);
-  } else {
-    console.log('🆕 Release جديد، لا نقوم بملء البيانات القديمة');
-    // تعيين القيم الافتراضية الفارغة
-    resetAllFields();
-  }
+  console.log('📝 تم ملء البيانات من المسودة:', release.uuid);
 
   if (release.cover) {
     serverCoverUrl.value = `${storage_url}/${release.cover}`;
@@ -545,21 +522,219 @@ const fillReleaseData = (release) => {
   }, 500);
 };
 
+// في Parent.vue، قم بتعديل دالة createReleaseOnFirstInput
+
+const createReleaseOnFirstInput = async () => {
+  // لا تنشئ Release إذا:
+  // 1. تم إنشاؤه بالفعل
+  // 2. ليس في وضع التخطي
+  // 3. لم يتم إدخال أي قيمة فعلية (فقط الحقول الفارغة)
+  
+  if (isReleaseCreated.value) {
+    console.log('✅ Release تم إنشاؤه بالفعل');
+    return;
+  }
+  
+  if (!props.skipCreation) {
+    console.log('ℹ️ ليس في وضع التخطي، لن يتم إنشاء Release تلقائياً');
+    return;
+  }
+  
+  // التحقق من وجود قيمة فعلية مدخلة (ليست فارغة)
+  const hasRealInput = 
+    (searchQuery2.value && searchQuery2.value.trim() !== '') ||
+    (searchQuery3.value && searchQuery3.value.trim() !== '') ||
+    selectedDate.value ||
+    (releasePrice.value && releasePrice.value.toString().trim() !== '') ||
+    (songPrice.value && songPrice.value.toString().trim() !== '') ||
+    (mainGenre.value && mainGenre.value.trim() !== '') ||
+    (subGenre.value && subGenre.value.trim() !== '') ||
+    (gtin.value && gtin.value.trim() !== '') ||
+    (catalogNumber.value && catalogNumber.value.trim() !== '') ||
+    artistInputs.value.some(input => input.searchQuery && input.searchQuery.trim() !== '');
+  
+  if (!hasRealInput) {
+    console.log('ℹ️ لا توجد قيم فعلية مدخلة بعد، انتظار إدخال المستخدم');
+    return;
+  }
+  
+  console.log('🎯 تم اكتشاف أول إدخال حقيقي - جاري إنشاء Release...');
+  
+  const releaseType = props.pendingReleaseType || releaseStore.releaseType;
+  
+  if (!releaseType) {
+    console.error('❌ لا يوجد release_type');
+    return;
+  }
+
+  // منع محاولات متعددة متزامنة
+  if (isCreatingRelease.value) {
+    console.log('⏳ جاري إنشاء Release بالفعل، انتظر...');
+    return;
+  }
+  
+  isCreatingRelease.value = true;
+  
+  // لا نرفع isUploading هنا لأننا لا نرفع صورة
+  // isUploading خاص برفع الصور فقط
+  
+  try {
+    // تحضير البيانات الأساسية - فقط الحقول التي تحتوي على قيم
+    const releaseData = {
+      release_type: releaseType
+    };
+    
+    // إضافة الحقل title فقط إذا كان المستخدم قد كتب شيئاً
+    if (searchQuery2.value && searchQuery2.value.trim() !== '') {
+      releaseData.title = searchQuery2.value.trim();
+    }
+    
+    if (searchQuery3.value && searchQuery3.value.trim() !== '') {
+      releaseData.subtitle = searchQuery3.value.trim();
+    }
+    
+    if (selectedDate.value) {
+      releaseData.release_date = formatDate(selectedDate.value);
+    }
+    
+    if (releasePrice.value && releasePrice.value.toString().trim() !== '') {
+      releaseData.release_price = parseFloat(releasePrice.value);
+    }
+    
+    if (songPrice.value && songPrice.value.toString().trim() !== '') {
+      releaseData.price_per_song = parseFloat(songPrice.value);
+    }
+    
+    if (mainGenre.value && mainGenre.value.trim() !== '') {
+      releaseData.main_genre = mainGenre.value.trim();
+    }
+    
+    if (subGenre.value && subGenre.value.trim() !== '') {
+      releaseData.sub_genre = subGenre.value.trim();
+    }
+    
+    if (gtin.value && gtin.value.trim() !== '') {
+      releaseData.GTIN = gtin.value.trim();
+    }
+    
+    if (catalogNumber.value && catalogNumber.value.trim() !== '') {
+      releaseData.catalog_number = catalogNumber.value.trim();
+    }
+    
+    const artistsList = artistInputs.value
+      .filter(input => input.searchQuery && input.searchQuery.trim() !== '')
+      .map(input => input.searchQuery.trim());
+    
+    if (artistsList.length > 0) {
+      releaseData.artists = artistsList;
+    }
+
+    console.log('📤 إنشاء Release مع البيانات المدخلة:', releaseData);
+
+    const response = await apiRequest.post('/releases', releaseData);
+
+    console.log('✅ Release تم إنشاؤه بنجاح:', response.data);
+
+    if (response.data?.data?.uuid) {
+      const newReleaseUuid = response.data.data.uuid;
+      releaseUuid.value = newReleaseUuid;
+      releaseStore.currentReleaseId = newReleaseUuid;
+      isReleaseCreated.value = true;
+      
+      // تحديث الصورة إذا كانت موجودة (ولكن لا نرفع isUploading هنا لأننا لا نرفع صورة)
+      if (pendingCoverFile.value) {
+        // رفع الصورة إذا وجدت - هذا سيقوم بتعيين isUploading بنفسه
+        await updateCover(pendingCoverFile.value);
+      }
+      
+      if (response.data.data.cover) {
+        serverCoverUrl.value = `${storage_url}/${response.data.data.cover}`;
+        localUploadedImage.value = serverCoverUrl.value;
+      }
+      
+     router.replace({
+  path: `/releases/${newReleaseUuid}/edit`,
+  query: { ...route.query }
+});
+      
+      emit('release-created', {
+        releaseId: newReleaseUuid,
+        coverUrl: response.data.data.cover || null
+      });
+      
+      console.log('✅ Release created with UUID:', newReleaseUuid);
+    }
+  } catch (err) {
+    console.error('❌ فشل إنشاء الـ Release:', err);
+    errorMessage.value = err.response?.data?.message || 'Fehler beim Erstellen des Releases.';
+  } finally {
+    isCreatingRelease.value = false;
+    // لا نقوم بتعيين isUploading.value = false هنا لأننا لم نرفعها
+  }
+};
+
+
+// دالة مساعدة لتنسيق التاريخ
+const formatDate = (dateStr) => {
+  if (!dateStr) return null;
+  const [day, month, yearShort] = dateStr.split('/');
+  const year = parseInt(yearShort) < 50 ? `20${yearShort}` : `19${yearShort}`;
+  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+};
+
+// ========== مراقبة الحالات لإنشاء Release عند أول إدخال ==========
+watch(
+  [
+    () => searchQuery2.value,
+    () => searchQuery3.value,
+    () => selectedDate.value,
+    () => releasePrice.value,
+    () => songPrice.value,
+    () => mainGenre.value,
+    () => subGenre.value,
+    () => gtin.value,
+    () => catalogNumber.value,
+    () => artistInputs.value.map(a => a.searchQuery).join(',')
+  ],
+  async (newValues, oldValues) => {
+    // التحقق من وجود تغيير فعلي ووجود قيمة حقيقية
+    const hasRealNewValue = newValues.some(val => val && String(val).trim() !== '');
+    
+    if (hasRealNewValue && props.skipCreation && !isReleaseCreated.value) {
+      // تأخير صغير للتأكد من أن المستخدم انتهى من الكتابة
+      setTimeout(() => {
+        createReleaseOnFirstInput();
+      }, 500);
+    }
+  },
+  { deep: true }
+);
+
 // Handle file selection from ImageUpload
 const handleFileSelected = (file) => {
   console.log('📸 Parent: تم استلام ملف جديد:', file.name, file.type);
 
-  // تحقق إضافي
   if (!file || !['image/jpeg', 'image/jpg'].includes(file.type) || !file.name.toLowerCase().endsWith('.jpg')) {
     console.warn('⚠️ ملف غير صالح:', file.type, file.name);
+    errorMessage.value = 'Bitte wählen Sie eine gültige JPG-Datei aus.';
     return;
   }
 
   pendingCoverFile.value = file;
   localUploadedImage.value = URL.createObjectURL(file);
   
-  // بدء عملية التحديث
-  updateCover(file);
+  // في وضع التخطي، إذا لم يتم إنشاء Release بعد، أنشئه أولاً
+  if (props.skipCreation && !isReleaseCreated.value) {
+    // إنشاء Release أولاً ثم رفع الصورة
+    createReleaseOnFirstInput().then(() => {
+      // بعد إنشاء Release، قم برفع الصورة
+      if (releaseUuid.value) {
+        updateCover(file);
+      }
+    });
+  } else if (releaseUuid.value) {
+    updateCover(file);
+  }
 };
 
 // تحديث الصورة عبر PATCH
@@ -569,18 +744,9 @@ const updateCover = async (file) => {
     return;
   }
 
-  // التحقق من وجود releaseUuid
   if (!releaseUuid.value) {
-    console.warn('⚠️ لا يوجد UUID للـ release، جاري البحث...');
-    
-    // محاولة الحصول على UUID من المتجر
-    if (releaseStore.currentReleaseId) {
-      releaseUuid.value = releaseStore.currentReleaseId;
-      console.log('✅ تم الحصول على UUID من المتجر:', releaseUuid.value);
-    } else {
-      console.error('❌ لا يمكن تحديث الصورة: لا يوجد Release ID');
-      return;
-    }
+    console.warn('⚠️ لا يوجد UUID للـ release');
+    return;
   }
 
   console.log('📤 بدء رفع الصورة إلى:', `/releases/${releaseUuid.value}`);
@@ -605,14 +771,12 @@ const updateCover = async (file) => {
 
     console.log('✅ تم تحديث الصورة بنجاح:', response.data);
 
-    // تحديث serverCoverUrl ليعرض الصورة الجديدة من السيرفر
     if (response.data?.data?.cover) {
       serverCoverUrl.value = `${storage_url}/${response.data.data.cover}`;
       localUploadedImage.value = serverCoverUrl.value;
       console.log('🖼️ تم تحديث serverCoverUrl:', serverCoverUrl.value);
     }
     
-    // إرسال حدث أن الصورة تم تحديثها
     emit('cover-updated', {
       releaseId: releaseUuid.value,
       coverUrl: response.data.data?.cover || null
@@ -620,10 +784,13 @@ const updateCover = async (file) => {
     
   } catch (err) {
     console.error('❌ فشل تحديث الصورة:', err.response?.data || err.message);
+    errorMessage.value = err.response?.data?.message || 'Fehler beim Hochladen des Covers.';
   } finally {
-    // إنهاء حالة الرفع
+    // تأكد من إيقاف isUploading بعد انتهاء الرفع
     setTimeout(() => {
       isUploading.value = false;
+      uploadProgress.value = 0;
+      console.log('🔄 isUploading تم تعيينه إلى false');
     }, 500);
   }
 };
@@ -795,22 +962,19 @@ const updateRelease = debounce(async () => {
     const response = await apiRequest.post(`/releases/${releaseUuid.value}`, payload);
     console.log('✅ Release updated successfully:', response.data);
     
-    // تحديث القيم السابقة بعد نجاح الإرسال
     updatePreviousValues();
     
-    // ===== إرسال حدث أن الـ Release تم تحديثه =====
     emit('release-updated', {
       releaseId: releaseUuid.value,
       data: response.data?.data || payload
     });
-    // ===========================================
     
   } catch (err) {
     console.error('❌ Update failed:', err.response?.data || err);
   }
 }, 2000);
 
-// مراقبة كل الحقول
+// مراقبة كل الحقول للتحديث (فقط إذا كان الـ Release موجود بالفعل)
 watch(
   [
     searchQuery2, searchQuery3, selectedDate,
@@ -818,7 +982,11 @@ watch(
     labelName, productionYear, cLineYear, cLineName,
     pLineYear, pLineName, gtin, catalogNumber
   ],
-  () => updateRelease(),
+  () => {
+    if (releaseUuid.value && !props.skipCreation) {
+      updateRelease();
+    }
+  },
   { deep: true }
 );
 
@@ -878,7 +1046,8 @@ watch(selectedDate, (newDate) => {
   showPopup.value = diffInDays >= 0 && diffInDays < 14;
 }, { immediate: true });
 
-// ========== دالة معالجة اختيار التاريخ من الكالندر (معدلة) ==========
+// ========== دالة معالجة اختيار التاريخ من الكالندر ==========
+// في Parent.vue، تأكد من وجود هذه الدالة أو قم بتعديلها
 const handleDateSelect = (formattedDate) => {
   if (!formattedDate || typeof formattedDate !== 'string') {
     return;
@@ -886,11 +1055,10 @@ const handleDateSelect = (formattedDate) => {
 
   console.log('📅 Parent: استلام تاريخ من الكالندر:', formattedDate);
   
-  // تحديث التاريخ
   selectedDate.value = formattedDate.trim();
   isForm4Selected.value = true;
 
-  // حساب الفرق في الأيام
+  // تحقق من التاريخ وعرض البوب أب إذا لزم الأمر
   const selected = dayjs(formattedDate, 'DD/MM/YY');
   if (!selected.isValid()) {
     return;
@@ -907,19 +1075,12 @@ const handleDateSelect = (formattedDate) => {
 
   showPopup.value = diffInDays >= 0 && diffInDays < 14;
 
-  // إغلاق الكالندر - استخدام setTimeout للتأكد من أن الحدث لا يتعارض
-  setTimeout(() => {
-    isCalendarVisible.value = false;
-    isInputFocused.value = false;
-    console.log('🔒 Parent: تم إغلاق الكالندر بعد التأخير');
-  }, 50);
-   nextTick(() => {
-    isCalendarVisible.value = false;
-    isInputFocused.value = false;
-  });
+  // ✅ إغلاق الكالندر بعد اختيار التاريخ
+  isCalendarVisible.value = false;
+  isInputFocused.value = false;
+  
+  console.log('🔒 تم إغلاق الكالندر بعد اختيار التاريخ');
 };
-// ===================================================================
-
 
 const updateToRecommendedDate = () => {
   selectedDate.value = recommendedDate.value;
@@ -1131,6 +1292,8 @@ watch([searchQuery2, searchQuery3, selectedDate, releasePrice, songPrice, mainGe
 }, { deep: true, immediate: true });
 </script>
 
+<!-- أضف الأنماط هنا إذا كانت موجودة -->
+
 <style lang="scss" scoped>
 * {
   margin: 0;
@@ -1232,6 +1395,7 @@ img[alt] {
     text-transform: uppercase;
     cursor: pointer;
     z-index: 11;
+    
 
     &:hover{
         transition: .3s ease;
@@ -1257,7 +1421,7 @@ img[alt] {
 
 @media  (min-width:2075px) and (max-width:2560px) {
    .button-arrow-top{
-    top: 50px;
+    top: 40px;
    }
 }
 </style>

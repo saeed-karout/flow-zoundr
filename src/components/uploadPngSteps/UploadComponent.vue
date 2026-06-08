@@ -62,7 +62,7 @@ const props = defineProps({
   sectionTitle: [String, Object]
 });
 
-const emit = defineEmits(['next', 'release-created', 'cover-updated']);
+const emit = defineEmits(['next', 'release-created', 'cover-updated', 'skip-upload']);
 
 const uploadedImage = ref(null);
 const pendingCoverFile = ref(null);
@@ -179,36 +179,22 @@ const createReleaseWithImage = async (file) => {
       
       // ========== الانتقال المباشر إلى Upload1Component ==========
       console.log('🚀 محاولة الانتقال إلى Upload1Component...');
-      console.log('📍 الانتقال إلى:', `/create-release/${newReleaseUuid}?step=2`);
+      console.log('📍 الانتقال إلى:', `/create-release/${newReleaseUuid}`);
       
       try {
-        // الطريقة 1: استخدام router.push
-        await router.push({
-          path: `/create-release/${newReleaseUuid}`,
-          query: { step: '2' }
-        });
-        
+       await router.push({
+  path: `/releases/${newReleaseUuid}/edit`,
+});
         console.log('✅ تم الانتقال بنجاح عبر router.push');
-        
-        // تأكيد بعد نصف ثانية
-        setTimeout(() => {
-          console.log('📍 المسار الحالي:', router.currentRoute.value.fullPath);
-          console.log('📍 query:', router.currentRoute.value.query);
-        }, 500);
-        
       } catch (pushErr) {
         console.error('❌ فشل router.push:', pushErr);
-        
-        // الطريقة 2: استخدام window.location
         try {
           console.log('⚠️ محاولة الانتقال عبر window.location');
-          window.location.href = `/create-release/${newReleaseUuid}?step=2`;
+          window.location.href = `/create-release/${newReleaseUuid}`;
         } catch (locErr) {
           console.error('❌ فشل window.location:', locErr);
         }
       }
-    } else {
-      console.error('❌ لم يتم العثور على UUID في الاستجابة:', response.data);
     }
   } catch (err) {
     console.error('❌ فشل إنشاء الـ Release:', err);
@@ -284,8 +270,9 @@ const handleUploadError = (err) => {
   }
 };
 
+// ========== دالة skipUpload المعدلة - لا ترسل POST ==========
 const skipUpload = async () => {
-  console.log('➡️ تخطي رفع الصورة - إنشاء Release جديد بدون صورة');
+  console.log('➡️ تخطي رفع الصورة - الانتقال بدون إنشاء Release');
   
   if (!releaseStore.releaseType) {
     console.error('❌ release_type غير موجود');
@@ -293,56 +280,20 @@ const skipUpload = async () => {
     return;
   }
 
-  try {
-    isUploading.value = true;
-    
-    // إنشاء كائن البيانات بدلاً من FormData
-    const releaseData = {
-      release_type: releaseStore.releaseType,
-      title: 'Neues Release', // عنوان افتراضي
-      // يمكنك إضافة المزيد من الحقول الافتراضية هنا
-    };
-
-    console.log('📤 إرسال طلب إنشاء Release جديد بدون صورة:', releaseData);
-
-    const response = await apiRequest.post('/releases', releaseData);
-
-    console.log('✅ Release تم إنشاؤه بنجاح:', response.data);
-
-    if (response.data?.data?.uuid) {
-      const newReleaseUuid = response.data.data.uuid;
-      releaseId.value = newReleaseUuid;
-      releaseStore.currentReleaseId = newReleaseUuid;
-      
-      console.log('🔗 تم إنشاء Release جديد بالـ UUID:', newReleaseUuid);
-      
-      // إرسال حدث أن الـ Release تم إنشاؤه
-      emit('release-created', {
-        releaseId: newReleaseUuid,
-        coverUrl: null
-      });
-      
-      // إنهاء حالة الرفع
-      isUploading.value = false;
-      await nextTick();
-      
-      // الانتقال إلى Parent.vue مع الـ UUID الجديد
-      console.log('🚀 الانتقال إلى Parent.vue مع الـ UUID الجديد:', newReleaseUuid);
-      
-      await router.push({
-        path: `/create-release/${newReleaseUuid}`,
-        query: { step: '2', new: 'true' }
-      });
-    }
-  } catch (err) {
-    console.error('❌ فشل إنشاء الـ Release:', err);
-    if (err.response) {
-      console.error('❌ Response data:', err.response.data);
-      errorMessage.value = err.response.data?.message || 'Fehler beim Erstellen des Releases.';
-    }
-    isUploading.value = false;
-  }
+  // لا نقوم بإنشاء Release هنا
+  // فقط نرسل حدث للوالد أننا نريد التخطي مع نوع الـ Release
+  
+  console.log('🚀 إرسال حدث skip-upload إلى الوالد');
+  
+  // إرسال الحدث إلى المكون الأب
+  emit('skip-upload', {
+    releaseType: releaseStore.releaseType
+  });
+  
+  // الانتقال إلى الخطوة التالية مباشرة بدون إنشاء Release
+  emit('next', { skipUpload: true, releaseType: releaseStore.releaseType });
 };
+
 // إعادة المحاولة عند الخطأ
 const retryUpload = () => {
   if (pendingCoverFile.value) {
@@ -350,7 +301,6 @@ const retryUpload = () => {
     handleNewFile(pendingCoverFile.value);
   }
 };
-
 
 // مراقبة تغيير releaseId من المتجر
 watch(() => releaseStore.currentReleaseId, (newId) => {
@@ -368,6 +318,7 @@ watch(serverCoverUrl, (newUrl) => {
   }
 });
 </script>
+
 
 
 <style lang="scss" scoped>

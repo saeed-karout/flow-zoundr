@@ -121,7 +121,7 @@
                 <img src="/icon/play-dark.svg" v-if="isCalendarVisible" class="play-dark"
                     alt="image play dark for calendar" />
                 <CalendarPicker v-if="isCalendarVisible" class="calendar-picker"
-                    @select="$emit('update:selectedDate', $event)" />
+                    @select="handleDateSelect" @update:modelValue="handleDateSelect" />
             </div>
         </div>
 
@@ -162,6 +162,22 @@ const emit = defineEmits([
     'update:isInputFocused', 'update:isCalendarVisible', 'openVideoPopup', 'addArtistInput',
     'removeArtistInput', 'selectSearchResult', 'updateSearchResults'
 ]);
+
+const handleDateSelect = (date) => {
+    console.log('📅 RightSection: تم اختيار التاريخ:', date);
+    
+    // إرسال التاريخ إلى الـ parent
+    emit('update:selectedDate', date);
+    
+    // إغلاق الكالندر وإلغاء التركيز
+    emit('update:isCalendarVisible', false);
+    emit('update:isInputFocused', false);
+    
+    // تعيين isForm4Selected إلى true
+    if (date && date.trim() !== '') {
+        emit('update:isForm4Selected', true);
+    }
+};
 
 const localSearchQuery2 = computed({
     get: () => props.searchQuery2,
@@ -326,7 +342,7 @@ const handleBlur = (index) => {
     padding: 9px 10px;
     align-items: center;
     border-radius: 5px;
-    background: var(--secondary);
+    // background: var(--secondary);
     position: relative;
     cursor: pointer;
 }

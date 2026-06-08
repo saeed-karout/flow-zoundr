@@ -287,6 +287,7 @@ import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.js';
 import iconPlay from '@/assets/icons/play.png';
 import iconPause from '@/assets/icons/pause.png';
 import apiRequest from '@/lib/apiRequest';
+import { api_url } from '@/constants';
 
 const props = defineProps({
   currentSong: {
@@ -439,7 +440,7 @@ watch(formData, () => {
   autoSave();
 }, { deep: true });
 
-// ========== رفع الملف عبر axios مع FormData (رفع حقيقي) ==========
+// ========== رفع الملف عبر axios مع FormData ==========
 const uploadFileToServer = async (file) => {
   if (!file) return;
   
@@ -452,7 +453,6 @@ const uploadFileToServer = async (file) => {
   }
 
   const isWav = file.type === 'audio/wav' || file.name.toLowerCase().endsWith('.wav');
-  
   if (!isWav) {
     uploadError.value = 'Nur WAV-Dateien sind erlaubt. Bitte wähle eine .wav Datei aus.';
     return;
@@ -484,7 +484,6 @@ const uploadFileToServer = async (file) => {
           if (progressEvent.total) {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
             uploadProgress.value = percentCompleted;
-            console.log(`📤 Upload progress: ${percentCompleted}%`);
           }
         }
       }
@@ -492,32 +491,30 @@ const uploadFileToServer = async (file) => {
 
     console.log('✅ Server response:', response.data);
 
-    const filePath = response.data.song_file || response.data.data?.song_file;
-    
-    if (filePath) {
-      console.log('✅ File uploaded successfully, path:', filePath);
-      
-      const cleanPath = filePath.replace(/^\/+/, '');
-      
-      formData.fileUploaded = true;
-      
-      uploadedFileInfo.value = {
-        name: file.name,
-        size: file.size,
-        type: 'audio/wav',
-        path: cleanPath
-      };
-      
-      // تحديث currentSong مؤقتاً
-      if (props.currentSong) {
-        props.currentSong.song_file = cleanPath;
-      }
-      
-      nextTick(() => {
-        // استخدام proxy بدلاً من الرابط المباشر
-        loadAudioViaProxy(cleanPath, file.name);
-      });
+    // ✅ التصحيح: المسار موجود في response.data.data.song_file
+    const filePath = response.data.data?.song_file;
+    if (!filePath) {
+      throw new Error('No file path returned from server');
     }
+    
+    console.log('✅ File uploaded successfully, path:', filePath);
+    const cleanPath = filePath; // لا داعي لإزالة / لأن المسار صحيح
+    
+    formData.fileUploaded = true;
+    uploadedFileInfo.value = {
+      name: file.name,
+      size: file.size,
+      type: 'audio/wav',
+      path: cleanPath
+    };
+    
+    if (props.currentSong) {
+      props.currentSong.song_file = cleanPath;
+    }
+    
+    nextTick(() => {
+      loadAudioViaProxy(cleanPath, file.name);
+    });
 
     isUploading.value = false;
 
@@ -530,12 +527,16 @@ const uploadFileToServer = async (file) => {
   }
 };
 
-// ========== تحميل الصوت عبر proxy لتجنب CORS ==========
+// ========== تحميل الصوت عبر proxy (مع تنظيف المسار) ==========
 const loadAudioViaProxy = (filePath, fileName) => {
-  const proxyUrl = `/storage/${filePath.replace(/^\/+/, '')}`;
+  let relativePath = filePath;
+  // إزالة 'storage/' إذا كانت موجودة في البداية لتجنب التكرار
+  if (relativePath.startsWith('storage/')) {
+    relativePath = relativePath.substring(8);
+  }
+  const proxyUrl = `/storage/${relativePath}`;
   console.log('🔗 Loading audio via proxy:', proxyUrl);
   
-  // استخدام fetch للحصول على الملف كـ blob
   fetch(proxyUrl, {
     method: 'GET',
     mode: 'cors',
@@ -557,15 +558,18 @@ const loadAudioViaProxy = (filePath, fileName) => {
     initializeWaveSurferWithBlob(blobUrl, fileName);
   })
   .catch(error => {
-    console.error('❌ Failed to load audio via proxy:', error);
-    // محاولة بديلة باستخدام XHR
+    console.error('❌ Failed to load audio via fetch:', error);
     loadAudioViaXHR(filePath, fileName);
   });
 };
 
-// ========== تحميل الصوت عبر XHR ==========
+// ========== تحميل الصوت عبر XHR مع تنظيف المسار ==========
 const loadAudioViaXHR = (filePath, fileName) => {
-  const proxyUrl = `/storage/${filePath.replace(/^\/+/, '')}`;
+  let relativePath = filePath;
+  if (relativePath.startsWith('storage/')) {
+    relativePath = relativePath.substring(8);
+  }
+  const proxyUrl = `/storage/${relativePath}`;
   console.log('📥 Loading audio via XHR from:', proxyUrl);
   
   const xhr = new XMLHttpRequest();
@@ -590,6 +594,33 @@ const loadAudioViaXHR = (filePath, fileName) => {
   
   xhr.send();
 };
+
+// ========== في onMounted (تحميل الملف الموجود مسبقاً) ==========
+onMounted(() => {
+  console.log('InfosContent mounted → currentSong:', props.currentSong);
+  
+  if (props.currentSong?.song_file && props.currentSong?.uuid) {
+    let filePath = props.currentSong.song_file;
+    // تنظيف المسار من أي بادئة storage/ إذا وجدت
+    if (filePath.startsWith('storage/')) {
+      filePath = filePath.substring(8);
+    }
+    const fileName = filePath.split('/').pop() || 'audio.wav';
+    
+    console.log('🔗 Loading existing audio from path:', filePath);
+    
+    formData.fileUploaded = true;
+    uploadedFile.value = { name: fileName };
+    uploadedFileInfo.value = {
+      name: fileName,
+      path: filePath
+    };
+    
+    nextTick(() => {
+      loadAudioViaProxy(filePath, fileName);
+    });
+  }
+});
 
 // ========== تهيئة WaveSurfer مع Blob URL ==========
 const initializeWaveSurferWithBlob = (blobUrl, fileName) => {
@@ -1413,7 +1444,7 @@ letter-spacing: 0.9px;
   border: 0;
   color: #fff;
   font-family: Heebo;
-  font-size: 16px;
+  font-size: 20px;
   height: 46px;
   max-width: 100%;
   box-sizing: border-box;
@@ -1463,7 +1494,7 @@ letter-spacing: 0.9px;
   background: var(--primary);
   color: #6A6C6D;
   font-family: Heebo;
-  font-size: 16px;
+  font-size: 20px;
   height: 46px;
   max-width: 100%;
   box-sizing: border-box;
@@ -1501,7 +1532,7 @@ letter-spacing: 0.9px;
   padding: 10px 12px;
   color: #FFF;
   font-family: Heebo;
-  font-size: 16px;
+  font-size: 20px;
   cursor: pointer;
 }
 

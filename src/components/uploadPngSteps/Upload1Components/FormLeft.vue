@@ -2,7 +2,7 @@
     <div class="form-left">
         <div class="form6" :class="{ active: isForm6Active }">
             <div class="top-line">
-                <div class="title">Nutzt du deine eigene GTIN?</div>
+                <div class="title">Hast du die GTIN?</div>
                 <div class="btn-switch" @click="$emit('toggleForm6')">
                     <img src="/icon/circle.svg" class="circle" alt="circle image" />
                 </div>
@@ -23,7 +23,7 @@
         </div>
         <div class="form7" :class="{ active: isForm7Active }">
             <div class="top-line">
-                <div class="title">Nutzt du eine Katalognummer?</div>
+                <div class="title">Hast du die Katalognummer?</div>
                 <div class="btn-switch" @click="$emit('toggleForm7')">
                     <img src="/icon/circle.svg" class="circle" alt="circle image" />
                 </div>
@@ -142,7 +142,7 @@ const localCatalogNumber = computed({
     border: 0;
     color: #fff;
     font-family: Heebo;
-    font-size: 16px;
+    font-size: 20px;
     height: 46px;
     max-width: 100%;
     box-sizing: border-box;
@@ -172,7 +172,7 @@ const localCatalogNumber = computed({
     padding: 9px 10px;
     align-items: center;
     border-radius: 5px;
-    background: var(--secondary);
+    // background: var(--secondary);
     position: relative;
     cursor: pointer;
 }

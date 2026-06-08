@@ -1,9 +1,9 @@
 <template>
   <main>
     <!-- عرض Start.vue عندما لا توجد Releases -->
-    <Start v-if="showStartComponent" />
+    <Start v-if="showStart" />
     
-    <!-- عرض المحتوى العادي عندما توجد Releases -->
+    <!-- عرض المحتوى العادي مع containers فقط عندما يكون هناك Releases -->
     <div v-else class="containers">
       <div class="first-row">
         <div class="hero-section">
@@ -102,8 +102,7 @@
                       <span>{{ release.artist_name || 'Artist' }}</span>
                       <h1>{{ release.title || 'Untitled' }}</h1>
                     </div>
-                    <!-- <p>{{ getReleaseStatusText(release.release_status) }}</p> -->
-                     <p>5.240 Streams</p>
+                    <p>5.240 Streams</p>
                   </div>
                 </div>
               </div>
@@ -135,20 +134,16 @@ import Start from "@/components/Dashboard/Start.vue";
 const router = useRouter();
 const questionModalRef = ref(null);
 const settings = ref({});
-const isLoading = ref(false);
-const errorMessage = ref(null);
 const releases = ref([]);
-const isDataLoaded = ref(false); 
+const isLoading = ref(true); // متغير للتأكد من اكتمال التحميل
+
+// متغير للتحكم بعرض Start - سيتم تحديثه بناءً على وجود Releases
+const showStart = ref(true); 
 
 const contactImageUrl = computed(() => {
   return settings.value.contact_image
     ? `${storage_url}/${settings.value.contact_image}`
     : "../assets/icons/dashboard/user/user.jpg";
-});
-
-// تحديد ما إذا كان يجب عرض مكون Start
-const showStartComponent = computed(() => {
-  return isDataLoaded.value && releases.value.length === 0;
 });
 
 // جلب آخر 10 Releases
@@ -157,17 +152,30 @@ const fetchReleases = async () => {
     const response = await apiRequest.get("/releases?per_page=10");
     releases.value = response.data.data || [];
     console.log("📦 Releases fetched:", releases.value);
+    console.log("📊 Number of releases:", releases.value.length);
+    
+    // تحديث showStart بناءً على وجود Releases
+    // إذا كان هناك Releases، نخفي Start ونظهر containers
+    if (releases.value.length > 0) {
+      showStart.value = false;
+      console.log("✅ Releases found, hiding Start and showing containers");
+    } else {
+      showStart.value = true;
+      console.log("❌ No releases found, showing Start");
+    }
+    
   } catch (error) {
     console.error("❌ Error fetching releases:", error);
-    releases.value = []; // في حالة الخطأ، نعتبر أنه لا توجد Releases
+    releases.value = [];
+    showStart.value = true; // في حالة الخطأ، نظهر Start
   }
 };
 
 // الحصول على آخر 10 Releases (مرتبة حسب تاريخ الإنشاء)
 const recentReleases = computed(() => {
-  return releases.value
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    .slice(0, 10);
+  const sorted = [...releases.value].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 10);
+  console.log("📋 Recent releases:", sorted.length);
+  return sorted;
 });
 
 // الحصول على رابط الصورة
@@ -176,20 +184,6 @@ const getCoverUrl = (coverPath) => {
   return coverPath.startsWith('http') 
     ? coverPath 
     : `${storage_url}/${coverPath}`;
-};
-
-// الحصول على نص حالة الـ Release
-const getReleaseStatusText = (status) => {
-  const statusMap = {
-    'online': 'Online',
-    'out_for_delivery': 'In Auslieferung',
-    'submitted': 'Eingereicht',
-    'draft': 'Entwurf',
-    'correction': 'Korrektur',
-    'takedown': 'Entfernt'
-  };
-  
-  return statusMap[status] || status || 'Unbekannt';
 };
 
 // الانتقال إلى صفحة تفاصيل الـ Release
@@ -205,14 +199,11 @@ onMounted(async () => {
     const settingsResponse = await apiRequest.get("/settings");
     settings.value = settingsResponse.data || {};
     
-    // جلب الـ Releases
+    // جلب الـ Releases - هذه الدالة ستقوم بتحديث showStart تلقائياً
     await fetchReleases();
     
   } catch (error) {
     console.error("Error fetching data:", error);
-    errorMessage.value = "Fehler beim Laden der Daten";
-    
-    // بيانات افتراضية في حالة الخطأ
     settings.value = {
       contact_name: "null",
       contact_title: "null",
@@ -221,12 +212,13 @@ onMounted(async () => {
       contact_email: null,
       contact_image: null,
     };
-    
-    releases.value = []; // في حالة الخطأ، نعتبر أنه لا توجد Releases
+    releases.value = [];
+    showStart.value = true; // في حالة الخطأ، نظهر Start
     
   } finally {
     isLoading.value = false;
-    isDataLoaded.value = true; // تم تحميل البيانات بالكامل
+    console.log("🏁 Final showStart value:", showStart.value);
+    console.log("🏁 Final releases count:", releases.value.length);
   }
 });
 
@@ -248,7 +240,7 @@ const openQuestionModal = () => {
 };
 
 const handleImageError = () => {
-  contactImageUrl.value = "../assets/icons/dashboard/user/user.jpg";
+  console.log("Image error");
 };
 </script>
 

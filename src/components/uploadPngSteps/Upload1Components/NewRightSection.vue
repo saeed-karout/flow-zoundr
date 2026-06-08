@@ -78,110 +78,77 @@
                     </div>
                 </div>
                 <div class="row1">
-                   <!-- Hauptgenre -->
-<div class="form">
-    <div class="form5">
-        <div class="title">Hauptgenre?</div>
-        <div class="search-box-container">
-            <div class="section-input search-mode"
-                :class="{ 
-                    'is-hovered': isHoveredMainGenre, 
-                    'has-checkmark': isMainGenreSelected,
-                    'is-focused': isMainGenreFocused
-                }"
-                @mouseenter="isHoveredMainGenre = true"
-                @mouseleave="isHoveredMainGenre = false">
-                <input 
-                    type="text" 
-                    class="input-field" 
-                    v-model="mainGenreSearch"
-                    placeholder="Hauptgenre suchen..."
-                    @focus="isMainGenreFocused = true; isMainGenreDropdownOpen = true"
-                    @blur="handleMainGenreBlur"
-                    @input="handleMainGenreInput"
-                />
-                <div v-if="isMainGenreSelected" class="checkmark">
-                    <img src="../../../assets/icons/y.png" class="icon-y" alt="checkmark icon" />
-                </div>
-                <div v-else class="checkmark">
-                    <img src="/icon/icon-select.svg" class="icon-select" alt="select icon" />
-                </div>
-                <div class="spacer" @click="$emit('openVideoPopup', 'form7')">
-                    <div class="play" :class="{ visible: isHoveredMainGenre || isMainGenreFocused }">
-                        <img :src="iconPlay" class="icon" alt="play icon" />
+                    <!-- Hauptgenre - مثل الـ Price تماماً -->
+                    <div class="form">
+                        <div class="form5">
+                            <div class="title">Hauptgenre?</div>
+                            <div class="section-input"
+                                :class="{ 'is-hovered': isHoveredMainGenre, 'has-checkmark': isMainGenreSelected }"
+                                @mouseenter="isHoveredMainGenre = true"
+                                @mouseleave="isHoveredMainGenre = false">
+                                <div class="custom-select" @click="toggleDropdown('mainGenre')">
+                                    <div class="select-trigger" :class="{ 'selected': isMainGenreSelected }">
+                                        {{ localMainGenreDisplay || 'Genre auswählen' }}
+                                    </div>
+                                    <div class="dropdown" v-show="isMainGenreDropdownOpen">
+                                        <div class="option" 
+                                            v-for="genre in mainGenres" 
+                                            :key="genre.id"
+                                            @click.stop="selectMainGenre(genre)">
+                                            {{ genre.genre_name }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-if="isMainGenreSelected" class="checkmark">
+                                    <img src="../../../assets/icons/y.png" class="icon-y" alt="checkmark icon" />
+                                </div>
+                                <div v-else class="checkmark">
+                                    <img src="/icon/icon-select.svg" class="icon-select" alt="select icon" />
+                                </div>
+                                <div class="spacer" @click="$emit('openVideoPopup', 'form7')">
+                                    <div class="play" :class="{ visible: isHoveredMainGenre }">
+                                        <img :src="iconPlay" class="icon" alt="play icon" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            </div>
-            
-            <!-- نتائج البحث للأنواع الرئيسية -->
-            <div v-if="isMainGenreDropdownOpen && filteredMainGenres.length > 0" class="search-results">
-                <div v-for="genre in filteredMainGenres" 
-                     :key="genre.id" 
-                     class="search-result-item"
-                     @mousedown.prevent="selectMainGenre(genre)">
-                    {{ genre.genre_name }}
-                </div>
-            </div>
-            <div v-else-if="isMainGenreDropdownOpen && mainGenreSearch && filteredMainGenres.length === 0" class="search-results no-results">
-                Keine Ergebnisse
-            </div>
-        </div>
-    </div>
-</div>
 
-<!-- Subgenre -->
-<div class="form">
-    <div class="form5">
-        <div class="title">Subgenre?</div>
-        <div class="search-box-container">
-            <div class="section-input search-mode"
-                :class="{ 
-                    'is-hovered': isHoveredSubGenre, 
-                    'has-checkmark': isSubGenreSelected,
-                    'is-focused': isSubGenreFocused,
-                    'disabled': !isSubGenreEnabled
-                }"
-                :style="{ opacity: isSubGenreEnabled ? 1 : 0.5 }"
-                @mouseenter="isHoveredSubGenre = true"
-                @mouseleave="isHoveredSubGenre = false">
-                <input 
-                    type="text" 
-                    class="input-field" 
-                    v-model="subGenreSearch"
-                    placeholder="Subgenre suchen..."
-                    @focus="isSubGenreFocused = true; isSubGenreDropdownOpen = true"
-                    @blur="handleSubGenreBlur"
-                    @input="handleSubGenreInput"
-                    :disabled="!isSubGenreEnabled"
-                />
-                <div v-if="isSubGenreSelected" class="checkmark">
-                    <img src="../../../assets/icons/y.png" class="icon-y" alt="checkmark icon" />
-                </div>
-                <div v-else class="checkmark">
-                    <img src="/icon/icon-select.svg" class="icon-select" alt="select icon" />
-                </div>
-                <div class="spacer" @click="$emit('openVideoPopup', 'form8')">
-                    <div class="play" :class="{ visible: (isHoveredSubGenre || isSubGenreFocused) && isSubGenreEnabled }">
-                        <img :src="iconPlay" class="icon" alt="play icon" />
+                    <!-- Subgenre - مثل الـ Price تماماً (يظهر فقط بعد اختيار Hauptgenre) -->
+                    <div class="form" v-if="isSubGenreEnabled">
+                        <div class="form5">
+                            <div class="title">Subgenre?</div>
+                            <div class="section-input"
+                                :class="{ 'is-hovered': isHoveredSubGenre, 'has-checkmark': isSubGenreSelected }"
+                                @mouseenter="isHoveredSubGenre = true"
+                                @mouseleave="isHoveredSubGenre = false">
+                                <div class="custom-select" @click="toggleDropdown('subGenre')">
+                                    <div class="select-trigger" :class="{ 'selected': isSubGenreSelected }">
+                                        {{ localSubGenreDisplay || 'Subgenre auswählen' }}
+                                    </div>
+                                    <div class="dropdown" v-show="isSubGenreDropdownOpen">
+                                        <div class="option" 
+                                            v-for="subGenre in subGenresForCurrentMain" 
+                                            :key="subGenre.id"
+                                            @click.stop="selectSubGenre(subGenre)">
+                                            {{ subGenre.genre_name }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-if="isSubGenreSelected" class="checkmark">
+                                    <img src="../../../assets/icons/y.png" class="icon-y" alt="checkmark icon" />
+                                </div>
+                                <div v-else class="checkmark">
+                                    <img src="/icon/icon-select.svg" class="icon-select" alt="select icon" />
+                                </div>
+                                <div class="spacer" @click="$emit('openVideoPopup', 'form8')">
+                                    <div class="play" :class="{ visible: isHoveredSubGenre }">
+                                        <img :src="iconPlay" class="icon" alt="play icon" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            </div>
-            
-            <!-- نتائج البحث للأنواع الفرعية -->
-            <div v-if="isSubGenreDropdownOpen && isSubGenreEnabled && filteredSubGenresWithSearch.length > 0" class="search-results">
-                <div v-for="subGenre in filteredSubGenresWithSearch" 
-                     :key="subGenre.id" 
-                     class="search-result-item"
-                     @mousedown.prevent="selectSubGenre(subGenre)">
-                    {{ subGenre.genre_name }}
-                </div>
-            </div>
-            <div v-else-if="isSubGenreDropdownOpen && isSubGenreEnabled && subGenreSearch && filteredSubGenresWithSearch.length === 0" class="search-results no-results">
-                Keine Ergebnisse
-            </div>
-        </div>
-    </div>
-</div>
                 </div>
             </div>
         </template>
@@ -231,60 +198,9 @@ const isSongPriceDropdownOpen = ref(false);
 const isMainGenreDropdownOpen = ref(false);
 const isSubGenreDropdownOpen = ref(false);
 
-// حالات التركيز
-const isMainGenreFocused = ref(false);
-const isSubGenreFocused = ref(false);
+// حالات الـ hover
+const isHoveredMainGenre = ref(false);
 const isHoveredSubGenre = ref(false);
-
-// متغيرات البحث
-const mainGenreSearch = ref('');
-const subGenreSearch = ref('');
-
-// ========== دوال معالجة البحث ==========
-const handleMainGenreBlur = () => {
-    setTimeout(() => {
-        isMainGenreFocused.value = false;
-        isMainGenreDropdownOpen.value = false;
-    }, 200);
-};
-
-const handleSubGenreBlur = () => {
-    setTimeout(() => {
-        isSubGenreFocused.value = false;
-        isSubGenreDropdownOpen.value = false;
-    }, 200);
-};
-
-const handleMainGenreInput = () => {
-    isMainGenreDropdownOpen.value = true;
-};
-
-const handleSubGenreInput = () => {
-    isSubGenreDropdownOpen.value = true;
-};
-
-const selectMainGenre = (genre) => {
-    mainGenreSearch.value = genre.genre_name;
-    localMainGenre.value = genre.genre_name;
-    emit('update:isMainGenreSelected', true);
-    isMainGenreDropdownOpen.value = false;
-    isMainGenreFocused.value = false;
-    
-    // إعادة تعيين Subgenre
-    subGenreSearch.value = '';
-    localSubGenre.value = '';
-    emit('update:isSubGenreSelected', false);
-    
-    console.log('🔄 Main genre selected:', genre.genre_name);
-};
-
-const selectSubGenre = (subGenre) => {
-    subGenreSearch.value = subGenre.genre_name;
-    localSubGenre.value = subGenre.genre_name;
-    emit('update:isSubGenreSelected', true);
-    isSubGenreDropdownOpen.value = false;
-    isSubGenreFocused.value = false;
-};
 
 // ========== معالجة الأنواع ==========
 
@@ -293,107 +209,120 @@ const mainGenres = computed(() => {
     return genres.value;
 });
 
-// توليد أنواع فرعية افتراضية من الأنواع الرئيسية
-const generateSubGenres = (mainGenreName) => {
-    // كلمات مفتاحية للأنواع الفرعية الشائعة
-    const subGenreKeywords = [
-        'Rock', 'Pop', 'Metal', 'Jazz', 'Blues', 'Folk', 'Electronic',
-        'Hip Hop', 'R&B', 'Soul', 'Funk', 'Disco', 'House', 'Techno',
-        'Trance', 'Dubstep', 'Ambient', 'Classical', 'Country', 'Reggae',
-        'Ska', 'Punk', 'Hardcore', 'Grunge', 'Alternative', 'Indie',
-        'Experimental', 'Avant-Garde', 'World', 'Latin', 'Bossa Nova',
-        'Samba', 'Tango', 'Flamenco', 'Gospel', 'Christian', 'Holiday',
-        'Children', 'Comedy', 'Spoken Word', 'Audiobook', 'Podcast'
-    ];
-    
-    // إنشاء 5-8 أنواع فرعية عشوائية
-    const count = 5 + Math.floor(Math.random() * 4);
-    const subGenres = [];
-    
-    for (let i = 0; i < count; i++) {
-        const keyword = subGenreKeywords[Math.floor(Math.random() * subGenreKeywords.length)];
-        subGenres.push({
-            id: `sub-${mainGenreName}-${i}`,
-            genre_name: `${mainGenreName} ${keyword}`,
-            parent_genre_name: mainGenreName
-        });
-    }
-    
-    // إضافة بعض الأنواع الفرعية الشائعة
-    const commonSubs = [
-        `${mainGenreName} Classics`,
-        `${mainGenreName} Modern`,
-        `${mainGenreName} Underground`,
-        `Contemporary ${mainGenreName}`,
-        `Traditional ${mainGenreName}`
-    ];
-    
-    return [...subGenres, ...commonSubs.map((name, i) => ({
-        id: `common-${mainGenreName}-${i}`,
-        genre_name: name,
-        parent_genre_name: mainGenreName
-    }))];
-};
-
-// خريطة لتخزين الأنواع الفرعية المولدة لكل نوع رئيسي
+// تخزين الأنواع الفرعية المولدة
 const generatedSubGenresMap = ref(new Map());
 
-// الحصول على الأنواع الفرعية لنوع رئيسي معين
-const getSubGenresForMain = (mainGenreName) => {
-    if (!mainGenreName) return [];
-    
+// توليد أنواع فرعية من النوع الرئيسي المختار
+const generateSubGenresForMain = (mainGenreName) => {
     // إذا كانت الأنواع الفرعية موجودة مسبقاً، استخدمها
     if (generatedSubGenresMap.value.has(mainGenreName)) {
         return generatedSubGenresMap.value.get(mainGenreName);
     }
     
-    // وإلا، قم بتوليدها
-    const newSubGenres = generateSubGenres(mainGenreName);
-    generatedSubGenresMap.value.set(mainGenreName, newSubGenres);
-    return newSubGenres;
-};
-
-// الأنواع الرئيسية المفلترة حسب البحث
-const filteredMainGenres = computed(() => {
-    if (!mainGenreSearch.value) return mainGenres.value;
+    // قائمة بالأنواع الفرعية الشائعة
+    const subGenreList = [
+        { id: `sub-${mainGenreName}-1`, genre_name: `${mainGenreName} Rock` },
+        { id: `sub-${mainGenreName}-2`, genre_name: `${mainGenreName} Pop` },
+        { id: `sub-${mainGenreName}-3`, genre_name: `${mainGenreName} Metal` },
+        { id: `sub-${mainGenreName}-4`, genre_name: `${mainGenreName} Jazz` },
+        { id: `sub-${mainGenreName}-5`, genre_name: `${mainGenreName} Blues` },
+        { id: `sub-${mainGenreName}-6`, genre_name: `${mainGenreName} Electronic` },
+        { id: `sub-${mainGenreName}-7`, genre_name: `${mainGenreName} Hip Hop` },
+        { id: `sub-${mainGenreName}-8`, genre_name: `${mainGenreName} Classical` },
+        { id: `sub-${mainGenreName}-9`, genre_name: `${mainGenreName} Country` },
+        { id: `sub-${mainGenreName}-10`, genre_name: `${mainGenreName} Reggae` }
+    ];
     
-    const search = mainGenreSearch.value.toLowerCase();
-    return mainGenres.value.filter(g => 
-        g.genre_name.toLowerCase().includes(search)
-    );
-});
+    generatedSubGenresMap.value.set(mainGenreName, subGenreList);
+    return subGenreList;
+};
 
 // الأنواع الفرعية للنوع الرئيسي المختار
 const subGenresForCurrentMain = computed(() => {
     if (!props.mainGenre) return [];
-    return getSubGenresForMain(props.mainGenre);
-});
-
-// الأنواع الفرعية المفلترة حسب البحث
-const filteredSubGenresWithSearch = computed(() => {
-    let result = subGenresForCurrentMain.value;
-    
-    if (subGenreSearch.value) {
-        const search = subGenreSearch.value.toLowerCase();
-        result = result.filter(sg => 
-            sg.genre_name.toLowerCase().includes(search)
-        );
-    }
-    
-    return result;
+    return generateSubGenresForMain(props.mainGenre);
 });
 
 // تحديد ما إذا كان يجب تفعيل حقل Subgenre
 const isSubGenreEnabled = computed(() => {
-    const enabled = props.mainGenre.trim() !== '' && subGenresForCurrentMain.value.length > 0;
-    console.log('🔘 isSubGenreEnabled:', enabled, {
-        mainGenre: props.mainGenre,
-        subGenresCount: subGenresForCurrentMain.value.length
-    });
-    return enabled;
+    return props.mainGenre && props.mainGenre.trim() !== '';
 });
 
-// جلب البيانات من الـ API
+// عرض القيم
+const localMainGenreDisplay = computed(() => {
+    if (!props.mainGenre) return '';
+    const found = mainGenres.value.find(g => g.genre_name === props.mainGenre);
+    return found ? found.genre_name : props.mainGenre;
+});
+
+const localSubGenreDisplay = computed(() => {
+    if (!props.subGenre) return '';
+    const found = subGenresForCurrentMain.value.find(sg => sg.genre_name === props.subGenre);
+    return found ? found.genre_name : props.subGenre;
+});
+
+// ========== دوال اختيار القيم ==========
+
+const toggleDropdown = (field) => {
+    // إغلاق جميع القوائم المنسدلة الأخرى
+    isReleasePriceDropdownOpen.value = false;
+    isSongPriceDropdownOpen.value = false;
+    isMainGenreDropdownOpen.value = false;
+    isSubGenreDropdownOpen.value = false;
+    
+    // فتح القائمة المطلوبة
+    if (field === 'releasePrice') {
+        isReleasePriceDropdownOpen.value = true;
+    } else if (field === 'songPrice') {
+        isSongPriceDropdownOpen.value = true;
+    } else if (field === 'mainGenre') {
+        isMainGenreDropdownOpen.value = true;
+    } else if (field === 'subGenre') {
+        isSubGenreDropdownOpen.value = true;
+    }
+};
+
+const selectOption = (field, value) => {
+    if (field === 'releasePrice') {
+        emit('update:releasePrice', value);
+        emit('update:isReleasePriceSelected', true);
+        isReleasePriceDropdownOpen.value = false;
+    } else if (field === 'songPrice') {
+        emit('update:songPrice', value);
+        emit('update:isSongPriceSelected', true);
+        isSongPriceDropdownOpen.value = false;
+    }
+};
+
+const selectMainGenre = (genre) => {
+    emit('update:mainGenre', genre.genre_name);
+    emit('update:isMainGenreSelected', true);
+    // إعادة تعيين Subgenre عند تغيير Hauptgenre
+    emit('update:subGenre', '');
+    emit('update:isSubGenreSelected', false);
+    isMainGenreDropdownOpen.value = false;
+    console.log('🔄 Main genre selected:', genre.genre_name);
+};
+
+const selectSubGenre = (subGenre) => {
+    emit('update:subGenre', subGenre.genre_name);
+    emit('update:isSubGenreSelected', true);
+    isSubGenreDropdownOpen.value = false;
+    console.log('🔄 Sub genre selected:', subGenre.genre_name);
+};
+
+// ========== إغلاق القوائم عند النقر خارجها ==========
+const handleClickOutside = (event) => {
+    const target = event.target;
+    if (!target.closest('.custom-select')) {
+        isReleasePriceDropdownOpen.value = false;
+        isSongPriceDropdownOpen.value = false;
+        isMainGenreDropdownOpen.value = false;
+        isSubGenreDropdownOpen.value = false;
+    }
+};
+
+// ========== جلب البيانات من الـ API ==========
 const fetchGenres = async () => {
     isLoading.value = true;
     try {
@@ -418,37 +347,6 @@ const fetchGenres = async () => {
     }
 };
 
-// ========== دوال القوائم المنسدلة الأخرى ==========
-const toggleDropdown = (field) => {
-    console.log(`Toggling dropdown for ${field}`);
-    
-    if (field === 'releasePrice') {
-        isReleasePriceDropdownOpen.value = !isReleasePriceDropdownOpen.value;
-        isSongPriceDropdownOpen.value = false;
-        isMainGenreDropdownOpen.value = false;
-        isSubGenreDropdownOpen.value = false;
-    } else if (field === 'songPrice') {
-        isSongPriceDropdownOpen.value = !isSongPriceDropdownOpen.value;
-        isReleasePriceDropdownOpen.value = false;
-        isMainGenreDropdownOpen.value = false;
-        isSubGenreDropdownOpen.value = false;
-    }
-};
-
-const selectOption = (field, value) => {
-    console.log(`Selected ${field}: ${value}`);
-    
-    if (field === 'releasePrice') {
-        localReleasePrice.value = value;
-        emit('update:isReleasePriceSelected', value.trim() !== '');
-        isReleasePriceDropdownOpen.value = false;
-    } else if (field === 'songPrice') {
-        localSongPrice.value = value;
-        emit('update:isSongPriceSelected', value.trim() !== '');
-        isSongPriceDropdownOpen.value = false;
-    }
-};
-
 // ========== Computed properties للقيم ==========
 const sanitize = (value) => {
     if (typeof value === 'string') {
@@ -467,37 +365,25 @@ const localSongPrice = computed({
     set: (value) => emit('update:songPrice', sanitize(value))
 });
 
-const localMainGenre = computed({
-    get: () => sanitize(props.mainGenre),
-    set: (value) => emit('update:mainGenre', sanitize(value))
-});
-
-const localSubGenre = computed({
-    get: () => sanitize(props.subGenre),
-    set: (value) => emit('update:subGenre', sanitize(value))
-});
-
 // ========== Watchers ==========
-watch(localMainGenre, (newValue) => {
-    emit('update:isSubGenreEnabled', newValue.trim() !== '' && subGenresForCurrentMain.value.length > 0);
+watch(() => props.mainGenre, (newValue) => {
+    console.log('📌 Main genre changed to:', newValue);
 });
 
-// مزامنة البحث مع القيم من props
-watch(() => props.mainGenre, (newVal) => {
-    if (newVal && newVal !== mainGenreSearch.value) {
-        mainGenreSearch.value = newVal;
-    }
-}, { immediate: true });
-
-watch(() => props.subGenre, (newVal) => {
-    if (newVal && newVal !== subGenreSearch.value) {
-        subGenreSearch.value = newVal;
-    }
-}, { immediate: true });
+watch(() => props.subGenre, (newValue) => {
+    console.log('📌 Sub genre changed to:', newValue);
+});
 
 // ========== Initialization ==========
 onMounted(() => {
     fetchGenres();
+    document.addEventListener('click', handleClickOutside);
+});
+
+// تنظيف المستمع عند إلغاء تحميل المكون
+import { onUnmounted } from 'vue';
+onUnmounted(() => {
+    document.removeEventListener('click', handleClickOutside);
 });
 </script>
 
@@ -583,95 +469,6 @@ onMounted(() => {
     align-self: stretch;
 }
 
-/* أنماط وضع البحث */
-.section-input.search-mode .input-field {
-    display: flex;
-    padding: 12px;
-    justify-content: space-between;
-    align-items: center;
-    flex: 1 0 0;
-    border-radius: 5px;
-    background: var(--primary);
-    outline: none;
-    border: 0;
-    color: #fff;
-    font-family: Heebo;
-    font-size: 16px;
-    height: 46px;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.section-input.search-mode .input-field:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-}
-
-.section-input.search-mode.has-checkmark .input-field {
-    padding-right: 94px;
-}
-
-/* نتائج البحث */
-.search-box-container {
-    position: relative;
-    width: 100%;
-}
-
-.search-results {
-    position: absolute;
-    top: calc(100% + 5px);
-    left: 0;
-    right: 0;
-    background: var(--primary);
-    border-radius: 5px;
-    z-index: 100;
-    max-height: 250px;
-    overflow-y: auto;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    scrollbar-width: none;
-}
-
-.search-result-item {
-    padding: 12px 16px;
-    color: #FFF;
-    font-family: Heebo;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.search-result-item:last-child {
-    border-bottom: none;
-}
-
-.search-result-item:hover {
-    // background: var(--Strawberry, #DE1456);
-    padding-left: 20px;
-}
-
-.search-results.no-results {
-    padding: 20px 16px;
-    color: rgba(255, 255, 255, 0.5);
-    text-align: center;
-    font-style: italic;
-}
-
-/* حالة التركيز */
-.section-input.search-mode.is-focused {
-    // outline: 2px solid var(--Strawberry, #DE1456);
-}
-
-/* تعديل موضع السبيسر */
-.section-input.search-mode .spacer {
-    background: var(--secondary);
-}
-
-.section-input.search-mode .spacer .play {
-    background: var(--primary);
-}
-
 .metas .row1 .form {
     display: flex;
     flex-direction: column;
@@ -724,23 +521,26 @@ onMounted(() => {
     align-items: center;
     border-radius: 5px;
     background: var(--primary);
-    color: #6A6C6D; /* اللون الافتراضي قبل التحديد */
+    color: #6A6C6D;
     font-family: Heebo;
-    font-size: 16px;
+    font-size: 20px;
     height: 46px;
     max-width: 100%;
     box-sizing: border-box;
     cursor: pointer;
 }
 
+.select-trigger.selected {
+    color: #FFF;
+}
+
 .section-input.has-checkmark .select-trigger {
-    color: #FFF; /* اللون الأبيض بعد التحديد */
     padding-right: 94px;
 }
 
 .dropdown {
     position: absolute;
-    top: calc(100% + 2px); /* إزاحة القائمة المنسدلة 2 بكسل للأسفل */
+    top: calc(100% + 2px);
     left: 0;
     right: 0;
     background: var(--primary);
@@ -749,27 +549,22 @@ onMounted(() => {
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
     max-height: 200px;
     overflow-y: auto;
-    width: calc(100% + 38px);
-    transition: opacity 0.2s ease, transform 0.2s ease;
-    opacity: 1;
-    transform: translateY(0);
-}
-
-.dropdown[style*="display: none"] {
-    opacity: 0;
-    transform: translateY(-10px);
+    width: 100%;
+    scrollbar-width: none;
 }
 
 .dropdown .option {
     padding: 10px 12px;
     color: #FFF;
     font-family: Heebo;
-    font-size: 16px;
+    font-size: 20px;
     cursor: pointer;
+    transition: all 0.2s ease;
 }
 
 .dropdown .option:hover {
-    background: var(--secondary);
+    // background: var(--secondary);
+    padding-left: 20px;
 }
 
 .section-input .checkmark {
@@ -801,7 +596,6 @@ onMounted(() => {
     padding: 9px 10px;
     align-items: center;
     border-radius: 5px;
-    background: var(--secondary);
     position: relative;
     cursor: pointer;
 }
@@ -834,28 +628,44 @@ onMounted(() => {
     filter: brightness(0) invert(1);
 }
 
+.loading-spinner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 200px;
+    width: 100%;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--secondary);
+    border-top-color: var(--Strawberry, #D15);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
 
 @media (max-width:1599px) {
     .new-right .info .title{
         font-size: 48px;
     }
-
     .new-right .info .subtitle{
         font-size: 32px;
     }
-
     .new-right .info{
         gap: 16px;
     }
 }
-
 
 @media (min-width:1600px) and (max-width:2074px) {
     .new-right .info .title{
         font-size: 58px;
     }
 }
-
 
 @media (min-width:2075px) and (max-width:2560px) {
     .new-right .info .title{

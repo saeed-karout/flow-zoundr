@@ -45,18 +45,30 @@ const router = createRouter({
           component: () => import('@/views/UploadPNG.vue'),
           props: (route) => ({
             releaseUuid: route.params.releaseUuid || null,
-            currentStep: 1 // تمرير currentStep بشكل افتراضي
+            currentStep: 1
           })
         },
         {
-          path: "/releases/:releaseUuid/songs/:songUuid",
+          // مسار تعديل الأغنية (يجب أن يأتي أولاً لأنه أكثر تحديداً)
+          path: "/releases/:releaseUuid/songs/:songUuid/edit",
           name: "edit-song",
           component: () => import('@/views/UploadPNG.vue'),
           props: (route) => ({
             releaseUuid: route.params.releaseUuid,
             songUuid: route.params.songUuid,
             editMode: 'song',
-            currentStep: 3 // عند تعديل أغنية، نبدأ من الخطوة 3
+            currentStep: 3
+          })
+        },
+        {
+          // مسار تعديل الـ Release (يأتي بعد مسار الأغنية)
+          path: "/releases/:releaseUuid/edit",
+          name: "edit-release",
+          component: () => import('@/views/UploadPNG.vue'),
+          props: (route) => ({
+            releaseUuid: route.params.releaseUuid,
+            editMode: 'release',
+            currentStep: 2
           })
         },
         {
@@ -101,10 +113,17 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const releaseStore = useReleaseStore();
   
+  console.log('🔀 Router beforeEach - to.path:', to.path);
+  console.log('🔀 Router beforeEach - to.params:', to.params);
+  console.log('🔀 Router beforeEach - to.name:', to.name);
+  
   // إذا كان هناك songUuid في params (لرابط تعديل الأغنية)
   if (to.params.songUuid) {
     releaseStore.setSongUuid(to.params.songUuid);
     console.log('🔄 Router: تم حفظ songUuid من params:', to.params.songUuid);
+  } else {
+    // إذا لم يكن هناك songUuid في المسار، قم بمسحه
+    releaseStore.clearSongUuid();
   }
   
   // إذا كان هناك releaseUuid في params

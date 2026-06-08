@@ -9,8 +9,27 @@
                                 :with_transition="true" type="percent" :percent="progressPercent" />
                             <div class="top-line">
                                 <div class="p">{{ sectionTitle }}</div>
-                                <img v-if="topLineImage" :src="topLineImage" alt="Top line image"
-                                    @error="handleImageError">
+                                
+                                <!-- صورة نوع الأغنية (تظهر فقط في firstSection عندما currentStep === 2) -->
+                                <img 
+                                    v-if="currentStep === 2 && currentView === 'firstSection'"
+                                    :src="displayTopLineImage" 
+                                    alt="Top line image"
+                                    class="top-line-image clickable"
+                                    @click="handleTopLineImageClick"
+                                    @error="handleImageError"
+                                >
+                                
+                                <!-- صورة الرجوع (تظهر في infos فقط) -->
+                                <img 
+                                    v-if="currentView === 'infos'"
+                                    src="/icon/upload2/backToCompFirstSection.svg"
+                                    alt="Back to song list"
+                                    class="top-line-image back-button"
+                                    @click="handleBackToFirstSection"
+                                    @load="() => console.log('✅ Back button image loaded successfully')"
+                                    @error="(e) => console.error('❌ Back button image failed to load:', e.target.src)"
+                                >
                             </div>
                         </div>
 
@@ -53,7 +72,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import ProgressBar from '@/zoundr/components/ProgressBar.vue';
 import tabs from '../uploadPngSteps/Upload2/tabs.vue';
 
@@ -62,13 +81,47 @@ const props = defineProps({
     steps: { type: Array, default: () => ['0', '1', '2', '3', '4'] },
     sectionTitle: { type: String, default: 'Dein Neue Single' },
     topLineImage: { type: [String, null], default: null },
-    serverCoverUrl: { type: [String, null], default: null }
+    serverCoverUrl: { type: [String, null], default: null },
+    currentView: { type: String, default: 'main' }
 });
 
-const emit = defineEmits(['update-tab', 'back', 'update:topLineImage']);
+const emit = defineEmits(['update-tab', 'back', 'update:topLineImage', 'change-song-type', 'back-to-first-section']);
 
 const showVideoPopup = ref(false);
 const videoId = ref('WPni755-Krg');
+
+// مراقبة تغييرات currentView
+watch(() => props.currentView, (newVal, oldVal) => {
+    console.log('📺 [PreReleaseLayout] currentView changed:', { old: oldVal, new: newVal });
+}, { immediate: true });
+
+// الصورة المعروضة لنوع الأغنية
+const displayTopLineImage = computed(() => {
+    return props.topLineImage || '/icons/top-line/lossless.png';
+});
+
+// دالة معالجة النقر على صورة نوع الأغنية (تغيير نوع الأغنية)
+const handleTopLineImageClick = () => {
+    console.log('🖱️ [PreReleaseLayout] تم النقر على الصورة العلوية');
+    console.log('currentView:', props.currentView);
+    
+    if (props.currentView !== 'firstSection') {
+        console.log('⚠️ الصورة غير قابلة للنقر في هذا الوضع');
+        return;
+    }
+    
+    if (confirm('Möchten Sie den Songtyp ändern? Alle nicht gespeicherten Änderungen gehen verloren.')) {
+        console.log('✅ تم تأكيد تغيير نوع الأغنية');
+        emit('change-song-type');
+    }
+};
+
+// دالة معالجة النقر على زر الرجوع (العودة إلى FirstSection)
+const handleBackToFirstSection = () => {
+    console.log('🔙 [PreReleaseLayout] تم النقر على زر الرجوع - العودة إلى FirstSection');
+    console.log('currentView before emit:', props.currentView);
+    emit('back-to-first-section');
+};
 
 const openVideoPopup = () => {
     showVideoPopup.value = true;
@@ -104,10 +157,10 @@ const bgImageStyle = computed(() => {
 });
 
 const handleImageError = (event) => {
+    console.error('Image failed to load:', event.target.src);
     event.target.src = '/icons/top-line/lossless.png';
 };
 </script>
-
 
 <style lang="scss" scoped>
 * {
@@ -152,10 +205,41 @@ const handleImageError = (event) => {
     text-transform: uppercase;
 }
 
-.top-line img {
-    width: 33px;
+.top-line .top-line-image {
     height: 32px;
+    width: auto;
     display: block;
+    cursor: pointer;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.top-line .top-line-image.clickable {
+    cursor: pointer;
+}
+
+.top-line .top-line-image.clickable:hover {
+    transform: scale(1.05);
+    opacity: 0.8;
+}
+
+.top-line .top-line-image.clickable:active {
+    transform: scale(0.95);
+}
+
+/* زر الرجوع */
+.top-line .back-button {
+    cursor: pointer;
+    width: 21px;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.top-line .back-button:hover {
+    transform: scale(1.05);
+    opacity: 0.8;
+}
+
+.top-line .back-button:active {
+    transform: scale(0.95);
 }
 
 .content-wrapper {
@@ -310,7 +394,6 @@ const handleImageError = (event) => {
     overflow-x: hidden;
     display: flex;
     flex-direction: column;
-    // padding-bottom: 20px;
 }
 
 .slot-container::-webkit-scrollbar {
@@ -334,7 +417,6 @@ const handleImageError = (event) => {
     from {
         opacity: 0;
     }
-
     to {
         opacity: 1;
     }
@@ -344,11 +426,9 @@ const handleImageError = (event) => {
     .column2 {
         width: 180px;
     }
-
     .column2 .video {
         height: 110px;
     }
-
     .video .youtube {
         width: 160px;
         height: 90px;
@@ -359,11 +439,9 @@ const handleImageError = (event) => {
     .column2 {
         width: 286px;
     }
-
     .column2 .video {
         height: 172px;
     }
-
     .video .youtube {
         width: 266px;
         height: 149px;

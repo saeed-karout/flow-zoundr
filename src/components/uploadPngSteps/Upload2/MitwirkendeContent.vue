@@ -311,7 +311,7 @@
               <div class="dropdown" v-show="input.isRoleDropdownOpen && isWeitereActive">
                 <div class="option" @click.stop="selectRoleOption(index, 'Composer')">Composer</div>
                 <div class="option" @click.stop="selectRoleOption(index, 'Lyricist')">Lyricist</div>
-                <div class="option" @click.stop="selectRoleOption(index, 'Engineer')">Engineer</div>
+                
                 <div class="option" @click.stop="selectRoleOption(index, 'Mixing')">Mixing</div>
               </div>
             </div>

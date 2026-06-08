@@ -41,7 +41,7 @@
                         @mouseenter="$emit('update:isHoveredForm8', true)"
                         @mouseleave="$emit('update:isHoveredForm8', false)">
                         <input type="text" class="input-field" v-model="localLabelName" placeholder="Label Name"
-                            @input="$emit('update:isForm8Selected', localLabelName.trim() !== '')" />
+                            @input="updateLabelNameSelected" />
                         <div v-if="isForm8Selected" class="checkmark">
                             <img src="../../../assets/icons/y.png" class="icon-y" alt="checkmark icon" />
                         </div>
@@ -58,9 +58,8 @@
                         :class="{ 'is-hovered': isHoveredForm9, 'has-checkmark': isForm9Selected }"
                         @mouseenter="$emit('update:isHoveredForm9', true)"
                         @mouseleave="$emit('update:isHoveredForm9', false)">
-                        <input type="text" class="input-field" v-model="localProductionYear"
-                            placeholder="Produktionsjahr"
-                            @input="$emit('update:isForm9Selected', localProductionYear.trim() !== '')" />
+                        <input type="text" class="input-field" v-model="localProductionYear" placeholder="Produktionsjahr"
+                            @input="updateProductionYearSelected" />
                         <div v-if="isForm9Selected" class="checkmark">
                             <img src="../../../assets/icons/y.png" class="icon-y" alt="checkmark icon" />
                         </div>
@@ -74,12 +73,12 @@
             </div>
             <div class="row2">
                 <div class="form10">
-                    <div class="title">C-Line</div>
+                    <div class="title">Wie lautet deine C-Line?</div>
                     <div class="section-input"
                         :class="{ 'is-hovered': isHoveredForm10, 'has-checkmark': isForm10Selected }"
                         @mouseenter="$emit('update:isHoveredForm10', true)"
                         @mouseleave="$emit('update:isHoveredForm10', false)">
-                        <input type="text" class="input-field-small" v-model="localCLineYear" placeholder="C-Line"
+                        <input type="text" class="input-field-small" v-model="localCLineYear" placeholder="C-Line Jahr"
                             @input="updateCLineSelected" />
                         <input type="text" class="border-r" v-model="localCLineName" placeholder="C-Line Name"
                             @input="updateCLineSelected" />
@@ -96,12 +95,12 @@
             </div>
             <div class="row3">
                 <div class="form11">
-                    <div class="title">P-Line</div>
+                    <div class="title">Wie lautet deine P-Line?</div>
                     <div class="section-input"
                         :class="{ 'is-hovered': isHoveredForm11, 'has-checkmark': isForm11Selected }"
                         @mouseenter="$emit('update:isHoveredForm11', true)"
                         @mouseleave="$emit('update:isHoveredForm11', false)">
-                        <input type="text" class="input-field-small" v-model="localPLineYear" placeholder="P-Line"
+                        <input type="text" class="input-field-small" v-model="localPLineYear" placeholder="P-Line Jahr"
                             @input="updatePLineSelected" />
                         <input type="text" class="border-r" v-model="localPLineName" placeholder="P-Line Name"
                             @input="updatePLineSelected" />
@@ -127,13 +126,13 @@
                 </div>
                 <div class="info">
                     <div class="label">C-Line:</div>
-                    <div class="value">{{ cLineName && cLineYear ? `${cLineName}` : 'undefined' }}</div>
+                    <div class="value">{{ cLineName && cLineYear ? `${cLineYear} ${cLineName}` : 'undefined' }}</div>
                 </div>
             </div>
             <div class="row1">
                 <div class="info">
                     <div class="label">P-Line:</div>
-                    <div class="value">{{ pLineName && pLineYear ? `${pLineName}` : 'undefined' }}</div>
+                    <div class="value">{{ pLineName && pLineYear ? `${pLineYear} ${pLineName}` : 'undefined' }}</div>
                 </div>
                 <div class="info">
                     <div class="label">Produktionsjahr:</div>
@@ -153,12 +152,10 @@
         </div>
 
     </div>
-    <!-- زر من finalPage يظهر عندما showFinalPage = true -->
-   
 </template>
 
 <script setup>
-import { computed, watch } from 'vue';
+import { computed, watch, ref, onMounted } from 'vue';
 import iconPlay from '@/assets/icons/play.png';
 
 const props = defineProps({
@@ -199,6 +196,14 @@ const emit = defineEmits([
     'openVideoPopup', 'next'
 ]);
 
+// الحصول على السنة الحالية
+const currentYear = ref(new Date().getFullYear().toString());
+
+// الحصول على اسم الفنان من artistInputs
+const getArtistName = () => {
+    return props.artistInputs[0]?.searchQuery || '';
+};
+
 const localLabelName = computed({
     get: () => props.labelName,
     set: (value) => emit('update:labelName', value)
@@ -229,6 +234,18 @@ const localPLineName = computed({
     set: (value) => emit('update:pLineName', value)
 });
 
+// تحديث حالة isForm8Selected بناءً على قيمة Label Name
+const updateLabelNameSelected = () => {
+    const isSelected = localLabelName.value.trim() !== '';
+    emit('update:isForm8Selected', isSelected);
+};
+
+// تحديث حالة isForm9Selected بناءً على قيمة Production Year
+const updateProductionYearSelected = () => {
+    const isSelected = localProductionYear.value.trim() !== '';
+    emit('update:isForm9Selected', isSelected);
+};
+
 // تحديث حالة isForm10Selected بناءً على قيم C-Line
 const updateCLineSelected = () => {
     const isSelected = localCLineYear.value.trim() !== '' && localCLineName.value.trim() !== '';
@@ -241,6 +258,61 @@ const updatePLineSelected = () => {
     emit('update:isForm11Selected', isSelected);
 };
 
+// تهيئة القيم الافتراضية
+const initializeDefaultValues = () => {
+    const artistName = getArtistName();
+    
+    // تعيين Label Name باسم الفنان إذا كان فارغاً
+    if ((!props.labelName || props.labelName === '') && artistName) {
+        emit('update:labelName', artistName);
+        emit('update:isForm8Selected', true);
+    } else if (props.labelName && props.labelName !== '') {
+        emit('update:isForm8Selected', true);
+    }
+    
+    // تعيين Produktionsjahr بالسنة الحالية إذا كان فارغاً
+    if (!props.productionYear || props.productionYear === '') {
+        emit('update:productionYear', currentYear.value);
+        emit('update:isForm9Selected', true);
+    } else if (props.productionYear && props.productionYear !== '') {
+        emit('update:isForm9Selected', true);
+    }
+    
+    // تعيين C-Line Jahr بالسنة الحالية إذا كان فارغاً
+    if (!props.cLineYear || props.cLineYear === '') {
+        emit('update:cLineYear', currentYear.value);
+    }
+    
+    // تعيين C-Line Name باسم الفنان إذا كان فارغاً
+    if ((!props.cLineName || props.cLineName === '') && artistName) {
+        emit('update:cLineName', artistName);
+    }
+    
+    // تعيين P-Line Jahr بالسنة الحالية إذا كان فارغاً
+    if (!props.pLineYear || props.pLineYear === '') {
+        emit('update:pLineYear', currentYear.value);
+    }
+    
+    // تعيين P-Line Name باسم الفنان إذا كان فارغاً
+    if ((!props.pLineName || props.pLineName === '') && artistName) {
+        emit('update:pLineName', artistName);
+    }
+    
+    // تحديث حالة C-Line و P-Line
+    updateCLineSelected();
+    updatePLineSelected();
+};
+
+// مراقبة تغييرات Label Name
+watch(localLabelName, () => {
+    updateLabelNameSelected();
+}, { immediate: true });
+
+// مراقبة تغييرات Production Year
+watch(localProductionYear, () => {
+    updateProductionYearSelected();
+}, { immediate: true });
+
 // مراقبة تغييرات C-Line
 watch([localCLineYear, localCLineName], () => {
     updateCLineSelected();
@@ -250,6 +322,41 @@ watch([localCLineYear, localCLineName], () => {
 watch([localPLineYear, localPLineName], () => {
     updatePLineSelected();
 }, { immediate: true });
+
+// مراقبة تغييرات artistInputs لتحديث Label Name, C-Line Name, P-Line Name تلقائياً
+watch(() => props.artistInputs[0]?.searchQuery, (newArtistName, oldArtistName) => {
+    if (newArtistName && newArtistName !== oldArtistName) {
+        // تحديث Label Name إذا كان لا يزال يساوي الاسم القديم أو إذا كان فارغاً
+        if (!props.labelName || props.labelName === oldArtistName || props.labelName === '') {
+            emit('update:labelName', newArtistName);
+            updateLabelNameSelected();
+        }
+        
+        // تحديث C-Line Name إذا كان لا يزال يساوي الاسم القديم أو إذا كان فارغاً
+        if (!props.cLineName || props.cLineName === oldArtistName || props.cLineName === '') {
+            emit('update:cLineName', newArtistName);
+        }
+        
+        // تحديث P-Line Name إذا كان لا يزال يساوي الاسم القديم أو إذا كان فارغاً
+        if (!props.pLineName || props.pLineName === oldArtistName || props.pLineName === '') {
+            emit('update:pLineName', newArtistName);
+        }
+        
+        // تحديث الحالات
+        updateCLineSelected();
+        updatePLineSelected();
+    }
+}, { immediate: true });
+
+// تنفيذ التهيئة عند تحميل المكون
+onMounted(() => {
+    initializeDefaultValues();
+});
+
+// مراقبة التغييرات في props لإعادة التهيئة إذا لزم الأمر
+watch(() => [props.artistInputs, props.labelName, props.productionYear, props.cLineYear, props.cLineName, props.pLineYear, props.pLineName], () => {
+    initializeDefaultValues();
+}, { immediate: true, deep: true });
 </script>
 
 <style lang="scss" scoped>
@@ -373,7 +480,6 @@ text-overflow: ellipsis;
 .metas {
     display: flex;
     padding-left: 126px;
-    // padding-top: 18px;/\
     flex-direction: column;
     justify-content: flex-end;
     align-items: flex-start;
@@ -476,7 +582,7 @@ text-overflow: ellipsis;
     border: 0;
     color: #fff;
     font-family: Heebo;
-    font-size: 16px;
+    font-size: 20px;
     height: 46px;
     box-sizing: border-box;
 }
@@ -549,7 +655,6 @@ text-overflow: ellipsis;
     padding: 9px 10px;
     align-items: center;
     border-radius: 5px;
-    background: var(--secondary);
     position: relative;
     cursor: pointer;
 }
@@ -611,7 +716,6 @@ text-overflow: ellipsis;
     display: flex;
     align-items: center;
     gap: 8px;
-    // flex: 1 0 0;
     flex-direction: row;
 }
 
@@ -711,18 +815,18 @@ text-overflow: ellipsis;
 
     .metas{
         gap: 20px;
-        padding-left: 90px; // top 103px
+        padding-left: 90px;
         position: relative;
         top: -35px;
     }
 
     .summary{
-        padding: 0 0 28px 103px;//to 0 0 28px 103px
+        padding: 0 0 28px 103px;
     }
 
 
       .new-right2{
-        padding-right: 60px; // to 74px
+        padding-right: 60px;
     }
  
 }
@@ -742,7 +846,7 @@ text-overflow: ellipsis;
     }
 
     .summary{
-        padding: 0 0 28px 103px;//to 0 0 28px 143px
+        padding: 0 0 28px 103px;
     }
 
      .summary-item .label{
@@ -761,11 +865,11 @@ text-overflow: ellipsis;
 
      .metas{
         gap: 32px;
-        padding-left: 103px; // top 103px
+        padding-left: 103px;
     }
 
      .new-right2{
-        padding-right: 74px; // to 113px
+        padding-right: 74px;
     }
 }
 @media (max-width:1790px) {
@@ -792,7 +896,7 @@ text-overflow: ellipsis;
     }
 
     .new-right2{
-        padding-right: 113px; // to 153px
+        padding-right: 113px;
     }
 }
 </style>

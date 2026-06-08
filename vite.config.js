@@ -16,13 +16,13 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://flow-backend.zoundr.dev',
+        target: 'https://zoundr-flow-api.davinda.dev',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api/, '/api')
       },
       '/storage': {
-        target: 'https://flow-backend.zoundr.dev',
+        target: 'https://zoundr-flow-api.davinda.dev',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/storage/, '/storage')
