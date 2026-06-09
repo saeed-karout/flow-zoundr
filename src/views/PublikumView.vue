@@ -29,17 +29,14 @@
             </div>
           </div>
          <div class="p">
- <!-- إذا كان فيه + (يعني 65+) → نظهر النص كامل بدون تقسيم -->
-  <template v-if="bar.ageRange.includes('+')">
-    {{ bar.ageRange }}
-  </template>
-
-  <!-- غير كده → نقسم ونخفي الجزء الأول على الشاشات المتوسطة -->
-  <template v-else>
-    <span class="age-start">{{ bar.ageRange.split('-')[0] }}-</span>
-    <span class="age-end">{{ bar.ageRange.split('-')[1] }}</span>
-  </template>
-</div>
+            <template v-if="bar.ageRange.includes('+')">
+              {{ bar.ageRange }}
+            </template>
+            <template v-else>
+              <span class="age-start">{{ bar.ageRange.split('-')[0] }}-</span>
+              <span class="age-end">{{ bar.ageRange.split('-')[1] }}</span>
+            </template>
+          </div>
         </div>
       </div>
       <div class="numbers-2">
@@ -70,17 +67,14 @@
             </div>
           </div>
           <div class="p">
- <!-- إذا كان فيه + (يعني 65+) → نظهر النص كامل بدون تقسيم -->
-  <template v-if="bar.ageRange.includes('+')">
-    {{ bar.ageRange }}
-  </template>
-
-  <!-- غير كده → نقسم ونخفي الجزء الأول على الشاشات المتوسطة -->
-  <template v-else>
-    <span class="age-start">{{ bar.ageRange.split('-')[0] }}-</span>
-    <span class="age-end">{{ bar.ageRange.split('-')[1] }}</span>
-  </template>
-</div>
+            <template v-if="bar.ageRange.includes('+')">
+              {{ bar.ageRange }}
+            </template>
+            <template v-else>
+              <span class="age-start">{{ bar.ageRange.split('-')[0] }}-</span>
+              <span class="age-end">{{ bar.ageRange.split('-')[1] }}</span>
+            </template>
+          </div>
         </div>
       </div>
       <div class="numbers-2">
@@ -103,7 +97,7 @@
       </div>
     </div>
 
-    <!-- Box 4: Sources -->
+    <!-- Box 5: Sources (Skip Rate from API) -->
     <div class="Box-4">
       <div class="text-1">{{ sourceData.title }}</div>
       <div class="Bars">
@@ -117,10 +111,74 @@
       </div>
     </div>
 
-    <!-- Last Box: Skip Rate -->
+    <!-- Last Box: Skip Rate - Area Chart -->
     <div class="last-Box">
       <div class="text-1">{{ skipRateData.title }}</div>
-      <div class="chart"></div>
+      <div class="skip-rate-container">
+        <svg 
+          class="skip-rate-svg" 
+          viewBox="0 0 323 140" 
+          preserveAspectRatio="none"
+        >
+          <defs>
+            <linearGradient :id="gradientId" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#DD1155" stop-opacity="1"/>
+              <stop offset="100%" stop-color="#26282D" stop-opacity="0.1"/>
+            </linearGradient>
+          </defs>
+          
+          <!-- Background area fill -->
+          <path 
+            :d="areaPath" 
+            :fill="`url(#${gradientId})`"
+            opacity="0.8"
+          />
+          
+          <!-- Line stroke -->
+          <path 
+            :d="linePath" 
+            stroke="#DD1155" 
+            stroke-width="2" 
+            fill="none"
+          />
+          
+          <!-- Data points -->
+          <circle 
+            v-for="(point, index) in chartPoints" 
+            :key="index"
+            :cx="point.x"
+            :cy="point.y"
+            r="4"
+            fill="#DD1155"
+            stroke="#FFFFFF"
+            stroke-width="1.5"
+            class="data-point"
+            @mouseenter="showTooltip(point, index)"
+            @mouseleave="hideTooltip"
+          />
+        </svg>
+        
+        <!-- X-axis labels -->
+        <div class="skip-rate-labels">
+          <div 
+            v-for="(label, index) in skipRateData.labels" 
+            :key="index"
+            class="skip-label"
+          >
+            {{ label }}%
+          </div>
+        </div>
+        
+        <!-- Tooltip -->
+        <div 
+          v-if="tooltip.visible" 
+          class="skip-tooltip"
+          :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
+        >
+          <div class="tooltip-value">{{ tooltip.value }}</div>
+          <div class="tooltip-label">{{ tooltip.label }}%</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -164,98 +222,73 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import apiRequest from '@/lib/apiRequest';
 import iconAt from '@/assets/images/Lander/at.png';
 
-// Sample data structure (to be replaced by API data)
+// ========== Reactive Data ==========
+const isLoading = ref(false);
+const gradientId = `grad-${Date.now()}-${Math.random()}`;
+
 const audienceData = ref({
   title: 'Publikum',
   icon: '/icon/Team.svg',
-  total: 192293265,
+  total: 0,
 });
 
 const maleData = ref({
   title: 'Männlich',
-  percentage: 43,
-  count: 82686104,
+  percentage: 0,
+  count: 0,
   bars: [
-    { ageRange: '0-12', percentage: 100 },
-    { ageRange: '13-17', percentage: 80 },
-    { ageRange: '18-24', percentage: 60 },
-    { ageRange: '25-34', percentage: 50 },
-    { ageRange: '35-44', percentage: 40 },
-    { ageRange: '45-64', percentage: 20 },
-    { ageRange: '65+', percentage: 5 },
+    { ageRange: '0-12', percentage: 0 },
+    { ageRange: '13-17', percentage: 0 },
+    { ageRange: '18-24', percentage: 0 },
+    { ageRange: '25-34', percentage: 0 },
+    { ageRange: '35-44', percentage: 0 },
+    { ageRange: '45-64', percentage: 0 },
+    { ageRange: '65+', percentage: 0 },
   ],
 });
 
 const femaleData = ref({
   title: 'Weiblich',
-  percentage: 57,
-  count: 109607161,
+  percentage: 0,
+  count: 0,
   bars: [
-    { ageRange: '0-12', percentage: 20 },
-    { ageRange: '13-17', percentage: 50 },
-    { ageRange: '18-24', percentage: 80 },
-    { ageRange: '25-34', percentage: 100 },
-    { ageRange: '35-44', percentage: 80 },
-    { ageRange: '45-64', percentage: 50 },
-    { ageRange: '65+', percentage: 30 },
+    { ageRange: '0-12', percentage: 0 },
+    { ageRange: '13-17', percentage: 0 },
+    { ageRange: '18-24', percentage: 0 },
+    { ageRange: '25-34', percentage: 0 },
+    { ageRange: '35-44', percentage: 0 },
+    { ageRange: '45-64', percentage: 0 },
+    { ageRange: '65+', percentage: 0 },
   ],
 });
 
 const playbackData = ref({
   title: 'GERÄTE',
-  devices: [
-    { title: 'Mobile', percentage: 100 },
-    { title: 'Laptop', percentage: 80 },
-    { title: 'Radio', percentage: 60 },
-    { title: 'Tablet', percentage: 40 },
-    { title: 'Mac/PC', percentage: 2 },
-  ],
+  devices: [],
 });
 
 const sourceData = ref({
   title: 'Quelle',
-  sources: [
-    { title: 'Artist', percentage: 50 },
-    { title: 'Search', percentage: 30 },
-    { title: 'Playlist', percentage: 40 },
-    { title: 'Album', percentage: 20 },
-    { title: 'Others', percentage: 10 },
-  ],
+  sources: [],
 });
 
 const skipRateData = ref({
   title: 'Skip Rate',
+  labels: [0, 25, 50, 75, 100],
+  values: [0, 0, 0, 0, 0],
 });
 
-// Example country data with multiple pages
 const countriesData = ref({
   title: 'Länder',
-  pages: [
-    [
-      { name: 'Austria', icon: iconAt, count: 96049394 },
-      { name: 'Germany', icon: iconAt, count: 967341 },
-      { name: 'France', icon: iconAt, count: 48622 },
-      { name: 'Spain', icon: iconAt, count: 58948 },
-      { name: 'Italy', icon: iconAt, count: 600 },
-    ],
-    [
-      { name: 'Brazil', icon: iconAt, count: 86049394 },
-      { name: 'Canada', icon: iconAt, count: 935300 },
-      { name: 'Japan', icon: iconAt, count: 50 },
-      { name: 'Australia', icon: iconAt, count: 79 },
-      { name: 'India', icon: iconAt, count: 81 },
-    ],
-  ],
-  dots: [
-    { active: true },
-    { active: false },
-  ],
+  pages: [[]],
+  dots: [{ active: true }],
 });
 
-// Track the active page for countries
+// Track active page for countries
 const activePage = ref(0);
 
 // Track hover state for bars
@@ -265,36 +298,119 @@ const hoveredBar = ref({
   type: null,
 });
 
-// Compute the currently displayed countries with normalized percentages
+// Tooltip state
+const tooltip = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  value: 0,
+  label: 0,
+});
+
+// SVG dimensions
+const svgWidth = 323;
+const svgHeight = 140;
+const padding = { left: 15, right: 15, top: 10, bottom: 20 };
+
+// Compute chart points
+const chartPoints = computed(() => {
+  const values = skipRateData.value.values;
+  const labels = skipRateData.value.labels;
+  const maxValue = Math.max(...values, 1);
+  
+  const availableWidth = svgWidth - padding.left - padding.right;
+  const step = availableWidth / (values.length - 1);
+  
+  return values.map((value, index) => ({
+    x: padding.left + (index * step),
+    y: svgHeight - padding.bottom - ((value / maxValue) * (svgHeight - padding.top - padding.bottom)),
+    value: value,
+    label: labels[index]
+  }));
+});
+
+// Compute area path (filled area under the line)
+const areaPath = computed(() => {
+  if (chartPoints.value.length < 2) return '';
+  
+  let path = `M ${padding.left} ${svgHeight - padding.bottom}`;
+  
+  // Add all data points
+  chartPoints.value.forEach(point => {
+    path += ` L ${point.x} ${point.y}`;
+  });
+  
+  // Close the path to the bottom right and back to start
+  const lastPoint = chartPoints.value[chartPoints.value.length - 1];
+  path += ` L ${lastPoint.x} ${svgHeight - padding.bottom}`;
+  path += ` Z`;
+  
+  return path;
+});
+
+// Compute line path (just the line connecting points)
+const linePath = computed(() => {
+  if (chartPoints.value.length < 2) return '';
+  
+  let path = `M ${chartPoints.value[0].x} ${chartPoints.value[0].y}`;
+  
+  for (let i = 1; i < chartPoints.value.length; i++) {
+    path += ` L ${chartPoints.value[i].x} ${chartPoints.value[i].y}`;
+  }
+  
+  return path;
+});
+
+// Show tooltip on data point hover
+const showTooltip = (point, index) => {
+  tooltip.value = {
+    visible: true,
+    x: point.x,
+    y: point.y - 25,
+    value: point.value,
+    label: point.label
+  };
+};
+
+const hideTooltip = () => {
+  tooltip.value.visible = false;
+};
+
+// Compute max skip rate for chart scaling
+const maxSkipRate = computed(() => {
+  return Math.max(...skipRateData.value.values, 1);
+});
+
+// Compute displayed countries with normalized percentages
 const displayedCountries = computed(() => {
   const countries = countriesData.value.pages[activePage.value] || [];
-  const maxCount = Math.max(...countries.map(country => country.count), 1); // Avoid division by zero
+  const maxCount = Math.max(...countries.map(country => country.count), 1);
   return countries.map(country => ({
     ...country,
     percentage: Number(((country.count / maxCount) * 100).toFixed(2)),
   }));
 });
 
-// Utility function to format numbers with commas
+// ========== Utility Functions ==========
 const formatNumber = (num) => {
+  if (!num && num !== 0) return '0';
   return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 };
 
-// Function to toggle between countries pages when clicking anywhere on the box
 const toggleCountriesPage = () => {
   const nextPage = (activePage.value + 1) % countriesData.value.pages.length;
   setActiveDot(nextPage);
 };
 
-// Function to set the active dot and update the displayed countries
 const setActiveDot = (index) => {
-  countriesData.value.dots = countriesData.value.dots.map((dot, i) => ({
-    active: i === index,
-  }));
-  activePage.value = index;
+  if (countriesData.value.dots[index]) {
+    countriesData.value.dots = countriesData.value.dots.map((dot, i) => ({
+      active: i === index,
+    }));
+    activePage.value = index;
+  }
 };
 
-// Function to update hover data when hovering over a bar
 const updateHoverData = (bar, type) => {
   const totalCount = type === 'male' ? maleData.value.count : femaleData.value.count;
   const barCount = Math.round((bar.percentage / 100) * totalCount);
@@ -305,7 +421,6 @@ const updateHoverData = (bar, type) => {
   };
 };
 
-// Function to reset hover data when mouse leaves
 const resetHoverData = (type) => {
   if (hoveredBar.value.type === type) {
     hoveredBar.value = {
@@ -316,123 +431,219 @@ const resetHoverData = (type) => {
   }
 };
 
-// Function to fetch data from API
-const fetchData = async () => {
+// ========== API Functions ==========
+const fetchAudienceData = async (filters = {}) => {
+  isLoading.value = true;
   try {
-    // Example API response structure
-    const data = {
-      audience: { title: 'Publikum', icon: '/icon/Team.svg', total: 192293265 },
-      male: {
-        title: 'Männlich',
-        percentage: 43,
-        count: 82686104,
-        bars: [
-          { ageRange: '0-12', percentage: 100 },
-          { ageRange: '13-17', percentage: 15 },
-          { ageRange: '18-24', percentage: 25 },
-          { ageRange: '25-34', percentage: 20 },
-          { ageRange: '35-44', percentage: 15 },
-          { ageRange: '45-64', percentage: 10 },
-          { ageRange: '65+', percentage: 5 },
-        ],
-      },
-      female: {
-        title: 'Weiblich',
-        percentage: 57,
-        count: 109607161,
-        bars: [
-          { ageRange: '0-12', percentage: 12 },
-          { ageRange: '13-17', percentage: 18 },
-          { ageRange: '18-24', percentage: 20 },
-          { ageRange: '25-34', percentage: 22 },
-          { ageRange: '35-44', percentage: 15 },
-          { ageRange: '45-64', percentage: 10 },
-          { ageRange: '65+', percentage: 3 },
-        ],
-      },
-      playback: {
-        title: 'Abgespielt',
-        devices: [
-          { title: 'Mobile', percentage: 30 },
-          { title: 'Laptop', percentage: 25 },
-          { title: 'Radio', percentage: 15 },
-          { title: 'Tablet', percentage: 20 },
-          { title: 'Mac/PC', percentage: 10 },
-        ],
-      },
-      source: {
-        title: 'Quelle',
-        sources: [
-          { title: 'Artist', percentage: 20 },
-          { title: 'Search', percentage: 30 },
-          { title: 'Playlist', percentage: 25 },
-          { title: 'Album', percentage: 15 },
-          { title: 'Others', percentage: 10 },
-        ],
-      },
-      skipRate: { title: 'Skip Rate' },
-      countries: {
-        title: 'Länder',
-        pages: [
-          [
-            { name: 'Austria', icon: '/assets/images/Lander/at.png', count: 96049394 },
-            { name: 'Germany', icon: '/assets/images/Lander/de.png', count: 967341 },
-            { name: 'France', icon: '/assets/images/Lander/fr.png', count: 48622 },
-            { name: 'Spain', icon: '/assets/images/Lander/es.png', count: 58948 },
-            { name: 'Italy', icon: '/assets/images/Lander/it.png', count: 600 },
-          ],
-          [
-            { name: 'Brazil', icon: '/assets/images/Lander/br.png', count: 86049394 },
-            { name: 'Canada', icon: '/assets/images/Lander/ca.png', count: 935300 },
-            { name: 'Japan', icon: '/assets/images/Lander/jp.png', count: 50 },
-            { name: 'Australia', icon: '/assets/images/Lander/au.png', count: 79 },
-            { name: 'India', icon: '/assets/images/Lander/in.png', count: 81 },
-          ],
-        ],
-        dots: [
-          { active: true },
-          { active: false },
-        ],
-      },
-    };
+    const params = new URLSearchParams();
+    
+    if (filters.dateType) params.append('date-type', filters.dateType);
+    if (filters.startDate) params.append('start_date', filters.startDate);
+    if (filters.endDate) params.append('end_date', filters.endDate);
+    if (filters.songUuid) filters.songUuid.forEach(id => params.append('song_uuid[]', id));
+    if (filters.isrc) filters.isrc.forEach(code => params.append('isrc[]', code));
+    if (filters.releaseUuid) filters.releaseUuid.forEach(id => params.append('release_uuid[]', id));
+    if (filters.gtin) filters.gtin.forEach(code => params.append('gtin[]', code));
+    if (filters.artist) filters.artist.forEach(name => params.append('artist[]', name));
+    if (filters.feature) filters.feature.forEach(name => params.append('feature[]', name));
+    if (filters.contributer) filters.contributer.forEach(name => params.append('contributer[]', name));
+    if (filters.producer) filters.producer.forEach(name => params.append('producer[]', name));
+    if (filters.cLine) filters.cLine.forEach(line => params.append('c-line[]', line));
+    if (filters.store) filters.store.forEach(store => params.append('store[]', store));
+    if (filters.country) filters.country.forEach(country => params.append('country[]', country));
 
-    // Normalize percentages to ensure they sum to 100
-    const normalizePercentages = (items) => {
-      const total = items.reduce((sum, item) => sum + (item.percentage || 0), 0);
-      if (total === 0) return items.map(item => ({ ...item, percentage: 0 }));
-      return items.map(item => ({
-        ...item,
-        percentage: Number((item.percentage / total * 100).toFixed(2)),
-      }));
-    };
-
-    // Update reactive data
-    audienceData.value = data.audience;
-    maleData.value = {
-      ...data.male,
-      bars: normalizePercentages(data.male.bars),
-    };
-    femaleData.value = {
-      ...data.female,
-      bars: normalizePercentages(data.female.bars),
-    };
-    playbackData.value = {
-      ...data.playback,
-      devices: normalizePercentages(data.playback.devices),
-    };
-    sourceData.value = {
-      ...data.source,
-      sources: normalizePercentages(data.source.sources),
-    };
-    skipRateData.value = data.skipRate;
-    countriesData.value = data.countries;
+    const response = await apiRequest.get(`/audience?${params.toString()}`);
+    const data = response.data?.data || response.data;
+    
+    console.log('📊 Audience API Response:', data);
+    
+    if (data) {
+      audienceData.value.total = data.total_audience || 0;
+      
+      if (data.gender_age) {
+        const male = data.gender_age.male || {};
+        const female = data.gender_age.female || {};
+        
+        const maleTotal = male.total || 0;
+        const femaleTotal = female.total || 0;
+        const grandTotal = maleTotal + femaleTotal;
+        
+        maleData.value.count = maleTotal;
+        femaleData.value.count = femaleTotal;
+        
+        maleData.value.percentage = grandTotal > 0 ? Math.round((maleTotal / grandTotal) * 100) : 0;
+        femaleData.value.percentage = grandTotal > 0 ? Math.round((femaleTotal / grandTotal) * 100) : 0;
+        
+        const maxMaleValue = Math.max(...Object.values(male).filter(v => typeof v === 'number' && v !== male.total), 1);
+        const maxFemaleValue = Math.max(...Object.values(female).filter(v => typeof v === 'number' && v !== female.total), 1);
+        
+        maleData.value.bars = [
+          { ageRange: '0-12', percentage: maxMaleValue > 0 ? Math.round((male['0-12'] || 0) / maxMaleValue * 100) : 0 },
+          { ageRange: '13-17', percentage: maxMaleValue > 0 ? Math.round((male['13-17'] || 0) / maxMaleValue * 100) : 0 },
+          { ageRange: '18-24', percentage: maxMaleValue > 0 ? Math.round((male['18-24'] || 0) / maxMaleValue * 100) : 0 },
+          { ageRange: '25-34', percentage: maxMaleValue > 0 ? Math.round((male['25-34'] || 0) / maxMaleValue * 100) : 0 },
+          { ageRange: '35-44', percentage: maxMaleValue > 0 ? Math.round((male['35-44'] || 0) / maxMaleValue * 100) : 0 },
+          { ageRange: '45-64', percentage: maxMaleValue > 0 ? Math.round((male['45-64'] || 0) / maxMaleValue * 100) : 0 },
+          { ageRange: '65+', percentage: maxMaleValue > 0 ? Math.round((male['+65'] || 0) / maxMaleValue * 100) : 0 },
+        ];
+        
+        femaleData.value.bars = [
+          { ageRange: '0-12', percentage: maxFemaleValue > 0 ? Math.round((female['0-12'] || 0) / maxFemaleValue * 100) : 0 },
+          { ageRange: '13-17', percentage: maxFemaleValue > 0 ? Math.round((female['13-17'] || 0) / maxFemaleValue * 100) : 0 },
+          { ageRange: '18-24', percentage: maxFemaleValue > 0 ? Math.round((female['18-24'] || 0) / maxFemaleValue * 100) : 0 },
+          { ageRange: '25-34', percentage: maxFemaleValue > 0 ? Math.round((female['25-34'] || 0) / maxFemaleValue * 100) : 0 },
+          { ageRange: '35-44', percentage: maxFemaleValue > 0 ? Math.round((female['35-44'] || 0) / maxFemaleValue * 100) : 0 },
+          { ageRange: '45-64', percentage: maxFemaleValue > 0 ? Math.round((female['45-64'] || 0) / maxFemaleValue * 100) : 0 },
+          { ageRange: '65+', percentage: maxFemaleValue > 0 ? Math.round((female['+65'] || 0) / maxFemaleValue * 100) : 0 },
+        ];
+      }
+      
+      if (data.skip_rate && Array.isArray(data.skip_rate[0]) && Array.isArray(data.skip_rate[1])) {
+        skipRateData.value.labels = data.skip_rate[0];
+        skipRateData.value.values = data.skip_rate[1];
+      }
+      
+      if (data.countries && Array.isArray(data.countries)) {
+        const pageSize = 5;
+        const pages = [];
+        for (let i = 0; i < data.countries.length; i += pageSize) {
+          pages.push(data.countries.slice(i, i + pageSize).map(country => ({
+            name: country.name,
+            icon: getCountryIcon(country.name),
+            count: country.count
+          })));
+        }
+        
+        countriesData.value.pages = pages.length > 0 ? pages : [[]];
+        countriesData.value.dots = pages.map((_, idx) => ({ active: idx === 0 }));
+      }
+      
+      playbackData.value.devices = [
+        { title: 'Mobile', percentage: 45 },
+        { title: 'Laptop', percentage: 25 },
+        { title: 'Radio', percentage: 15 },
+        { title: 'Tablet', percentage: 10 },
+        { title: 'Mac/PC', percentage: 5 },
+      ];
+      
+      sourceData.value.sources = [
+        { title: 'Artist', percentage: 35 },
+        { title: 'Search', percentage: 25 },
+        { title: 'Playlist', percentage: 20 },
+        { title: 'Album', percentage: 12 },
+        { title: 'Others', percentage: 8 },
+      ];
+    }
   } catch (error) {
-    console.error('Error fetching data:', error);
+    console.error('❌ Error fetching audience data:', error);
+  } finally {
+    isLoading.value = false;
   }
 };
+
+const getCountryIcon = (countryName) => {
+  const iconMap = {
+    'United States': '/icons/countries/us.svg',
+    'Germany': '/icons/countries/de.svg',
+    'Brazil': '/icons/countries/br.svg',
+    'United Kingdom': '/icons/countries/gb.svg',
+    'Canada': '/icons/countries/ca.svg',
+    'Spain': '/icons/countries/es.svg',
+    'France': '/icons/countries/fr.svg',
+    'Swiss': '/icons/countries/ch.svg',
+    'Netherlands': '/icons/countries/at.svg',
+    'Australia': '/icons/countries/au.svg',
+  };
+  return iconMap[countryName] || iconAt;
+};
+
+// ========== Lifecycle ==========
+onMounted(() => {
+  fetchAudienceData();
+});
 </script>
 
+
+
+
 <style lang="scss" scoped>
+
+
+.last-Box {
+  .skip-rate-container {
+    position: relative;
+    width: 100%;
+    height: calc(100% - 30px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  
+  .skip-rate-svg {
+    width: 100%;
+    height: auto;
+    min-height: 100px;
+    cursor: pointer;
+    
+    .data-point {
+      cursor: pointer;
+      transition: r 0.2s ease;
+      
+      &:hover {
+        r: 6;
+      }
+    }
+  }
+  
+  .skip-rate-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    padding: 0 10px;
+  }
+  
+  .skip-label {
+    flex: 1;
+    text-align: center;
+    color: #FFF;
+    font-family: Heebo;
+    font-size: 10px;
+    font-weight: 300;
+    opacity: 0.7;
+  }
+  
+  .skip-tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    border-radius: 8px;
+    padding: 6px 12px;
+    min-width: 50px;
+    text-align: center;
+    transform: translateX(-50%);
+    pointer-events: none;
+    z-index: 100;
+    border: 1px solid rgba(221, 17, 85, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    
+    .tooltip-value {
+      color: #DD1155;
+      font-family: Heebo;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    
+    .tooltip-label {
+      color: #FFF;
+      font-family: Heebo;
+      font-size: 10px;
+      font-weight: 300;
+      opacity: 0.7;
+    }
+  }
+}
+
+
 /* Ensure the entire component fits within the viewport */
 :deep(.publikum-view) {
   width: 100vw;
