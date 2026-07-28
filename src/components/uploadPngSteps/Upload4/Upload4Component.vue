@@ -1,12 +1,12 @@
 <template>
   <div class="main">
+
     <div class="content-publish">
       <div class="row1">
         <div class="column1">
           <div class="Title">
             <div class="release">
               <div class="card" :style="{ backgroundImage: releaseCover ? `url(${releaseCover})` : 'none' }">
-                <!-- Background image is set in CSS or inline style -->
               </div>
               <div class="info">
                 <div class="name">
@@ -37,23 +37,18 @@
             </div>
 
             <div class="last-line">
-              <div class="topic">
-                Brutto
-              </div>
-
-              <div class="total-price">
-                {{ totalPrice }} EUR
-              </div>
+              <div class="topic">Brutto</div>
+              <div class="total-price">{{ displayTotalPrice }} EUR</div>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- الفورم -->
+    <!-- الفورم - تظهر دائماً ولكن مع تعطيل الحقول إذا كان المستخدم مشتركاً -->
     <div class="Rechnungsadresse">
       <div class="title">Rechnungsadresse</div>
-      <form class="payment-form" @submit.prevent="initiatePayment">
+      <form class="payment-form" @submit.prevent="handlePublish">
         <div class="form-container">
           <!-- Left Section -->
           <div class="left-section">
@@ -61,9 +56,9 @@
               <div class="form-group">
                 <input v-model="formData.company" type="text" placeholder="Firma (optional)"
                   class="input-field" :class="{ 'filled': formData.company }"
-                  :disabled="isFieldDisabled.company" />
+                  :disabled="isFieldDisabled.company || isSubscriptionActive" />
                 <span class="checkmark" v-if="isFieldDisabled.company || formData.company">
-                  <img :src="isFieldDisabled.company ? iconDisabled : iconCorrect" alt="completed" />
+                  <img :src="isFieldDisabled.company || isSubscriptionActive ? iconDisabled : iconCorrect" alt="completed" />
                 </span>
               </div>
             </div>
@@ -71,18 +66,18 @@
               <div class="form-group w-50">
                 <input v-model="formData.firstName" type="text" placeholder="Vorname" class="input-field"
                   :class="{ 'filled': formData.firstName, 'error': errors.firstName }"
-                  :disabled="isFieldDisabled.firstName" />
+                  :disabled="isFieldDisabled.firstName || isSubscriptionActive" />
                 <span class="checkmark" v-if="formData.firstName && !errors.firstName">
-                  <img :src="isFieldDisabled.firstName ? iconDisabled : iconCorrect" alt="completed" />
+                  <img :src="isFieldDisabled.firstName || isSubscriptionActive ? iconDisabled : iconCorrect" alt="completed" />
                 </span>
                 <span class="error-message" v-if="errors.firstName">{{ errors.firstName }}</span>
               </div>
               <div class="form-group w-50">
                 <input v-model="formData.lastName" type="text" placeholder="Nachname" class="input-field"
                   :class="{ 'filled': formData.lastName, 'error': errors.lastName }"
-                  :disabled="isFieldDisabled.lastName" />
+                  :disabled="isFieldDisabled.lastName || isSubscriptionActive" />
                 <span class="checkmark" v-if="formData.lastName && !errors.lastName">
-                  <img :src="isFieldDisabled.lastName ? iconDisabled : iconCorrect" alt="completed" />
+                  <img :src="isFieldDisabled.lastName || isSubscriptionActive ? iconDisabled : iconCorrect" alt="completed" />
                 </span>
                 <span class="error-message" v-if="errors.lastName">{{ errors.lastName }}</span>
               </div>
@@ -90,18 +85,19 @@
             <div class="form-row flex">
               <div class="form-group w-75">
                 <input v-model="formData.street" type="text" placeholder="Straße" class="input-field"
-                  :class="{ 'filled': formData.street, 'error': errors.street }" :disabled="isFieldDisabled.street" />
+                  :class="{ 'filled': formData.street, 'error': errors.street }" 
+                  :disabled="isFieldDisabled.street || isSubscriptionActive" />
                 <span class="checkmark" v-if="formData.street && !errors.street">
-                  <img :src="isFieldDisabled.street ? iconDisabled : iconCorrect" alt="completed" />
+                  <img :src="isFieldDisabled.street || isSubscriptionActive ? iconDisabled : iconCorrect" alt="completed" />
                 </span>
                 <span class="error-message" v-if="errors.street">{{ errors.street }}</span>
               </div>
               <div class="input-wrapper w-33">
                 <input v-model="formData.streetNr" type="text" placeholder="Nr." class="input-field"
                   :class="{ 'filled': formData.streetNr, 'error': errors.streetNr }"
-                  :disabled="isFieldDisabled.streetNr" />
+                  :disabled="isFieldDisabled.streetNr || isSubscriptionActive" />
                 <span class="checkmark" v-if="formData.streetNr && !errors.streetNr">
-                  <img :src="isFieldDisabled.streetNr ? iconDisabled : iconCorrect" alt="completed" />
+                  <img :src="isFieldDisabled.streetNr || isSubscriptionActive ? iconDisabled : iconCorrect" alt="completed" />
                 </span>
                 <span class="error-message" v-if="errors.streetNr">{{ errors.streetNr }}</span>
               </div>
@@ -110,17 +106,18 @@
               <div class="input-wrapper w-33">
                 <input v-model="formData.postalCode" type="text" placeholder="PLZ" class="input-field"
                   :class="{ 'filled': formData.postalCode, 'error': errors.postalCode }"
-                  :disabled="isFieldDisabled.postalCode" />
+                  :disabled="isFieldDisabled.postalCode || isSubscriptionActive" />
                 <span class="checkmark" v-if="formData.postalCode && !errors.postalCode">
-                  <img :src="isFieldDisabled.postalCode ? iconDisabled : iconCorrect" alt="completed" />
+                  <img :src="isFieldDisabled.postalCode || isSubscriptionActive ? iconDisabled : iconCorrect" alt="completed" />
                 </span>
                 <span class="error-message" v-if="errors.postalCode">{{ errors.postalCode }}</span>
               </div>
               <div class="form-group w-67">
                 <input v-model="formData.city" type="text" placeholder="Ort" class="input-field"
-                  :class="{ 'filled': formData.city, 'error': errors.city }" :disabled="isFieldDisabled.city" />
+                  :class="{ 'filled': formData.city, 'error': errors.city }" 
+                  :disabled="isFieldDisabled.city || isSubscriptionActive" />
                 <span class="checkmark" v-if="formData.city && !errors.city">
-                  <img :src="isFieldDisabled.city ? iconDisabled : iconCorrect" alt="completed" />
+                  <img :src="isFieldDisabled.city || isSubscriptionActive ? iconDisabled : iconCorrect" alt="completed" />
                 </span>
                 <span class="error-message" v-if="errors.city">{{ errors.city }}</span>
               </div>
@@ -133,11 +130,11 @@
               <div class="form-group">
                 <div class="custom-select" :class="{ 'focused': isLandFocused }">
                   <div class="select-button"
-                    @click="isLandFocused = !isLandFocused && !isFieldDisabled.country"
-                    :class="{ 'filled': formData.country, 'error': errors.country, 'disabled': isFieldDisabled.country }">
+                    @click="isLandFocused = !isLandFocused && !isFieldDisabled.country && !isSubscriptionActive"
+                    :class="{ 'filled': formData.country, 'error': errors.country, 'disabled': isFieldDisabled.country || isSubscriptionActive }">
                     <span>{{ countryDisplayName(formData.country) }}</span>
                     <span class="checkmark">
-                      <img v-if="formData.country && !errors.country && isFieldDisabled.country"
+                      <img v-if="formData.country && !errors.country && (isFieldDisabled.country || isSubscriptionActive)"
                         :src="iconDisabled" alt="locked" />
                       <img v-else-if="formData.country && !errors.country" :src="iconCorrect" alt="completed" />
                       <svg v-else xmlns="http://www.w3.org/2000/svg" width="12" height="22" viewBox="0 0 12 22"
@@ -151,7 +148,7 @@
                       </svg>
                     </span>
                   </div>
-                  <ul class="options" v-if="isLandFocused && !isFieldDisabled.country">
+                  <ul class="options" v-if="isLandFocused && !isFieldDisabled.country && !isSubscriptionActive">
                     <li @click="selectCountry('germany')">Deutschland</li>
                     <li @click="selectCountry('austria')">Österreich</li>
                     <li @click="selectCountry('switzerland')">Schweiz</li>
@@ -164,13 +161,14 @@
             <div class="form-row" v-if="formData.country === 'austria'">
               <div class="form-group ustid-group">
                 <input v-model="formData.ustId" type="text" placeholder="UST-ID" class="input-field"
-                  :class="{ 'filled': formData.ustId, 'error': errors.ustId }" :disabled="isFieldDisabled.ustId" />
+                  :class="{ 'filled': formData.ustId, 'error': errors.ustId }" 
+                  :disabled="isFieldDisabled.ustId || isSubscriptionActive" />
                 <button type="button" class="confirm-btn" @click="validateUstId"
-                  :disabled="!formData.ustId || isLoading || isFieldDisabled.ustId">
+                  :disabled="!formData.ustId || isLoading || isFieldDisabled.ustId || isSubscriptionActive">
                   Bestätigen
                 </button>
                 <span class="checkmark" v-if="isUstIdValid && !errors.ustId">
-                  <img :src="isFieldDisabled.ustId ? iconDisabled : iconCorrect" alt="completed" />
+                  <img :src="isFieldDisabled.ustId || isSubscriptionActive ? iconDisabled : iconCorrect" alt="completed" />
                 </span>
                 <span class="error-message" v-if="errors.ustId">{{ errors.ustId }}</span>
               </div>
@@ -189,7 +187,7 @@
             <div class="form-row checkbox-row">
               <div class="checkbox-container">
                 <input v-model="formData.agreement" type="checkbox" id="agreement" class="person-checkbox"
-                  :class="{ 'error': errors.agreement }" />
+                  :class="{ 'error': errors.agreement }" :disabled="isSubscriptionActive" />
                 <label for="agreement" class="checkbox-label">
                   Ich habe die AGBs, das Widerrufsrecht und die Datenschutzerklärung gelesen, verstanden und stimme zu.
                 </label>
@@ -198,28 +196,55 @@
             </div>
           </div>
         </div>
-
       </form>
     </div>
   </div>
+
   <!-- Price and Buttons Section -->
   <div class="price-section">
-  
     <div class="form-buttons">
-    
-      <button class="pay-button" @click="initiatePayment" :disabled="!isFormValid || isLoading">
-        {{ paymentButtonLabel }}
-      </button>
+      <div class="pay-button" @click="handlePublish" 
+        :disabled="isLoading || isProcessing || !isFormValid">
+        {{ buttonLabel }}
+      </div>
     </div>
   </div>
+
+  <!-- 🔥 Popup تنبيه عدم وجود اشتراك -->
+  <Teleport to="body">
+    <div v-if="showSubscriptionPopup" class="subscription-popup-overlay" @click.self="closeSubscriptionPopup">
+      <div class="subscription-popup">
+        <div class="popup-header">
+          <button class="popup-close" @click="closeSubscriptionPopup">✕</button>
+        </div>
+        <div class="popup-body">
+          <h3>Kein aktives Abonnement</h3>
+          <p>
+            Sie haben kein aktives Abonnement. Um Ihr Release zu veröffentlichen, 
+            benötigen Sie ein gültiges Abonnement.
+          </p>
+          <p class="popup-detail">
+            Bitte füllen Sie das Formular aus und klicken Sie auf 
+            <strong>"Abonnieren & Veröffentlichen"</strong>, um fortzufahren.
+          </p>
+        </div>
+        <div class="popup-footer">
+          <button class="popup-btn primary" @click="closeSubscriptionPopup">Verstanden</button>
+          <button class="popup-btn secondary" @click="goToSubscription">Zum Abonnement</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useDataStore } from '@/stores/data';
+import { useSubscriptionStore } from '@/stores/subscription';
 import apiRequest from '@/lib/apiRequest';
 import authHeader from '@/services/auth-header';
+import { subscriptionService } from '@/services/subscriptionService';
 import iconDisabled from '@/assets/icons/Icon_awesome-lock.png';
 import iconCorrect from '@/assets/icons/y.png';
 
@@ -233,8 +258,20 @@ const emit = defineEmits(['next', 'back']);
 
 const router = useRouter();
 const dataStore = useDataStore();
+const subscriptionStore = useSubscriptionStore();
 
-// بيانات المستخدم
+// ========== حالة الاشتراك ==========
+const subscriptionStatus = ref(null);
+const isSubscriptionActive = ref(false);
+const isProcessing = ref(false);
+const showSubscriptionPopup = ref(false);
+
+const isFetchingSubscription = ref(false);
+const lastFetchTime = ref(0);
+const fetchAttempts = ref(0);
+const MAX_ATTEMPTS = 3;
+
+// ========== بيانات المستخدم ==========
 const userEmail = computed(() => dataStore.user?.email || '');
 const billingFirstName = computed(() => dataStore.user?.billing_first_name || '');
 const billingLastName = computed(() => dataStore.user?.billing_last_name || '');
@@ -246,18 +283,18 @@ const billingCountry = computed(() => dataStore.user?.billing_country || '');
 const billingCompany = computed(() => dataStore.user?.billing_company || '');
 const billingVatId = computed(() => dataStore.user?.billing_vat_id || '');
 
-// بيانات الـ Release
+// ========== بيانات الـ Release ==========
 const releaseCover = ref(null);
 const releaseArtist = ref('Diggie');
 const releaseTitle = ref('Summer Feeling');
 const releaseType = ref('Single');
-const audioQuality = ref('lossless')
+const audioQuality = ref('lossless');
 const songCount = ref(2);
 const releaseTypeText = computed(() => {
   return `${audioQuality.value} – ${releaseType.value} (${songCount.value} Song${songCount.value > 1 ? 's' : ''})`;
 });
 
-// النموذج
+// ========== النموذج ==========
 const formData = ref({
   company: '',
   country: '',
@@ -285,18 +322,30 @@ const isFieldDisabled = computed(() => ({
   email: true,
 }));
 
-// الأخطاء والحالة
-const errors = ref({ firstName: '', lastName: '', street: '', streetNr: '', postalCode: '', city: '', country: '', ustId: '', agreement: '' });
+// ========== الأخطاء ==========
+const errors = ref({ 
+  firstName: '', 
+  lastName: '', 
+  street: '', 
+  streetNr: '', 
+  postalCode: '', 
+  city: '', 
+  country: '', 
+  ustId: '', 
+  agreement: '' 
+});
+
 const isLandFocused = ref(false);
 const isUstIdValid = ref(false);
 const isLoading = ref(false);
-const paymentStatus = ref(0);
 
-// الحسابات
-const pricePerSong = 9.5; // سعر كل أغنية - يمكن تعديله حسب الحاجة
+// ========== الحسابات ==========
+const pricePerSong = 9.5;
 const totalWithTax = computed(() => songCount.value * pricePerSong);
 
 const taxRate = computed(() => {
+  if (isSubscriptionActive.value) return 0;
+  
   if (formData.value.country === 'germany') return 0.19;
   if (formData.value.country === 'austria') return formData.value.ustId && isUstIdValid.value ? 0 : 0.19;
   if (formData.value.country === 'switzerland') return 0;
@@ -314,36 +363,68 @@ const tax = computed(() => {
   return (totalWithTax.value - parseFloat(netPrice.value)).toFixed(2);
 });
 
+const displayTotalPrice = computed(() => {
+  if (isSubscriptionActive.value) return '0,00';
+  return totalWithTax.value.toFixed(2);
+});
+
 const totalPrice = computed(() => totalWithTax.value.toFixed(2));
 const taxRateDisplay = computed(() => taxRate.value === 0 ? '(0%)' : `(${taxRate.value * 100}%)`);
 const isReverseCharge = computed(() => formData.value.country === 'austria' && formData.value.ustId && isUstIdValid.value);
-const paymentButtonLabel = computed(() => totalWithTax.value === 0 ? 'Kostenlos fortfahren' : 'Zahlung per Paypal');
+
+// ========== زر النشر ==========
+const buttonLabel = computed(() => {
+  if (isLoading.value) return 'Wird geladen...';
+  if (isProcessing.value) return 'Wird bearbeitet...';
+  if (isSubscriptionActive.value) return 'Veröffentlichen';
+  return 'Abonnieren & Veröffentlichen';
+});
 
 const countryDisplayMap = { 
   germany: 'Deutschland', 
   austria: 'Österreich', 
   switzerland: 'Schweiz' 
 };
+
 const countryDisplayName = (c) => countryDisplayMap[c] || c || 'Land';
 
+// ========== التحقق من الاشتراك وعرض الـ Popup ==========
+const checkSubscriptionAndShowPopup = () => {
+  if (subscriptionStatus.value && !isSubscriptionActive.value) {
+    showSubscriptionPopup.value = true;
+  }
+};
+
+// ========== إغلاق الـ Popup ==========
+const closeSubscriptionPopup = () => {
+  showSubscriptionPopup.value = false;
+};
+
+// ========== الذهاب إلى الاشتراك ==========
+const goToSubscription = () => {
+  showSubscriptionPopup.value = false;
+  const formElement = document.querySelector('.Rechnungsadresse');
+  if (formElement) {
+    formElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+};
+
+// ========== دوال النموذج ==========
 const selectCountry = (country) => {
   formData.value.country = country;
   isLandFocused.value = false;
   errors.value.country = '';
   
-  // إعادة تعيين UST-ID إذا تغيرت الدولة
   if (country !== 'austria') {
     formData.value.ustId = '';
     isUstIdValid.value = false;
   }
 };
 
-// UST-ID Validation
 const validateUstId = async () => {
-  if (!formData.value.ustId || formData.value.country !== 'austria' || isFieldDisabled.value.ustId) return;
+  if (!formData.value.ustId || formData.value.country !== 'austria' || isFieldDisabled.value.ustId || isSubscriptionActive.value) return;
   isLoading.value = true;
   try {
-    // محاكاة التحقق - في الواقع يجب استدعاء API حقيقي
     await new Promise(resolve => setTimeout(resolve, 500));
     const isValid = formData.value.ustId.startsWith('AT');
     isUstIdValid.value = isValid;
@@ -356,45 +437,9 @@ const validateUstId = async () => {
   }
 };
 
-// جلب بيانات الـ Release
-const fetchReleaseData = async () => {
-  if (!props.releaseUuid) return;
-  
-  try {
-    const response = await apiRequest.get(`/releases/${props.releaseUuid}`);
-    const release = response.data.data || response.data;
-    
-    if (release) {
-      releaseArtist.value = release.artist_name || 'artist name';
-      releaseTitle.value = release.title || 'undefine title';
-      releaseType.value = release.release_type || 'undefine releaseType';
-      audioQuality.value = release.audio_quality || 'undefine audio quality';
-      
-      // جلب عدد الأغاني
-      const songsResponse = await apiRequest.get(`/releases/${props.releaseUuid}/songs`);
-      const songs = songsResponse.data.data || [];
-      songCount.value = songs.length;
-      
-      // صورة الغلاف
-      if (release.cover) {
-        releaseCover.value = release.cover.startsWith('http') 
-          ? release.cover 
-          : `${import.meta.env.VITE_STORAGE_URL}/${release.cover}`;
-      }
-    }
-  } catch (error) {
-    console.error('❌ فشل جلب بيانات الـ Release:', error);
-  }
-};
-
-// دالة العودة للخطوة السابقة
-const goBack = () => {
-  console.log('🔙 العودة للخطوة السابقة');
-  emit('back');
-};
-
-// التحقق من النموذج
 const validateForm = () => {
+  if (isSubscriptionActive.value) return true;
+  
   errors.value = { 
     firstName: '', lastName: '', street: '', streetNr: '', 
     postalCode: '', city: '', country: '', ustId: '', agreement: '' 
@@ -419,6 +464,8 @@ const validateForm = () => {
 };
 
 const isFormValid = computed(() => {
+  if (isSubscriptionActive.value) return true;
+  
   const f = formData.value;
   const d = isFieldDisabled.value;
   return (
@@ -434,134 +481,369 @@ const isFormValid = computed(() => {
   );
 });
 
-
-
-// دالة الدفع باستخدام /releases/{release}/request-payment
-const initiatePayment = async () => {
-  if (!validateForm()) return;
-  isLoading.value = true;
-
-  // تجهيز بيانات الفوترة بالشكل المطلوب
-  const billingDetails = {
-    company: formData.value.company || '',
-    first_name: formData.value.firstName,
-    last_name: formData.value.lastName,
-    street_name: formData.value.street,
-    street_number: formData.value.streetNr,
-    postal_code: formData.value.postalCode,
-    city: formData.value.city,
-    country: formData.value.country,
-    vat_id: formData.value.ustId || null
-  };
-
-  // حفظ بيانات الفوترة في المتجر
-  dataStore.setPaymentFormData(billingDetails);
-  localStorage.setItem('paymentFormData', JSON.stringify(billingDetails));
-  dataStore.setTotalPrice(parseFloat(totalPrice.value));
-
+// ========== جلب حالة الاشتراك ==========
+const fetchSubscriptionStatus = async () => {
+  if (isFetchingSubscription.value) {
+    console.log('⏳ Subscription fetch already in progress');
+    return;
+  }
+  
+  const now = Date.now();
+  if (now - lastFetchTime.value < 2000) {
+    console.log('⏳ Too many requests, waiting...');
+    return;
+  }
+  
+  if (fetchAttempts.value >= MAX_ATTEMPTS) {
+    console.log('❌ Max attempts reached');
+    return;
+  }
+  
+  isFetchingSubscription.value = true;
+  lastFetchTime.value = now;
+  
   try {
-    // استخدام endpoint جديد لطلب الدفع مع الـ payload المطلوب
-    const payload = {
-      country: formData.value.country,
-      amount: parseFloat(totalPrice.value),
-      billing_details: billingDetails,
-      currency: 'EUR',
-      success_url: `${window.location.origin}/payment/success?release=${props.releaseUuid}`,
-      cancel_url: `${window.location.origin}/payment/canceled?release=${props.releaseUuid}`,
-    };
-
-    console.log('📤 إرسال طلب الدفع:', payload);
+    console.log(`📡 Fetching subscription status (attempt ${fetchAttempts.value + 1}/${MAX_ATTEMPTS})...`);
+    const data = await subscriptionService.getSubscriptionStatus();
+    subscriptionStatus.value = data;
     
-    const response = await apiRequest.post(
-      `/releases/${props.releaseUuid}/request-payment`, 
-      payload, 
-      { headers: { ...authHeader() } }
-    );
-
-    if (response.status !== 200 && response.status !== 201) throw new Error('Unexpected status');
-
-    console.log('✅ تم استلام رد الدفع:', response.data);
+    const isActive = subscriptionService.isSubscriptionActive(data);
+    isSubscriptionActive.value = isActive;
     
-    localStorage.setItem('paymentStatus', '0');
-    paymentStatus.value = 0;
-
-    // إذا كان السعر 0، انتقل مباشرة إلى صفحة النجاح
-    if (totalWithTax.value === 0) {
-      router.push('/thanks');
-      return;
+    try {
+      if (subscriptionStore && typeof subscriptionStore.setSubscription === 'function') {
+        subscriptionStore.setSubscription(data);
+      }
+      if (subscriptionStore) {
+        subscriptionStore.isSubscribed = isActive;
+        subscriptionStore.isActive = isActive;
+        subscriptionStore.isInitialized = true;
+        subscriptionStore.subscriptionStatus = data.subscription?.status || (data.subscribed ? 'active' : 'inactive');
+        subscriptionStore.expiresAt = data.subscription?.expires_at || null;
+      }
+    } catch (storeError) {
+      console.warn('⚠️ Could not update subscription store:', storeError);
     }
-
-    // دفع PayPal - فتح نافذة الدفع
-    const paymentUrl = response.data.payment_url || response.data.url;
-    if (!paymentUrl || paymentUrl === '-') throw new Error('No payment URL');
-
-    const popup = window.open(paymentUrl, 'paypal_payment_popup', 'width=900,height=950');
-    if (!popup) throw new Error('Popup blocked');
-
-    // الاستماع لرسائل من نافذة الدفع
-    const onMessage = async (e) => {
-      const allowed = [window.location.origin, 'https://www.paypal.com'];
-      if (!allowed.includes(e.origin)) return;
-
-      console.log('Received message from popup:', e.data);
-
-      if (e.data.type === 'PAYMENT_STATUS_UPDATE' || e.data.type === 'PAYMENT_SUCCESS') {
-        localStorage.setItem('paymentStatus', '1');
-        paymentStatus.value = 1;
-        
-        // تنظيف البيانات والانتقال إلى صفحة الشكر
-        dataStore.clearPaymentFormData();
-        localStorage.removeItem('paymentFormData');
-        await dataStore.loadUser();
-        
-        // **مهم**: إعادة تعيين paymentStatus بعد الانتقال
-        setTimeout(() => {
-          localStorage.setItem('paymentStatus', '0');
-          paymentStatus.value = 0;
-          console.log('✅ Payment status reset to 0');
-        }, 100);
-        
-        // الانتقال إلى صفحة thanks
-        console.log('✅ Payment successful, redirecting to /thanks');
-        router.push('/thanks');
-      }
-    };
-    window.addEventListener('message', onMessage);
-
-    // مراقبة إغلاق النافذة
-    const monitor = setInterval(() => {
-      if (popup.closed) {
-        clearInterval(monitor);
-        const currentStatus = localStorage.getItem('paymentStatus');
-        console.log('Popup closed, payment status:', currentStatus);
-        
-        // إذا كانت حالة الدفع نجاح، انتقل إلى thanks
-        if (currentStatus === '1') {
-          dataStore.clearPaymentFormData();
-          localStorage.removeItem('paymentFormData');
-          
-          // **مهم**: إعادة تعيين paymentStatus بعد الانتقال
-          setTimeout(() => {
-            localStorage.setItem('paymentStatus', '0');
-            paymentStatus.value = 0;
-            console.log('✅ Payment status reset to 0');
-          }, 100);
-          
-          router.push('/thanks');
-        } else {
-          console.log('Payment popup closed without success');
-        }
-      }
-    }, 500);
-
+    
+    console.log('✅ Subscription status:', data);
+    console.log('✅ Is active:', isActive);
+    
+    fetchAttempts.value = 0;
+    
+    if (!isActive) {
+      checkSubscriptionAndShowPopup();
+    }
+    
+    return data;
   } catch (error) {
-    console.error('❌ فشل في طلب الدفع:', error);
+    console.error('❌ Failed to fetch subscription:', error);
+    fetchAttempts.value++;
+    subscriptionStatus.value = null;
+    isSubscriptionActive.value = false;
   } finally {
-    isLoading.value = false;
+    isFetchingSubscription.value = false;
   }
 };
 
-// مراقبة تغييرات المستخدم
+// ========== جلب بيانات الـ Release ==========
+const fetchReleaseData = async () => {
+  if (!props.releaseUuid) {
+    console.warn('⚠️ No release UUID provided');
+    return;
+  }
+  
+  try {
+    console.log(`📡 Fetching release data for: ${props.releaseUuid}`);
+    
+    const response = await apiRequest.get(`/releases/${props.releaseUuid}`);
+    const release = response.data.data || response.data;
+    
+    if (!release) {
+      console.warn('⚠️ No release data found');
+      return;
+    }
+    
+    console.log('📦 Release data:', release);
+    
+    releaseArtist.value = release.artist_name || release.artists?.[0] || 'artist name';
+    releaseTitle.value = release.title || 'untitled release';
+    releaseType.value = release.release_type || 'Single';
+    audioQuality.value = release.audio_quality || 'lossless';
+    
+    try {
+      const songsResponse = await apiRequest.get(`/releases/${props.releaseUuid}/songs`);
+      const songs = songsResponse.data.data || [];
+      songCount.value = songs.length;
+      console.log(`🎵 Found ${songCount.value} songs`);
+      
+      if (songs.length > 0 && songs[0].cover) {
+        const coverPath = songs[0].cover;
+        releaseCover.value = coverPath.startsWith('http') 
+          ? coverPath 
+          : `${import.meta.env.VITE_STORAGE_URL}/${coverPath}`;
+        console.log('🖼️ Cover from first song:', releaseCover.value);
+      }
+    } catch (songsError) {
+      console.warn('⚠️ Could not fetch songs:', songsError);
+      songCount.value = 0;
+    }
+    
+    if (!releaseCover.value && release.cover) {
+      const coverPath = release.cover;
+      let fullCoverPath = coverPath;
+      
+      if (coverPath.startsWith('covers/')) {
+        fullCoverPath = `${import.meta.env.VITE_STORAGE_URL}/${coverPath}`;
+      } else if (coverPath.startsWith('storage/')) {
+        fullCoverPath = `${import.meta.env.VITE_STORAGE_URL}/${coverPath.replace('storage/', '')}`;
+      } else if (coverPath.startsWith('/storage/')) {
+        fullCoverPath = `${import.meta.env.VITE_STORAGE_URL}${coverPath}`;
+      } else if (coverPath.startsWith('http')) {
+        fullCoverPath = coverPath;
+      } else {
+        fullCoverPath = `${import.meta.env.VITE_STORAGE_URL}/${coverPath}`;
+      }
+      
+      releaseCover.value = fullCoverPath;
+      console.log('🖼️ Cover from release:', releaseCover.value);
+    }
+    
+    if (!releaseCover.value) {
+      releaseCover.value = '/img/bgCardSongs/card1.png';
+      console.log('🖼️ Using default cover image');
+    }
+    
+    console.log('✅ Release data loaded successfully');
+    
+  } catch (error) {
+    console.error('❌ فشل جلب بيانات الـ Release:', error);
+    releaseArtist.value = 'artist name';
+    releaseTitle.value = 'untitled release';
+    releaseType.value = 'Single';
+    audioQuality.value = 'lossless';
+    songCount.value = 0;
+    releaseCover.value = '/img/bgCardSongs/card1.png';
+  }
+};
+
+// ========== 🔥 دالة إرسال الـ Release للنشر ==========
+const submitRelease = async () => {
+  try {
+    console.log(`📤 Submitting release: ${props.releaseUuid}`);
+    
+    const response = await apiRequest.post(
+      `/releases/${props.releaseUuid}/submit`,
+      {},
+      { headers: { ...authHeader() } }
+    );
+    
+    console.log('✅ Release submitted successfully:', response.data);
+    
+    // 🔥 تخزين releaseUuid في localStorage للاستخدام في صفحة thanks
+    localStorage.setItem('submittedReleaseUuid', props.releaseUuid);
+    localStorage.setItem('submittedReleaseData', JSON.stringify({
+      title: releaseTitle.value,
+      artist: releaseArtist.value,
+      cover: releaseCover.value
+    }));
+    
+    // 🔥 التوجيه إلى صفحة thanks
+    router.push('/thanks');
+    
+    return response.data;
+    
+  } catch (error) {
+    console.error('❌ Failed to submit release:', error);
+    
+    let errorMessage = 'Fehler beim Einreichen des Releases. Bitte versuchen Sie es erneut.';
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message;
+    }
+    
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { message: errorMessage, type: 'error' }
+    }));
+    
+    throw error;
+  }
+};
+
+// ========== نشر الـ Release ==========
+const publishRelease = async () => {
+  if (isProcessing.value) {
+    console.log('⏳ Already processing, skipping...');
+    return;
+  }
+  
+  isProcessing.value = true;
+  
+  try {
+    console.log('📤 Publishing release...');
+    
+    await fetchSubscriptionStatus();
+    
+    if (!isSubscriptionActive.value) {
+      console.warn('⚠️ No active subscription, cannot publish');
+      showSubscriptionPopup.value = true;
+      isProcessing.value = false;
+      return;
+    }
+    
+    if (releaseCover.value) {
+      localStorage.setItem('releaseCover', releaseCover.value);
+      console.log('💾 Cover image saved to localStorage:', releaseCover.value);
+    }
+    
+    // 🔥 إرسال الطلب إلى /submit
+    await submitRelease();
+    
+  } catch (error) {
+    console.error('❌ Failed to publish release:', error);
+    
+    let errorMessage = 'Fehler beim Veröffentlichen des Releases. Bitte versuchen Sie es erneut.';
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message;
+    }
+    
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { message: errorMessage, type: 'error' }
+    }));
+    
+  } finally {
+    isProcessing.value = false;
+  }
+};
+
+// ========== بدء عملية الاشتراك ==========
+const initiateSubscription = async () => {
+  if (!validateForm()) return;
+  
+  await fetchSubscriptionStatus();
+  
+  if (isSubscriptionActive.value) {
+    console.log('✅ User already has active subscription, publishing directly');
+    await publishRelease();
+    return;
+  }
+  
+  isProcessing.value = true;
+  
+  try {
+    console.log('📤 Creating subscription...');
+    
+    const billingDetails = {
+      company: formData.value.company || '',
+      first_name: formData.value.firstName,
+      last_name: formData.value.lastName,
+      street_name: formData.value.street,
+      street_number: formData.value.streetNr,
+      postal_code: formData.value.postalCode,
+      city: formData.value.city,
+      country: formData.value.country,
+      vat_id: formData.value.ustId || null
+    };
+    
+    dataStore.setPaymentFormData(billingDetails);
+    localStorage.setItem('paymentFormData', JSON.stringify(billingDetails));
+    
+    const subscriptionData = await subscriptionService.createSubscription();
+    console.log('✅ Subscription created:', subscriptionData);
+    
+    const approvalUrl = subscriptionData.approval_url;
+    if (!approvalUrl) {
+      throw new Error('No approval URL received');
+    }
+    
+    const popup = window.open(approvalUrl, 'paypal_subscription_popup', 'width=900,height=950');
+    if (!popup) throw new Error('Popup blocked');
+    
+    let paymentSuccess = false;
+    
+    const onMessage = async (e) => {
+      const allowed = [window.location.origin, 'https://www.paypal.com'];
+      if (!allowed.includes(e.origin)) return;
+      
+      console.log('Received message from popup:', e.data);
+      
+      if (e.data.type === 'PAYMENT_SUCCESS' || e.data.type === 'SUBSCRIBE_SUCCESS') {
+        console.log('✅ Payment/Subscription completed successfully');
+        paymentSuccess = true;
+        
+        if (popup && !popup.closed) {
+          popup.close();
+        }
+        
+        await fetchSubscriptionStatus();
+        await publishRelease();
+      }
+    };
+    
+    window.addEventListener('message', onMessage);
+    
+    const monitor = setInterval(async () => {
+      if (popup.closed) {
+        clearInterval(monitor);
+        console.log('Subscription popup closed');
+        
+        if (!paymentSuccess) {
+          await fetchSubscriptionStatus();
+          
+          if (isSubscriptionActive.value) {
+            await publishRelease();
+          } else {
+            console.log('Subscription popup closed without success');
+          }
+        }
+      }
+    }, 500);
+    
+  } catch (error) {
+    console.error('❌ Failed to initiate subscription:', error);
+    
+    const errorMsg = error.response?.data?.message || error.message || '';
+    if (errorMsg.includes('active subscription')) {
+      console.log('🔄 User already has active subscription, trying to publish directly');
+      isProcessing.value = false;
+      await fetchSubscriptionStatus();
+      if (isSubscriptionActive.value) {
+        await publishRelease();
+        return;
+      }
+    }
+    
+    let errorMessage = 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.';
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { message: errorMessage, type: 'error' }
+    }));
+    
+  } finally {
+    isProcessing.value = false;
+  }
+};
+
+// ========== دالة النشر الرئيسية ==========
+const handlePublish = async () => {
+  if (isLoading.value || isProcessing.value) return;
+  
+  await fetchSubscriptionStatus();
+  
+  if (isSubscriptionActive.value) {
+    await publishRelease();
+  } else {
+    if (!validateForm()) {
+      return;
+    }
+    await initiateSubscription();
+  }
+};
+
+// ========== مراقبة التغييرات ==========
 watch(userEmail, (v) => (formData.value.email = v));
 
 watch(() => dataStore.user, (u) => {
@@ -587,12 +869,88 @@ watch(() => dataStore.user, (u) => {
   }
 }, { immediate: true, deep: true });
 
+// ========== مراقبة الـ Store ==========
+watch(
+  () => subscriptionStore.isInitialized,
+  (isInitialized) => {
+    if (isInitialized) {
+      subscriptionStatus.value = subscriptionStore.subscription;
+      isSubscriptionActive.value = subscriptionStore.isSubscribed || subscriptionStore.isActive || false;
+      
+      console.log('📦 Using subscription from store:', {
+        isSubscribed: subscriptionStore.isSubscribed,
+        isActive: subscriptionStore.isActive,
+        status: subscriptionStore.subscriptionStatus,
+        expiresAt: subscriptionStore.expiresAt
+      });
+      
+      if (!isSubscriptionActive.value) {
+        checkSubscriptionAndShowPopup();
+      }
+    }
+  },
+  { immediate: true }
+);
+
+watch(
+  () => subscriptionStore.isSubscribed,
+  (isSubscribed) => {
+    console.log('🔄 Subscription store isSubscribed changed:', isSubscribed);
+    isSubscriptionActive.value = isSubscribed || subscriptionStore.isActive || false;
+    
+    if (!isSubscribed) {
+      subscriptionStatus.value = subscriptionStore.subscription;
+      checkSubscriptionAndShowPopup();
+    }
+  },
+  { immediate: true }
+);
+
+watch(
+  () => subscriptionStore.isActive,
+  (isActive) => {
+    console.log('🔄 Subscription store isActive changed:', isActive);
+    isSubscriptionActive.value = isActive || subscriptionStore.isSubscribed || false;
+    
+    if (!isActive) {
+      subscriptionStatus.value = subscriptionStore.subscription;
+      checkSubscriptionAndShowPopup();
+    }
+  },
+  { immediate: true }
+);
+
+// ========== Lifecycle ==========
 onMounted(async () => {
   console.log('🚀 Upload4Component mounted with releaseUuid:', props.releaseUuid);
+  
+  if (subscriptionStore.isInitialized) {
+    subscriptionStatus.value = subscriptionStore.subscription;
+    isSubscriptionActive.value = subscriptionStore.isSubscribed || subscriptionStore.isActive || false;
+    console.log('📦 Using existing subscription from store:', isSubscriptionActive.value);
+    if (!isSubscriptionActive.value) {
+      checkSubscriptionAndShowPopup();
+    }
+  } else {
+    await fetchSubscriptionStatus();
+  }
+  
   await fetchReleaseData();
   
-  const saved = localStorage.getItem('paymentStatus');
-  if (saved) paymentStatus.value = parseInt(saved);
+  if (dataStore.user) {
+    Object.assign(formData.value, {
+      company: dataStore.user.billing_company || '',
+      firstName: dataStore.user.billing_first_name || '',
+      lastName: dataStore.user.billing_last_name || '',
+      street: dataStore.user.billing_street_name || '',
+      streetNr: dataStore.user.billing_street_number || '',
+      postalCode: dataStore.user.billing_postal_code || '',
+      city: dataStore.user.billing_city || '',
+      country: dataStore.user.billing_country || '',
+      ustId: dataStore.user.billing_vat_id || '',
+      email: dataStore.user.email || '',
+    });
+  }
 });
 </script>
 
@@ -608,6 +966,7 @@ onMounted(async () => {
   position: relative;
 }
 
+/* ========== باقي الأنماط ========== */
 .content-publish {
   display: flex;
   align-items: center;
@@ -817,7 +1176,7 @@ onMounted(async () => {
   text-transform: uppercase;
 }
 
-/* أنماط الفورم */
+/* ========== أنماط الفورم ========== */
 .Rechnungsadresse {
   display: flex;
   flex-direction: column;
@@ -1114,6 +1473,11 @@ onMounted(async () => {
   position: relative;
 }
 
+.person-checkbox:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .person-checkbox.error {
   border-color: #ff4d4f;
 }
@@ -1143,7 +1507,7 @@ onMounted(async () => {
   width: 490px;
 }
 
-/* Price and Buttons Section */
+/* ========== Price and Buttons Section ========== */
 .price-section {
   display: flex;
   padding-top: 24px;
@@ -1151,67 +1515,6 @@ onMounted(async () => {
   gap: 16px;
   align-self: stretch;
   margin-top: 20px;
-}
-
-.price-details {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  flex: 1 0 0;
-}
-
-.price-details .title {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-  flex: 1;
-}
-
-.price-details .title span {
-  color: var(--Main-Colors-Dove, #6A6C6D);
-  font-family: Heebo;
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1;
-  letter-spacing: 0.7px;
-}
-
-.price-details .title .span {
-  color: #FFF;
-  font-family: Heebo;
-  font-size: 28px;
-  font-weight: 300;
-  line-height: 1;
-  letter-spacing: 1.6px;
-  text-transform: uppercase;
-}
-
-.price-row {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 12px;
-  flex: 1;
-}
-
-.price-row span {
-  color: var(--Main-Colors-Dove, #6a6c6d);
-  text-align: right;
-  font-family: Heebo;
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1;
-  letter-spacing: 0.7px;
-  text-transform: uppercase;
-  width: 219px;
-}
-
-.price-row .price {
-  color: #fff;
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: 1.6px;
 }
 
 .form-buttons {
@@ -1222,47 +1525,22 @@ onMounted(async () => {
   flex: 1 0 0;
 }
 
-.back-btn {
-  display: flex;
-  height: 42px;
-  padding: 17px 20px;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-  border-radius: 5px;
-  background: var(--Main-Colors-Slate-Light, #3A3E42);
-  cursor: pointer;
-  color: #FFF;
-  font-family: Heebo;
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.back-btn:hover {
-  background-color: #990033;
-  color: white;
-  transition: 0.3s ease;
-}
-
 .pay-button {
   display: flex;
-  height: 44px;
+  cursor: pointer;
   padding: 12px 20px;
   justify-content: center;
   align-items: center;
   gap: 10px;
   border-radius: 5px;
   background-color: var(--Strawberry, #D15);
-  color: white;
-  border: none;
-  cursor: pointer;
+  color: var(--Main-Colors-White, #FFF);
   font-family: Heebo;
   font-size: 16px;
+  font-style: normal;
   font-weight: 400;
+  line-height: .8;
   text-transform: uppercase;
-  min-width: 200px;
 }
 
 .pay-button:disabled {
@@ -1275,73 +1553,182 @@ onMounted(async () => {
   background-color: #990033;
 }
 
-.reverse-charge {
-  color: #fff;
-  font-family: Heebo;
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1;
-  letter-spacing: 0.7px;
+/* ========== Popup الاشتراك ========== */
+.subscription-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.3s ease;
 }
 
-/* Responsive */
+.subscription-popup {
+  background: var(--Main-Colors-Slate, #26282D);
+  border-radius: 20px;
+  max-width: 500px;
+  width: 90%;
+  padding: 30px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.3s ease;
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  position: relative;
+}
+
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: absolute;
+  top: 20px;
+  right: 20px;
+}
+
+.popup-close {
+  background: none;
+  border: none;
+  color: #FFF;
+  font-size: 24px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.popup-close:hover {
+  opacity: 1;
+}
+
+.popup-body h3 {
+  color: #FF9800;
+  font-family: Heebo;
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.popup-body p {
+  color: #FFF;
+  font-family: Heebo;
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+
+.popup-detail {
+  color: #AAA !important;
+  font-size: 14px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+.popup-footer {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.popup-btn {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  font-family: Heebo;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.popup-btn.primary {
+  background: var(--Strawberry, #D15);
+  color: white;
+}
+
+.popup-btn.primary:hover {
+  background: #b00e44;
+  transform: scale(1.02);
+}
+
+.popup-btn.secondary {
+  background: transparent;
+  color: #FFF;
+}
+
+.popup-btn.secondary:hover {
+  border-color: #FFF;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ========== Responsive ========== */
 @media (min-width:1440px) and (max-width:1599px) {
   .info .name .first {
     font-size: 48px;
     line-height: .8;
   }
-
   .checkbox-label {
     font-size: 12px !important;
   }
-
   .info .name .second {
     font-size: 32px;
     width: 236px;
     line-height: .8;
   }
-
   .info .name {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 16px;
   }
-
   .release .card {
     width: 130px;
     height: 130px;
     padding: 0;
   }
-
   .info span {
     font-size: 16px;
     max-width: 300px;
     line-height: .8;
   }
-
   .release .info {
     gap: 24px;
   }
-
   .column2 {
     padding-left: 180px;
   }
-
   .release .info {
     min-width: 298px;
   }
-
   .column2 .info .last-line .total-price,
   .column2 .info .last-line .topic {
     font-size: 28px;
   }
-
   .column2 .info .list .line1 p,
   .column2 .info .list .line2 p {
     font-size: 18px;
   }
-
   .confirm-btn {
     display: flex;
     padding: 8px 20px;
@@ -1352,23 +1739,16 @@ onMounted(async () => {
     border-radius: 5px;
     background: var(--Main-Colors-Slate-Light, #3A3E42);
   }
-
   .input-field,
   .select-button {
     padding: 8px 20px;
   }
-
   .checkbox-row {
     padding: 0;
   }
-
   .select-button {
     min-height: 43px;
   }
-}
-
-@media (min-width:1600px) and (max-width:2074px) {
-  /* يمكن إضافة تعديلات هنا */
 }
 
 @media (min-width:2075px) and (max-width:2560px) {
@@ -1376,7 +1756,6 @@ onMounted(async () => {
     width: 490px;
     max-width: 490px;
   }
-
   .select-button {
     min-height: 48px;
   }

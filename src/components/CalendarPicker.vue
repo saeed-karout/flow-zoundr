@@ -44,22 +44,62 @@
   
   const weekDays = ['m', 'd', 'm', 'd', 'f', 's', 's'];
   
+  // ========== 🔥 دالة تحويل DD.MM.YYYY أو DD/MM/YY إلى Date ==========
   const parseSelectedDate = (dateString) => {
     if (!dateString) return null;
-    const parts = dateString.split('/');
-    if (parts.length !== 3) return null;
-    const day = parseInt(parts[0]);
-    const month = parseInt(parts[1]) - 1;
-    let year = parseInt(parts[2]);
-    if (year < 100) year = 2000 + year;
-    return new Date(year, month, day);
+    
+    let day, month, year;
+    
+    // ✅ التعامل مع تنسيق DD.MM.YYYY
+    if (dateString.includes('.')) {
+      const parts = dateString.split('.');
+      if (parts.length === 3) {
+        day = parseInt(parts[0]);
+        month = parseInt(parts[1]) - 1;
+        year = parseInt(parts[2]);
+      }
+    }
+    // ✅ التعامل مع تنسيق DD/MM/YY أو DD/MM/YYYY
+    else if (dateString.includes('/')) {
+      const parts = dateString.split('/');
+      if (parts.length === 3) {
+        day = parseInt(parts[0]);
+        month = parseInt(parts[1]) - 1;
+        year = parseInt(parts[2]);
+        if (year < 100) year = 2000 + year;
+      }
+    }
+    // ✅ التعامل مع تنسيق YYYY-MM-DD
+    else if (dateString.includes('-')) {
+      const parts = dateString.split('-');
+      if (parts.length === 3) {
+        year = parseInt(parts[0]);
+        month = parseInt(parts[1]) - 1;
+        day = parseInt(parts[2]);
+      }
+    }
+    
+    if (day && month !== undefined && year) {
+      return new Date(year, month, day);
+    }
+    
+    return null;
   };
   
+  // ========== 🔥 تنسيق التاريخ إلى YYYY-MM-DD ==========
   const formatDateToYYYYMMDD = (date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  };
+  
+  // ========== 🔥 تنسيق التاريخ للعرض بصيغة DD.MM.YYYY ==========
+  const formatDateForDisplay = (date) => {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}.${month}.${year}`;
   };
   
   const currentDate = ref(new Date());
@@ -75,10 +115,9 @@
         currentDate.value = new Date(date.getFullYear(), date.getMonth(), 1);
       }
     }
-    // لا تقم بتعيين null أبداً هنا
   };
   
-  // مراقبة التغييرات - فقط عندما تكون القيمة الجديدة صالحة
+  // مراقبة التغييرات
   watch(() => props.modelValue, (newVal) => {
     if (newVal && newVal.trim()) {
       console.log('📅 CalendarPicker: modelValue changed to:', newVal);
@@ -150,12 +189,10 @@
     if (!day.isCurrentMonth) return false;
     const dateStr = formatDateToYYYYMMDD(day.date);
     const isSelected = selectedDayValue.value === dateStr;
-    if (isSelected) {
-      console.log('✅ اليوم المحدد:', day.date.getDate(), 'التاريخ:', dateStr);
-    }
     return isSelected;
   };
   
+  // ========== 🔥 دالة اختيار اليوم ==========
   const selectDay = (day) => {
     if (!day.isCurrentMonth || isPastDay(day)) return;
     
@@ -163,19 +200,13 @@
     selectedDayValue.value = dateStr;
     console.log('📅 CalendarPicker: تم اختيار يوم جديد, selectedDayValue:', selectedDayValue.value);
     
+    // ✅ إرسال التاريخ بصيغة DD.MM.YYYY
     const displayDate = formatDateForDisplay(day.date);
     console.log('📅 CalendarPicker: إرسال تاريخ للعرض:', displayDate);
     
     // إرسال الأحداث
     emit('update:modelValue', displayDate);
     emit('select', displayDate);
-  };
-  
-  const formatDateForDisplay = (date) => {
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = String(date.getFullYear()).slice(-2);
-    return `${day}/${month}/${year}`;
   };
   
   const prevMonth = () => {
@@ -349,6 +380,7 @@
 .calendar1 .calender-1 .past-day {
   background: var(--Main-Colors-Slate, #26282D);
   cursor: no-drop;
+  opacity: 0.3;
 }
 
 .calendar1 .calender-1 .selected {

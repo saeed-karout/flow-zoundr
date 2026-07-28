@@ -5,7 +5,7 @@
       @select="handleZeitraumSelect"
     />
     <Guthaben />
-    <ButtonPrimary  /> 
+    <ButtonPrimary /> 
   </div>
 </template>
 
@@ -13,20 +13,20 @@
 import { ref } from 'vue';
 import ZeitraumComboBox from './dropDown/ZeitraumDropdown.vue';
 import Guthaben from './dropDown/Guthaben.vue';
-
 import ButtonPrimary from './dropDown/ButtonPrimary.vue';
 
+// ========== Emits ==========
+const emit = defineEmits(['filters-changed']);
 
-
+// ========== Refs ==========
 const zeitraumDropdown = ref(null);
-const filterDropdown = ref(null);
 
+// ========== Methods ==========
 const handleZeitraumSelect = (value) => {
-  console.log('Zeitraum selected:', value);
-};
-
-const handleFilterSelect = (value) => {
-  console.log('Filter selected:', value);
+  console.log('📅 Zeitraum selected:', value);
+  
+  // إرسال الفلتر إلى المكون الأب
+  emit('filters-changed', value);
 };
 </script>
 
@@ -37,11 +37,11 @@ const handleFilterSelect = (value) => {
   gap: 20px;
   align-self: stretch;
   position: relative;
-  z-index: 100; /* تأكد من أن الـ TopRow فوق العناصر الأخرى */
+  z-index: 100;
 }
 
-@media (min-width:1440px) and (max-width:1599px) {
-  .top-row{
+@media (min-width: 1440px) and (max-width: 1599px) {
+  .top-row {
     max-height: 40px;
   }
 }

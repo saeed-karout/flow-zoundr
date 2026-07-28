@@ -1,21 +1,36 @@
-```vue
 <template>
   <div class="tab-content">
     <div class="section">
       <div class="p">Deine Top Länder</div>
       <div class="top-song">
-        <div class="music-title" v-for="song in songs" :key="song.id">
-          <div class="background-layer" :style="{ backgroundImage: `url(${song.flagUrl})` }"></div>
-          <div class="number-container">
-            <div :class="song.id === 1 ? 'number-1' : 'number'">{{ song.id }}.</div>
-          </div>
-          <div class="image-overlay"></div>
-          <div class="info">
-            <div class="title">
-              <div class="span">{{ song.title }}</div>
+        <!-- Loading State -->
+        <div v-if="isLoading" class="loading-state">
+          <div class="spinner"></div>
+        </div>
+        
+        <!-- Countries List -->
+        <div v-else class="countries-container">
+          <div class="music-title" v-for="(country, index) in data" :key="country.code || index">
+            <div 
+              class="background-layer" 
+              :style="{ backgroundImage: `url(${getCountryFlag(country.code || '')})` }"
+            ></div>
+            <div class="number-container">
+              <div :class="index === 0 ? 'number-1' : 'number'">{{ index + 1 }}.</div>
             </div>
-            <div class="p">{{ song.streams }} Streams</div>
+            <div class="image-overlay"></div>
+            <div class="info">
+              <div class="title">
+                <div class="span">{{ country.name || 'Unknown Country' }}</div>
+              </div>
+              <div class="p">{{ formatCurrency(country.revenue) }} Revenue</div>
+            </div>
           </div>
+        </div>
+        
+        <!-- Empty State -->
+        <div v-if="!isLoading && (!data || data.length === 0)" class="empty-state">
+          <div class="empty-message">Keine Länder gefunden</div>
         </div>
       </div>
     </div>
@@ -23,48 +38,39 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import Ger from '@/assets/images/Lander/G.png';
-import at from '@/assets/images/Lander/at.png';
-import us from '@/assets/images/Lander/us.png';
+import { ref } from 'vue';
 
-// افتراض بيانات من API
-const songs = ref([]);
+// ========== Props ==========
+const props = defineProps({
+  data: {
+    type: Array,
+    default: () => []
+  },
+  filters: {
+    type: Object,
+    default: () => ({})
+  }
+});
 
-const fetchSongs = async () => {
-    // محاكاة استدعاء API
-    const response = await new Promise(resolve => {
-        setTimeout(() => {
-            resolve([
-                { id: 1, title: "Germany", streams: "15.242", flagUrl: Ger },
-                { id: 2, title: "Austria", streams: "18.240", flagUrl: at },
-                { id: 3, title: "United States", streams: "15.200", flagUrl: us },
-                { id: 4, title: "France", streams: "12.800", flagUrl: "https://example.com/flags/france.jpg" },
-                { id: 5, title: "Italy", streams: "10.000", flagUrl: "https://example.com/flags/italy.jpg" },
-                { id: 6, title: "Spain", streams: "8.900", flagUrl: "https://example.com/flags/spain.jpg" },
-                { id: 7, title: "Portugal", streams: "7.500", flagUrl: "https://example.com/flags/portugal.jpg" },
-                { id: 8, title: "Netherlands", streams: "6.300", flagUrl: "https://example.com/flags/netherlands.jpg" },
-                { id: 9, title: "Belgium", streams: "5.100", flagUrl: "https://example.com/flags/belgium.jpg" },
-                { id: 10, title: "Denmark", streams: "4.200", flagUrl: "https://example.com/flags/denmark.jpg" },
-                { id: 11, title: "Sweden", streams: "3.800", flagUrl: "https://example.com/flags/sweden.jpg" },
-                { id: 12, title: "Norway", streams: "3.200", flagUrl: "https://example.com/flags/norway.jpg" },
-                { id: 13, title: "Finland", streams: "2.900", flagUrl: "https://example.com/flags/finland.jpg" },
-                { id: 14, title: "Poland", streams: "2.500", flagUrl: "https://example.com/flags/poland.jpg" },
-                { id: 15, title: "Czech Republic", streams: "2.100", flagUrl: "https://example.com/flags/czech.jpg" },
-                { id: 16, title: "Hungary", streams: "1.800", flagUrl: "https://example.com/flags/hungary.jpg" },
-                { id: 17, title: "Slovakia", streams: "1.500", flagUrl: "https://example.com/flags/slovakia.jpg" },
-                { id: 18, title: "Croatia", streams: "1.200", flagUrl: "https://example.com/flags/croatia.jpg" },
-                { id: 19, title: "Slovenia", streams: "1.000", flagUrl: "https://example.com/flags/slovenia.jpg" },
-                { id: 20, title: "Romania", streams: "900", flagUrl: "https://example.com/flags/romania.jpg" },
-            ]);
-        }, 1000);
-    });
-    songs.value = response;
+// ========== Reactive Data ==========
+const isLoading = ref(false);
+
+// ========== Utility Functions ==========
+const formatCurrency = (num) => {
+  if (!num && num !== 0) return '€0.00';
+  return new Intl.NumberFormat('de-DE', { 
+    style: 'currency', 
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(num);
 };
 
-onMounted(() => {
-    fetchSongs();
-});
+const getCountryFlag = (countryCode) => {
+  if (!countryCode) return '';
+  // استخدام CDN للأعلام الدائرية
+  return `https://cdn.jsdelivr.net/npm/flag-icons@7.0.0/flags/4x3/${countryCode.toLowerCase()}.svg`;
+};
 </script>
 
 <style lang="scss" scoped>
@@ -75,6 +81,8 @@ onMounted(() => {
   border-radius: 20px;
   width: 100%;
   max-width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .section {
@@ -90,6 +98,8 @@ onMounted(() => {
   position: relative;
   width: 100%;
   max-width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .section .p {
@@ -103,6 +113,7 @@ onMounted(() => {
   text-transform: uppercase;
   padding-top: 3px;
   z-index: 111;
+  flex-shrink: 0;
 }
 
 .top-song {
@@ -111,11 +122,20 @@ onMounted(() => {
   gap: 20px;
   align-self: stretch;
   overflow-x: auto;
-  padding-right: 80px;
+  // padding-right: 80px;
   scrollbar-width: none;
   border-radius: 20px;
   flex-wrap: nowrap;
   min-width: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.countries-container {
+  display: flex;
+  gap: 20px;
+  flex-wrap: nowrap;
+  height: 100%;
 }
 
 .top-song::-webkit-scrollbar {
@@ -138,7 +158,9 @@ onMounted(() => {
 .music-title {
   display: flex;
   width: 207px;
-  height: 207px;
+  min-width: 207px;
+  height: 100%;
+  min-height: 207px;
   justify-content: space-between;
   align-items: flex-end;
   border-radius: 20px;
@@ -164,7 +186,7 @@ onMounted(() => {
 }
 
 .music-title:hover .background-layer {
-  filter: saturate(80%);
+  filter: saturate(80%) brightness(1.1);
 }
 
 .image-overlay {
@@ -230,7 +252,6 @@ onMounted(() => {
   z-index: 150;
   opacity: 0.7;
   transition: opacity 0.3s ease;
-  transform: translateZ(0); /* تحسين الأداء لمنع الـ "jump" */
 }
 
 .music-title:hover .info {
@@ -272,40 +293,62 @@ onMounted(() => {
   z-index: 150;
 }
 
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 207px;
+}
 
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(221, 17, 85, 0.1);
+  border-top-color: #DD1155;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 
-@media (min-width:1440px) and (max-width:1599px) {
-    .music-title {
-      width: 160px;
-      height: 160px;
-    }
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 207px;
+}
 
-    .title .sub-title{
-      overflow: hidden;
-      text-overflow: ellipsis;
-      line-height: 1;
+.empty-message {
+  color: #FFF;
+  font-family: Heebo;
+  font-size: 16px;
+  font-weight: 300;
+  opacity: 0.5;
+  text-align: center;
+}
 
-    }
+/* Responsive */
+@media (min-width: 1440px) and (max-width: 1599px) {
+  .music-title {
+    width: 160px;
+    min-width: 160px;
+    height: 160px;
+    min-height: 160px;
+  }
 
-    .title .sub-title{
-      font-size: 14px;
-       overflow: hidden;
-      text-overflow: ellipsis;
-    }
+  .title .span {
+    font-size: 17px;
+    line-height: .9;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
-
-    .info .p{
-      font-size: 12px;
-    }
-
-    .title  span{
-      font-size: 17px;
-      line-height: .9;
-    }
-
-
-   
+  .info .p {
+    font-size: 12px;
+  }
 }
 </style>
-```

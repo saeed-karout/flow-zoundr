@@ -27,8 +27,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted, watch, computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 import apiRequest from '@/lib/apiRequest';
 
@@ -52,6 +52,7 @@ const cards = ref([]);
 const loading = ref(true);
 const error   = ref(null);
 
+const route = useRoute();
 const router = useRouter();
 
 // ── دالة لجلب جميع الصفحات ──
@@ -64,7 +65,7 @@ const fetchAllPages = async () => {
     // جلب الصفحة الأولى أولاً لمعرفة عدد الصفحات
     const firstResponse = await apiRequest.get('/releases', {
       params: {
-        per_page: 100, // نحاول جلب أكبر عدد ممكن في كل صفحة
+        per_page: 100,
         page: currentPage
       }
     });
@@ -72,19 +73,15 @@ const fetchAllPages = async () => {
     const firstPageData = firstResponse.data?.data ?? [];
     allReleases = [...firstPageData];
     
-    // التحقق من وجود meta للحصول على معلومات الصفحات
     const meta = firstResponse.data?.meta;
     if (meta) {
       lastPage = meta.last_page || meta.total_pages || 1;
       console.log(`📊 إجمالي الصفحات: ${lastPage}`);
     } else {
-      // إذا لم يكن هناك meta، نحتاج إلى طريقة أخرى لمعرفة العدد
-      // يمكننا إرسال طلب head أو افتراض أن هناك صفحة واحدة فقط
       console.log('⚠️ لا توجد meta في الاستجابة');
       return allReleases;
     }
     
-    // جلب باقي الصفحات
     for (let page = 2; page <= lastPage; page++) {
       console.log(`📡 جلب الصفحة ${page} من ${lastPage}`);
       const response = await apiRequest.get('/releases', {
@@ -113,10 +110,8 @@ const fetchCounts = async () => {
     loading.value = true;
     error.value = null;
 
-    // جلب جميع الصفحات
     const allReleases = await fetchAllPages();
 
-    // ── حساب العدد لكل status ──
     const counts = {
       Releases:  allReleases.filter(r => r.status === 'release' || r.status === null || r.status === 'published').length,
       Entwürfe:  allReleases.filter(r => r.status === 'draft').length,
@@ -126,7 +121,6 @@ const fetchCounts = async () => {
 
     console.log('📊 الإحصائيات:', counts);
 
-    // ربط العدد مع الكروت
     cards.value = baseCards.map(card => ({
       ...card,
       count: counts[card.title] ?? 0
@@ -143,6 +137,7 @@ const fetchCounts = async () => {
 // ── تنقل عند الضغط ──
 const navigateToRoute = (title) => {
   const path = title.toLowerCase();
+  console.log(`🔀 التنقل إلى /catalog/${path}`);
   router.push(`/catalog/${path}`);
 };
 
@@ -178,9 +173,46 @@ const getBackgroundStyle = (background) => {
   return background ? { backgroundImage: `url(${background})` } : {};
 };
 
-// ── جلب البيانات عند التحميل ──
+// ========== 🔥 مراقبة تغيير المسار ==========
+watch(
+  () => route.path,
+  (newPath, oldPath) => {
+    console.log(`🔄 [CatalogHome] تغير المسار من ${oldPath} إلى ${newPath}`);
+    
+    // 🔥 إذا كنا في صفحة الكروت الرئيسية (أو أي صفحة فرعية)، نعيد تحميل البيانات
+    // ولكن نتحقق من أننا في الصفحة الرئيسية وليس في صفحة تفاصيل
+    if (newPath === '/catalog' || newPath === '/catalog/') {
+      console.log('🔄 [CatalogHome] العودة إلى الصفحة الرئيسية، إعادة تحميل البيانات');
+      fetchCounts();
+    }
+  },
+  { immediate: false }
+);
+
+// ========== 🔥 مراقبة تغيير params ==========
+watch(
+  () => route.params,
+  (newParams, oldParams) => {
+    console.log('🔄 [CatalogHome] تغير params:', newParams);
+    // إذا كان هناك param مثل status، نعيد تحميل البيانات
+    if (route.path === '/catalog' || route.path === '/catalog/') {
+      fetchCounts();
+    }
+  },
+  { deep: true, immediate: false }
+);
+
+// ========== دورة الحياة ==========
 onMounted(() => {
+  console.log('🚀 [CatalogHome] mounted');
   fetchCounts();
+});
+
+// ========== تصدير ==========
+defineExpose({
+  fetchCounts,
+  cards,
+  loading
 });
 </script>
 
@@ -240,7 +272,7 @@ onMounted(() => {
   flex-direction: column;
   justify-content: flex-end;
   align-items: flex-start;
-  gap: 20px;
+  gap: 25px;
   flex: 1 0 0;
   align-self: stretch;
   border-radius: 20px;
@@ -275,9 +307,9 @@ onMounted(() => {
 .subtitle {
   color: var(--Main-Colors-White, #FFF);
   font-family: Heebo;
-  font-size: 14px;
+  font-size: 18px;
   font-style: normal;
-  font-weight: 400;
+  font-weight: 200;
   line-height: .6;
   opacity: 0.7;
   transition: opacity 0.3s ease;

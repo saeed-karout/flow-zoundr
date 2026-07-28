@@ -10,14 +10,14 @@
             können, dass Dein Release zu diesem Datum in jedem Store verfügbar sein wird.
           </div>
           <div class="p">Wir empfehlen Dir, Dein Releasedatum auf <br>
-            <span>{{ formatGermanDate(recommendedDate) }}</span> zu ändern.
+            <span>{{ formatGermanDate(computedRecommendedDate) }}</span> zu ändern.
           </div>
         </div>
         <div class="buttons">
           <div class="button-primary" @click="$emit('close')">
             <div class="p">Nein Danke!</div>
           </div>
-          <div class="button-secondary" @click="$emit('update-date', recommendedDate)">
+          <div class="button-secondary" @click="$emit('update-date', computedRecommendedDate)">
             <div class="p">Ja, bitte ändern!</div>
           </div>
         </div>
@@ -27,16 +27,64 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
+
 const props = defineProps({
   showPopup: { type: Boolean, required: true },
   selectedDate: { type: String, required: true },
-  recommendedDate: { type: String, required: true },
   daysDifference: { type: Number, required: true }
 });
 
-defineEmits(['update-date', 'close']);
+const emit = defineEmits(['update-date', 'close']);
 
-// دالة لتنسيق التاريخ بالصيغة الألمانية (DD.MM.YYYY)
+// ========== 🔥 حساب التاريخ الموصى به (الجمعة بعد أسبوعين من اليوم الحالي) ==========
+const computeRecommendedDate = () => {
+  // 🔥 استخدام اليوم الحالي بدلاً من التاريخ المختار
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  console.log('📅 اليوم الحالي:', today);
+  
+  // 🔥 إضافة أسبوعين (14 يوم)
+  const targetDate = new Date(today);
+  targetDate.setDate(targetDate.getDate() + 14);
+  
+  console.log('📅 بعد أسبوعين:', targetDate);
+  
+  // 🔥 الانتقال إلى يوم الجمعة التالي (5 = Friday)
+  const currentDay = targetDate.getDay(); // 0=Sunday, 5=Friday
+  let daysToAdd = 0;
+  
+  if (currentDay <= 5) {
+    // إذا كان اليوم قبل أو يساوي الجمعة، ننتقل إلى الجمعة
+    daysToAdd = 5 - currentDay;
+  } else {
+    // إذا كان اليوم بعد الجمعة (السبت أو الأحد)، ننتقل إلى الجمعة القادمة
+    daysToAdd = (5 - currentDay) + 7;
+  }
+  
+  targetDate.setDate(targetDate.getDate() + daysToAdd);
+  
+  console.log('📅 التاريخ الموصى به (الجمعة القادمة بعد أسبوعين):', targetDate);
+  
+  // تنسيق التاريخ للإرجاع
+  return formatDateForReturn(targetDate);
+};
+
+// ========== تنسيق التاريخ للإرجاع ==========
+const formatDateForReturn = (date) => {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+// ========== حساب التاريخ الموصى به باستخدام computed ==========
+const computedRecommendedDate = computed(() => {
+  return computeRecommendedDate();
+});
+
+// ========== دالة لتنسيق التاريخ بالصيغة الألمانية (DD.MM.YYYY) ==========
 const formatGermanDate = (dateString) => {
   if (!dateString) return '';
   

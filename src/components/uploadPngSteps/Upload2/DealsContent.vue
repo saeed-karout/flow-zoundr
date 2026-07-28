@@ -1,7 +1,8 @@
 <template>
   <div class="tab-content">
     <div class="main-content">
-      <!-- Artist (Diggie) -->
+      
+      <!-- 🔥 Artist (Diggie) - هذا القسم فقط نشط وواضح -->
       <div class="section-top">
         <div class="topic">Diggie</div>
         <div class="anteil">
@@ -15,46 +16,22 @@
         </div>
       </div>
 
-      <div class="splitting">
-        <div class="top-line">
-          <div class="title">Werden Deine Einnahmen Gesplittet?</div>
-          <div class="btn-switch" :class="{ active: isSplittingActive }" @click="toggleSplitting">
-            <img src="/icon/circle.svg" class="circle" alt="circle image" />
-          </div>
-        </div>
-
-        <!-- Feature Artists -->
-        <div v-for="(contributor, index) in featureContributors" :key="'feature-'+index" 
-             class="share" :class="{ active: isSplittingActive }">
-          <div class="name">{{ contributor.name }}</div>
-          <div class="roller">Feature</div>
-          <div class="anteil">
-            <div class="input-percentage">
-              <input
-                type="number"
-                v-model.number="contributor.percentage"
-                min="0"
-                max="100"
-                placeholder="0"
-                :disabled="!isSplittingActive"
-                @input="updateContributorPercentage('feature', index, $event.target.value)"
-                :class="{ 'zero-percentage': contributor.percentage === 0 }"
-              />
-              <span :class="{ 'zero-percentage': contributor.percentage === 0 }">%</span>
-            </div>
-            <div class="progress-bar" style="min-width: 244px;">
-              <div class="active" :style="{ width: contributor.percentage + '%' }"></div>
-              <div class="inactive" :style="{ width: (100 - contributor.percentage) + '%' }"></div>
+      <!-- 🔥 القسم الباقي - معطل مع رسالة Coming Soon -->
+      <div class="splitting-wrapper splitting-disabled">
+        
+        <div class="splitting">
+          <div class="top-line">
+            <div class="title">Werden Deine Einnahmen Gesplittet?</div>
+            <div class="btn-switch">
+              <img src="/icon/circle.svg" class="circle" alt="circle image" />
             </div>
           </div>
-        </div>
 
-        <!-- Producers -->
-        <div class="Produzent">
-          <div v-for="(contributor, index) in producerContributors" :key="'producer-'+index" 
-               class="share" :class="{ active: isSplittingActive }">
+          <!-- Feature Artists -->
+          <div v-for="(contributor, index) in featureContributors" :key="'feature-'+index" 
+               class="share">
             <div class="name">{{ contributor.name }}</div>
-            <div class="roller">Produzent</div>
+            <div class="roller">Feature</div>
             <div class="anteil">
               <div class="input-percentage">
                 <input
@@ -63,8 +40,84 @@
                   min="0"
                   max="100"
                   placeholder="0"
-                  :disabled="!isSplittingActive"
-                  @input="updateContributorPercentage('producer', index, $event.target.value)"
+                  disabled
+                  :class="{ 'zero-percentage': contributor.percentage === 0 }"
+                />
+                <span :class="{ 'zero-percentage': contributor.percentage === 0 }">%</span>
+              </div>
+              <div class="progress-bar" style="min-width: 244px;">
+                <div class="active" :style="{ width: contributor.percentage + '%' }"></div>
+                <div class="inactive" :style="{ width: (100 - contributor.percentage) + '%' }"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Producers -->
+          <div class="Produzent">
+            <div v-for="(contributor, index) in producerContributors" :key="'producer-'+index" 
+                 class="share">
+              <div class="name">{{ contributor.name }}</div>
+              <div class="roller">Produzent</div>
+              <div class="anteil">
+                <div class="input-percentage">
+                  <input
+                    type="number"
+                    v-model.number="contributor.percentage"
+                    min="0"
+                    max="100"
+                    placeholder="0"
+                    disabled
+                    :class="{ 'zero-percentage': contributor.percentage === 0 }"
+                  />
+                  <span :class="{ 'zero-percentage': contributor.percentage === 0 }">%</span>
+                </div>
+                <div class="progress-bar">
+                  <div class="active" :style="{ width: contributor.percentage + '%' }"></div>
+                  <div class="inactive" :style="{ width: (100 - contributor.percentage) + '%' }"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Other Contributors -->
+          <div v-for="(contributor, index) in otherContributors" :key="'other-'+index" 
+               class="share">
+            <div class="name">{{ contributor.name }}</div>
+            <div class="roller">{{ contributor.role }}</div>
+            <div class="anteil">
+              <div class="input-percentage">
+                <input
+                  type="number"
+                  v-model.number="contributor.percentage"
+                  min="0"
+                  max="100"
+                  placeholder="0"
+                  disabled
+                  :class="{ 'zero-percentage': contributor.percentage === 0 }"
+                />
+                <span :class="{ 'zero-percentage': contributor.percentage === 0 }">%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="active" :style="{ width: contributor.percentage + '%' }"></div>
+                <div class="inactive" :style="{ width: (100 - contributor.percentage) + '%' }"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- P-Line -->
+          <div v-for="(contributor, index) in pLineContributors" :key="'pline-'+index" 
+               class="share">
+            <div class="name">{{ contributor.name }}</div>
+            <div class="roller">P-Line</div>
+            <div class="anteil">
+              <div class="input-percentage">
+                <input
+                  type="number"
+                  v-model.number="contributor.percentage"
+                  min="0"
+                  max="100"
+                  placeholder="0"
+                  disabled
                   :class="{ 'zero-percentage': contributor.percentage === 0 }"
                 />
                 <span :class="{ 'zero-percentage': contributor.percentage === 0 }">%</span>
@@ -77,55 +130,15 @@
           </div>
         </div>
 
-        <!-- Other Contributors (Composer, etc) -->
-        <div v-for="(contributor, index) in otherContributors" :key="'other-'+index" 
-             class="share" :class="{ active: isSplittingActive }">
-          <div class="name">{{ contributor.name }}</div>
-          <div class="roller">{{ contributor.role }}</div>
-          <div class="anteil">
-            <div class="input-percentage">
-              <input
-                type="number"
-                v-model.number="contributor.percentage"
-                min="0"
-                max="100"
-                placeholder="0"
-                :disabled="!isSplittingActive"
-                @input="updateOtherContributorPercentage(index, $event.target.value)"
-                :class="{ 'zero-percentage': contributor.percentage === 0 }"
-              />
-              <span :class="{ 'zero-percentage': contributor.percentage === 0 }">%</span>
-            </div>
-            <div class="progress-bar">
-              <div class="active" :style="{ width: contributor.percentage + '%' }"></div>
-              <div class="inactive" :style="{ width: (100 - contributor.percentage) + '%' }"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- P-Line -->
-        <div v-for="(contributor, index) in pLineContributors" :key="'pline-'+index" 
-             class="share" :class="{ active: isSplittingActive }">
-          <div class="name">{{ contributor.name }}</div>
-          <div class="roller">P-Line</div>
-          <div class="anteil">
-            <div class="input-percentage">
-              <input
-                type="number"
-                v-model.number="contributor.percentage"
-                min="0"
-                max="100"
-                placeholder="0"
-                :disabled="!isSplittingActive"
-                @input="updateContributorPercentage('p_line', index, $event.target.value)"
-                :class="{ 'zero-percentage': contributor.percentage === 0 }"
-              />
-              <span :class="{ 'zero-percentage': contributor.percentage === 0 }">%</span>
-            </div>
-            <div class="progress-bar">
-              <div class="active" :style="{ width: contributor.percentage + '%' }"></div>
-              <div class="inactive" :style="{ width: (100 - contributor.percentage) + '%' }"></div>
-            </div>
+        <!-- 🔥 رسالة Coming Soon - واضحة تماماً بدون أي فلتر -->
+        <div class="coming-soon-overlay">
+          <div class="coming-soon-box">
+            <svg class="lock-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="white"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="white"/>
+            </svg>
+            <span class="coming-soon-text">Coming Soon</span>
+            <span class="coming-soon-subtext">Diese Funktion ist in Kürze verfügbar.</span>
           </div>
         </div>
       </div>
@@ -134,284 +147,128 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import { debounce } from '@/utils/debounce';
+import { ref, computed, onMounted, watch } from 'vue';
 
 const props = defineProps({
   currentSong: {
     type: Object,
     default: () => ({})
+  },
+  formData: {
+    type: Object,
+    default: () => ({})
+  },
+  activeTab: {
+    type: String,
+    default: 'deals'
   }
 });
 
-const emit = defineEmits(['openVideoPopup', 'save-song']);
+const emit = defineEmits([
+  'update:form-data',
+  'save-song',
+  'update-tab-completion'  // ✅ إضافة emit لـ tab completion
+]);
 
-// State for splitting toggle
-const isSplittingActive = ref(false);
+// ========== ✅ بيانات ثابتة للتصميم ==========
+const featureContributors = ref([
+  { name: 'Artist Feature 1', percentage: 20 },
+  { name: 'Artist Feature 2', percentage: 15 }
+]);
 
-// بيانات المساهمين
-const artistContributors = ref([]);
-const featureContributors = ref([]);
-const producerContributors = ref([]);
-const pLineContributors = ref([]);
-const otherContributors = ref([]);
+const producerContributors = ref([
+  { name: 'Producer 1', percentage: 10 },
+  { name: 'Producer 2', percentage: 5 }
+]);
 
-// تخزين القيم السابقة للمقارنة
-const previousValues = ref({
-  artist: [],
-  feature: [],
-  producer: [],
-  p_line: [],
-  other_contributors: []
-});
+const otherContributors = ref([
+  { name: 'Composer 1', percentage: 10 },
+  { name: 'Lyricist 1', percentage: 5 }
+]);
 
-// ─── تحديث البيانات من props ───
-const updateFromProps = () => {
-  if (!props.currentSong?.uuid) return;
+const pLineContributors = ref([
+  { name: 'P-Line 1', percentage: 10 }
+]);
 
-  console.log('🔄 DealsContent: تحديث من currentSong', props.currentSong);
+// ========== ✅ نسبة الفنان الرئيسي ==========
+const mainArtistPercentage = 100;
 
-  // تحديث بيانات المساهمين من contributors
-  if (props.currentSong.contributors) {
-    // Artist
-    artistContributors.value = props.currentSong.contributors.artist 
-      ? JSON.parse(JSON.stringify(props.currentSong.contributors.artist))
-      : [];
-    
-    // Feature
-    featureContributors.value = props.currentSong.contributors.feature
-      ? JSON.parse(JSON.stringify(props.currentSong.contributors.feature))
-      : [];
-    
-    // Producer
-    producerContributors.value = props.currentSong.contributors.producer
-      ? JSON.parse(JSON.stringify(props.currentSong.contributors.producer))
-      : [];
-    
-    // P-Line
-    pLineContributors.value = props.currentSong.contributors.p_line
-      ? JSON.parse(JSON.stringify(props.currentSong.contributors.p_line))
-      : [];
-    
-    // Other Contributors
-    otherContributors.value = props.currentSong.contributors.other_contributors
-      ? JSON.parse(JSON.stringify(props.currentSong.contributors.other_contributors))
-      : [];
-
-    // التحقق مما إذا كان هناك أي نسب مئوية أكبر من 0
-    const hasAnyPercentage = [
-      ...featureContributors.value,
-      ...producerContributors.value,
-      ...otherContributors.value,
-      ...pLineContributors.value
-    ].some(c => c.percentage > 0);
-
-    isSplittingActive.value = hasAnyPercentage;
-
-    // تخزين القيم السابقة
-    previousValues.value = {
-      artist: JSON.parse(JSON.stringify(artistContributors.value)),
-      feature: JSON.parse(JSON.stringify(featureContributors.value)),
-      producer: JSON.parse(JSON.stringify(producerContributors.value)),
-      p_line: JSON.parse(JSON.stringify(pLineContributors.value)),
-      other_contributors: JSON.parse(JSON.stringify(otherContributors.value))
-    };
-  }
-};
-
-// حساب نسبة الفنان الرئيسي (Diggie)
-const mainArtistPercentage = computed(() => {
-  // جمع كل النسب من جميع المساهمين
-  let totalOthersPercentage = 0;
-  
-  featureContributors.value.forEach(c => totalOthersPercentage += c.percentage );
-  producerContributors.value.forEach(c => totalOthersPercentage += c.percentage );
-  otherContributors.value.forEach(c => totalOthersPercentage += c.percentage );
-  pLineContributors.value.forEach(c => totalOthersPercentage += c.percentage );
-  
-  // نسبة الفنان الرئيسي هي 100% ناقص مجموع نسب الآخرين
-  return Math.max(0, 100 - totalOthersPercentage);
-});
-
-// تحديث نسبة مساهم
-const updateContributorPercentage = (type, index, value) => {
-  let percentage = parseInt(value) ;
-  if (percentage < 0) percentage = 0;
-  if (percentage > 100) percentage = 100;
-
-  // تحديث القيمة في المصفوفة المناسبة
-  switch(type) {
-    case 'feature':
-      featureContributors.value[index].percentage = percentage;
-      break;
-    case 'producer':
-      producerContributors.value[index].percentage = percentage;
-      break;
-    case 'p_line':
-      pLineContributors.value[index].percentage = percentage;
-      break;
-  }
-
-  // التأكد من أن المجموع لا يتجاوز 100%
-  validatePercentages();
-  
-  debouncedSendUpdate();
-};
-
-// تحديث نسبة other contributor
-const updateOtherContributorPercentage = (index, value) => {
-  let percentage = parseInt(value) ;
-  if (percentage < 0) percentage = 0;
-  if (percentage > 100) percentage = 100;
-
-  otherContributors.value[index].percentage = percentage;
-  
-  validatePercentages();
-  debouncedSendUpdate();
-};
-
-// التحقق من أن مجموع النسب لا يتجاوز 100%
-const validatePercentages = () => {
-  let total = 0;
-  
-  featureContributors.value.forEach(c => total += c.percentage );
-  producerContributors.value.forEach(c => total += c.percentage );
-  otherContributors.value.forEach(c => total += c.percentage );
-  pLineContributors.value.forEach(c => total += c.percentage );
-
-  // إذا تجاوز المجموع 100%، نقوم بتعديل آخر قيمة تم تغييرها
-  if (total > 100) {
-    // يمكن إضافة منطق لتعديل القيم تلقائياً
-    console.warn('Total percentages exceed 100%');
-  }
-};
-
-// Toggle splitting
-const toggleSplitting = () => {
-  isSplittingActive.value = !isSplittingActive.value;
-  if (!isSplittingActive.value) {
-    // إعادة تعيين جميع النسب إلى 0
-    featureContributors.value.forEach(c => c.percentage = 0);
-    producerContributors.value.forEach(c => c.percentage = 0);
-    otherContributors.value.forEach(c => c.percentage = 0);
-    pLineContributors.value.forEach(c => c.percentage = 0);
-  }
-  debouncedSendUpdate();
-};
-
-// ─── دالة إرسال التحديثات - ترسل فقط القيم المتغيرة ───
-const sendUpdate = () => {
-  if (!props.currentSong?.uuid) {
-    console.warn('⚠️ DealsContent: لا يوجد UUID للأغنية');
-    return;
-  }
-
-  const payload = { contributors: {} };
-  let hasChanges = false;
-
-  // مقارنة Artist
-  if (JSON.stringify(artistContributors.value) !== JSON.stringify(previousValues.value.artist)) {
-    payload.contributors['artist'] = artistContributors.value;
-    console.log('🔄 تغيير في Artist:', { 
-      قديم: previousValues.value.artist, 
-      جديد: artistContributors.value 
-    });
-    hasChanges = true;
-  }
-
-  // مقارنة Feature
-  if (JSON.stringify(featureContributors.value) !== JSON.stringify(previousValues.value.feature)) {
-    payload.contributors['feature'] = featureContributors.value;
-    console.log('🔄 تغيير في Feature:', { 
-      قديم: previousValues.value.feature, 
-      جديد: featureContributors.value 
-    });
-    hasChanges = true;
-  }
-
-  // مقارنة Producer
-  if (JSON.stringify(producerContributors.value) !== JSON.stringify(previousValues.value.producer)) {
-    payload.contributors['producer'] = producerContributors.value;
-    console.log('🔄 تغيير في Producer:', { 
-      قديم: previousValues.value.producer, 
-      جديد: producerContributors.value 
-    });
-    hasChanges = true;
-  }
-
-  // مقارنة P-Line
-  if (JSON.stringify(pLineContributors.value) !== JSON.stringify(previousValues.value.p_line)) {
-    payload.contributors['p_line'] = pLineContributors.value;
-    console.log('🔄 تغيير في P-Line:', { 
-      قديم: previousValues.value.p_line, 
-      جديد: pLineContributors.value 
-    });
-    hasChanges = true;
-  }
-
-  // مقارنة Other Contributors
-  if (JSON.stringify(otherContributors.value) !== JSON.stringify(previousValues.value.other_contributors)) {
-    payload.contributors['other_contributors'] = otherContributors.value;
-    console.log('🔄 تغيير في Other Contributors:', { 
-      قديم: previousValues.value.other_contributors, 
-      جديد: otherContributors.value 
-    });
-    hasChanges = true;
-  }
-
-  if (!hasChanges) {
-    console.log('ℹ️ DealsContent: لا توجد تغييرات');
-    return;
-  }
-
-  // إذا كان contributors فارغاً، نحذفه من الـ payload
-  if (Object.keys(payload.contributors).length === 0) {
-    delete payload.contributors;
-  }
-
-  console.log('📤 DealsContent: إرسال التغييرات فقط:', payload);
-
-  // تحديث القيم السابقة
-  previousValues.value = {
-    artist: JSON.parse(JSON.stringify(artistContributors.value)),
-    feature: JSON.parse(JSON.stringify(featureContributors.value)),
-    producer: JSON.parse(JSON.stringify(producerContributors.value)),
-    p_line: JSON.parse(JSON.stringify(pLineContributors.value)),
-    other_contributors: JSON.parse(JSON.stringify(otherContributors.value))
+// ========== ✅ tabCompletion = دائماً true ==========
+const tabCompletion = computed(() => {
+  // ✅ هذه الصفحة معطلة (Coming Soon) ولا ترسل API
+  // لذلك دائماً complete = true
+  const isComplete = true;
+  console.log('📌 [DealsContent] tabCompletion (always true):', { deals: isComplete });
+  return {
+    deals: isComplete
   };
-
-  // إرسال فقط التغييرات
-  emit('save-song', payload);
-};
-
-// ─── إنشاء دالة debounce للإرسال ───
-const debouncedSendUpdate = debounce(sendUpdate, 1500);
-
-// ─── مراقبة تغييرات currentSong ───
-watch(() => props.currentSong, (newSong) => {
-  if (newSong?.uuid) {
-    updateFromProps();
-  }
-}, { deep: true, immediate: true });
-
-// ─── إرسال تحديث فوري عند إزالة المكون ───
-onUnmounted(() => {
-  console.log('🗑️ DealsContent: تم إزالة المكون');
-  if (debouncedSendUpdate.flush) {
-    debouncedSendUpdate.flush();
-  }
 });
 
+// ========== ✅ دالة التحقق من اكتمال التاب ==========
+const isTabComplete = (tabId) => {
+  if (tabId === 'deals') {
+    // ✅ دائماً true لأن الصفحة معطلة
+    console.log('📌 [DealsContent] isTabComplete: true (always)');
+    return true;
+  }
+  return true; // جميع التابات الأخرى أيضاً true
+};
+
+// ========== ✅ إرسال تحديث الاكتمال ==========
+const emitTabCompletion = () => {
+  console.log('📌 [DealsContent] Emitting tab completion (always true)');
+  
+  // ✅ إرسال التحديث إلى المكون الأب
+  emit('update-tab-completion', {
+    deals: true
+  });
+  
+  // ✅ إرسال تحديث form-data أيضاً
+  emit('update:form-data', {
+    tab: 'deals',
+    data: { 
+      isComplete: true,
+      isSplittingActive: false,
+      shares: []
+    }
+  });
+};
+
+// ========== ✅ دورة الحياة ==========
 onMounted(() => {
-  console.log('🚀 DealsContent: تم التحميل');
-  updateFromProps();
+  console.log('🚀 DealsContent: Mounted (Coming Soon - always complete)');
+  
+  // ✅ إرسال الاكتمال فور التحميل
+  setTimeout(() => {
+    emitTabCompletion();
+  }, 300);
+});
+
+// ========== ✅ مراقبة التغييرات ==========
+watch(
+  () => props.activeTab,
+  (newTab) => {
+    if (newTab === 'deals') {
+      console.log('📌 [DealsContent] Active tab changed to deals, emitting completion');
+      setTimeout(() => {
+        emitTabCompletion();
+      }, 200);
+    }
+  },
+  { immediate: true }
+);
+
+// ========== ✅ تصدير الدوال ==========
+defineExpose({
+  isTabComplete,
+  tabCompletion,
+  emitTabCompletion
 });
 </script>
 
 <style lang="scss" scoped>
 .tab-content {
   display: flex;
-  padding-right: 40px;
   flex-direction: column;
   align-items: center;
   gap: 20px;
@@ -427,11 +284,14 @@ onMounted(() => {
   gap: 48px;
 }
 
+/* 🔥 section-top - نشط وواضح دائماً */
 .section-top {
   display: flex;
   align-items: center;
   gap: 8px;
   align-self: stretch;
+  position: relative;
+  z-index: 5;
 }
 
 .section-top .topic {
@@ -501,12 +361,24 @@ onMounted(() => {
   background: var(--Main-Colors-Slate-Dark, #1B1C20);
 }
 
+/* ====== 🔥 القسم المعطل ====== */
+.splitting-wrapper {
+  position: relative;
+  width: 100%;
+  min-height: 400px;
+}
+
 .splitting {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 28px;
   align-self: stretch;
+  opacity: 0.3;
+  filter: blur(3px);
+  pointer-events: none;
+  user-select: none;
+  cursor: not-allowed;
 }
 
 .splitting .top-line {
@@ -536,23 +408,14 @@ onMounted(() => {
   gap: 10px;
   border-radius: 10px;
   background: var(--primary, #1B1C20);
-  cursor: pointer;
+  cursor: default;
   transition: background 0.3s ease;
-}
-
-.btn-switch.active {
-  background: var(--Main-Colors-Strawberry, #D15);
 }
 
 .btn-switch .circle {
   width: 16px;
   height: 16px;
   margin-left: 2px;
-  transition: margin-left 0.3s ease;
-}
-
-.btn-switch.active .circle {
-  margin-left: 20px;
 }
 
 .share {
@@ -561,10 +424,6 @@ onMounted(() => {
   align-items: center;
   gap: 32px;
   align-self: stretch;
-}
-
-.share.active {
-  opacity: 1;
 }
 
 .share .name {
@@ -619,6 +478,11 @@ onMounted(() => {
   color: var(--Main-Colors-Dove, #6A6C6D);
 }
 
+.input-percentage input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .input-percentage input::-webkit-outer-spin-button,
 .input-percentage input::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -655,6 +519,69 @@ onMounted(() => {
   align-self: stretch;
 }
 
+/* ====== 🔥 رسالة Coming Soon - واضحة تماماً بدون أي فلتر ====== */
+.coming-soon-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 100;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+  filter: none !important;
+  -webkit-filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.coming-soon-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(27, 28, 32, 0.95);
+  padding: 40px 56px;
+  border-radius: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.6);
+  max-width: 420px;
+  width: 90%;
+  text-align: center;
+  pointer-events: none;
+  filter: none !important;
+  -webkit-filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  opacity: 1 !important;
+}
+
+.lock-icon {
+  width: 56px;
+  height: 56px;
+  color: var(--Main-Colors-Strawberry, #D15);
+  flex-shrink: 0;
+}
+
+.coming-soon-text {
+  color: #FFFFFF;
+  font-family: Heebo;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.coming-soon-subtext {
+  color: #AAAAAA;
+  font-family: Heebo;
+  font-size: 16px;
+  font-weight: 300;
+  line-height: 1.5;
+}
+
 @media (min-width:1440px) and (max-width:1599px){
   .topic{
     font-size: 32px;
@@ -671,6 +598,44 @@ onMounted(() => {
   }
   .anteil{
     gap: 12px;
+  }
+  
+  .coming-soon-box {
+    padding: 28px 32px;
+    max-width: 340px;
+  }
+  
+  .coming-soon-text {
+    font-size: 22px;
+  }
+  
+  .coming-soon-subtext {
+    font-size: 14px;
+  }
+  
+  .lock-icon {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (min-width:2075px) and (max-width:2560px) {
+  .coming-soon-box {
+    padding: 48px 64px;
+    max-width: 520px;
+  }
+  
+  .coming-soon-text {
+    font-size: 34px;
+  }
+  
+  .coming-soon-subtext {
+    font-size: 18px;
+  }
+  
+  .lock-icon {
+    width: 64px;
+    height: 64px;
   }
 }
 </style>

@@ -1,10 +1,9 @@
-```vue
 <template>
     <div class="main">
         <div class="top-row">
             <div class="Guthaben">
                 <div class="title">Dein Verfügbares Guthaben</div>
-                <div class="number">2.761,66 EUR</div>
+                <div class="number">{{ formattedBalance }}</div>
             </div>
         </div>
 
@@ -12,11 +11,11 @@
             <div class="Box">
                 <div class="Top-line">
                     <div class="title">Guthaben Auszahlen</div>
-                    <div class="right">Deine IP-Adresse: 172.17.0.3</div>
+                    <div class="right">Deine IP-Adresse: {{ userIp }}</div>
                 </div>
 
                 <div class="form-amount">
-                    <div class="number-Big">2.761,66</div>
+                    <div class="number-Big">{{ displayBigNumber }}</div>
                     <div class="form-CTA">
                         <div class="Form">
                             <input type="text" 
@@ -25,9 +24,10 @@
                                    @focus="handleFocus"
                                    @blur="handleBlur"
                                    class="form-input" 
+                                   :disabled="balance === 0"
                                    placeholder="0,00 EUR" />
                         </div>
-                        <div class="Form-btn">
+                        <div class="Form-btn" @click="setMaxAmount" :class="{ 'btn-disabled': balance === 0 }">
                             <div class="p">Alles</div>
                         </div>
                     </div>
@@ -47,7 +47,7 @@
                                         :type="field.type === 'password' && showPassword && index === 2 ? 'text' : field.type"
                                         v-model="field.value" class="formField"
                                         :placeholder="field.type === 'password' ? '' : field.placeholder"
-                                        @input="handleInput(index)" @blur="handleBlur(index)"
+                                        @input="handleInputField(index)" @blur="handleBlurField(index)"
                                         style="caret-color: transparent;" />
                                     <div v-if="field.type === 'password' && !showPassword && !field.value"
                                         class="password-placeholder">
@@ -104,15 +104,18 @@
                     </div>
 
                     <div class="CTAs">
-                        <button class="button-primary">
+                        <RouterLink class="button-primary" to="/finanzen">
+                        <!-- <button class="button-primary" @click="resetForm"> -->
+
                             <div class="p">Abbrechen</div>
+                        </RouterLink>
+                        <button class="button-primary" 
+                                :disabled="!isFormValid || isSubmitting"
+                                :class="{ 'valid-style': isFormValid && !isSubmitting }"
+                                @click="submitPayout">
+                            <div class="p" v-if="!isSubmitting">Betrag Auszahlen</div>
+                            <div class="p" v-else>Wird bearbeitet...</div>
                         </button>
-                        <router-link to="/finale-msg">
-                            <button class="button-primary" :disabled="!isFormValid"
-                                :class="{ 'valid-style': isFormValid }">
-                                <div class="p">Betrag Auszahlen</div>
-                            </button>
-                        </router-link>
                     </div>
                 </div>
             </div>
@@ -122,22 +125,28 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { useDataStore } from '@/stores/data';
+import apiRequest from '@/lib/apiRequest';
 import doneIcon from '@/assets/icons/y.png';
 import eyeOpenIcon from '@/assets/icons/showpw.svg';
 import eyeClosedIcon from '@/assets/icons/eye-open.svg';
 import Dot from '@/assets/icons/pw.svg';
 
-// Initialize the Pinia store
+const router = useRouter();
 const dataStore = useDataStore();
 const user = computed(() => dataStore.user);
 
-// Fetch user data on component mount
-onMounted(() => {
-  dataStore.loadUser();
-});
+// ========== State ==========
+const balance = ref(0);
+const isLoading = ref(false);
+const isSubmitting = ref(false);
+const userIp = ref('...');
+const userUuid = ref(null);
+const userName = ref(null);
+const userEmail = ref(null);
 
-// Form fields configuration
+// ========== Form Fields ==========
 const formFields = ref([
   {
     label: "Deine Paypal e-mail-Adresse",
@@ -162,53 +171,95 @@ const formFields = ref([
   },
 ]);
 
-// Password visibility toggle
+// ========== Password ==========
 const showPassword = ref(false);
 const dotCount = computed(() => {
   const password = formFields.value[2].value;
   return password.length > 0 ? password.length : 8;
 });
 
-// Form validation
-const isFormValid = computed(() => {
-  const [email, confirmEmail, password] = formFields.value;
-  return (
-    email.value.trim() !== "" &&
-    confirmEmail.value.trim() !== "" &&
-    email.value === confirmEmail.value &&
-    password.value.trim() !== "" &&
-    amount.value !== null && 
-    amount.value.toString().trim() !== ""
-  );
-});
-
-// Amount handling
+// ========== Amount ==========
 const amount = ref(null);
 const displayValue = ref('');
 const isFocused = ref(false);
 
+const displayBigNumber = computed(() => {
+  if (balance.value === 0) return '0,00';
+  return balance.value.toLocaleString('de-DE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+});
+
+const formattedBalance = computed(() => {
+  if (balance.value === null || balance.value === undefined || balance.value === 0) {
+    return '0,00 EUR';
+  }
+  return balance.value.toLocaleString('de-DE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }) + ' EUR';
+});
+
+// ========== Form Validation ==========
+const isFormValid = computed(() => {
+  const [email, confirmEmail, password] = formFields.value;
+  
+  const emailValue = email.value.trim();
+  const confirmValue = confirmEmail.value.trim();
+  const passwordValue = password.value.trim();
+  const amountValue = amount.value;
+  const isAmountValid = amountValue !== null && amountValue > 0 && amountValue <= balance.value;
+  
+  return (
+    emailValue !== "" &&
+    confirmValue !== "" &&
+    emailValue === confirmValue &&
+    passwordValue !== "" &&
+    isAmountValid &&
+    balance.value > 0
+  );
+});
+
+// ========== Amount Handlers ==========
 const handleFocus = () => {
+  if (balance.value === 0) return;
   isFocused.value = true;
+  // إزالة "EUR" عند التركيز
   displayValue.value = displayValue.value.replace(' EUR', '');
 };
 
 const handleBlur = () => {
+  if (balance.value === 0) return;
   isFocused.value = false;
   formatDisplayValue();
 };
 
 const handleInput = (event) => {
+  if (balance.value === 0) return;
+  
   let value = event.target.value;
-  value = value.replace(/[^0-9,]/g, '');
+  
+  // إزالة كل ما ليس رقم، فاصلة أو نقطة
+  value = value.replace(/[^0-9,.]/g, '');
+  
+  // إذا كان هناك أكثر من فاصلة، نحتفظ فقط بالأولى
+  const commaCount = (value.match(/,/g) || []).length;
+  if (commaCount > 1) {
+    const firstCommaIndex = value.indexOf(',');
+    value = value.substring(0, firstCommaIndex + 1) + 
+            value.substring(firstCommaIndex + 1).replace(/,/g, '');
+  }
+  
+  // تحديد منزلتين عشريتين فقط بعد الفاصلة
   const commaIndex = value.indexOf(',');
   if (commaIndex >= 0) {
-    value = value.substring(0, commaIndex + 1) + 
-            value.substring(commaIndex + 1).replace(/,/g, '');
-    const decimalPart = value.substring(commaIndex + 1);
-    if (decimalPart.length > 2) {
+    const afterComma = value.substring(commaIndex + 1);
+    if (afterComma.length > 2) {
       value = value.substring(0, commaIndex + 3);
     }
   }
+  
   displayValue.value = value;
   updateNumericValue();
 };
@@ -218,8 +269,19 @@ const updateNumericValue = () => {
     amount.value = null;
     return;
   }
-  const numericStr = displayValue.value.replace(/\./g, '').replace(',', '.');
-  amount.value = parseFloat(numericStr) || null;
+  
+  // تحويل من التنسيق الألماني إلى رقم
+  // إزالة النقاط (فاصل الآلاف) واستبدال الفاصلة بنقطة
+  let cleanValue = displayValue.value.replace(/\./g, '');
+  cleanValue = cleanValue.replace(',', '.');
+  
+  const val = parseFloat(cleanValue);
+  
+  if (!isNaN(val) && val >= 0) {
+    amount.value = Math.min(val, balance.value);
+  } else {
+    amount.value = null;
+  }
 };
 
 const formatDisplayValue = () => {
@@ -227,19 +289,21 @@ const formatDisplayValue = () => {
     displayValue.value = '';
     return;
   }
-  const formatted = new Intl.NumberFormat('de-DE', {
+  const formatted = amount.value.toLocaleString('de-DE', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
-  }).format(amount.value);
-  displayValue.value = formatted + ' EUR';
+  });
+  displayValue.value = formatted;
 };
 
-watch(isFocused, (newVal) => {
-  if (!newVal && amount.value !== null) {
+const setMaxAmount = () => {
+  if (balance.value > 0) {
+    amount.value = balance.value;
     formatDisplayValue();
   }
-});
+};
 
+// ========== Form Field Handlers ==========
 const handleInputField = (index) => {
   if (formFields.value[index].type !== 'password') {
     formFields.value[index].showIcon = formFields.value[index].value.trim() !== "";
@@ -255,12 +319,274 @@ const handleBlurField = (index) => {
 const togglePassword = () => {
   showPassword.value = !showPassword.value;
 };
+
+// ========== Reset Form ==========
+const resetForm = () => {
+  formFields.value.forEach(field => {
+    field.value = '';
+    field.showIcon = false;
+  });
+  amount.value = null;
+  displayValue.value = '';
+  showPassword.value = false;
+};
+
+// ========== Get User IP ==========
+const getUserIp = async () => {
+  try {
+    const response = await fetch('https://api.ipify.org?format=json');
+    const data = await response.json();
+    userIp.value = data.ip;
+  } catch (error) {
+    console.error('❌ Error fetching IP:', error);
+    userIp.value = 'unbekannt';
+  }
+};
+
+// ========== Get User Data ==========
+const getUserData = () => {
+  try {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      const parsed = JSON.parse(userData);
+      const userObj = parsed.data || parsed;
+      
+      userUuid.value = userObj.uuid || userObj.id || userObj.user_uuid;
+      userName.value = userObj.name || userObj.username || userObj.user_name || userObj.first_name;
+      userEmail.value = userObj.email || userObj.user_email;
+      
+      if (userUuid.value && userName.value && userEmail.value) {
+        console.log('👤 User data loaded from localStorage');
+        return true;
+      }
+    }
+    
+    const sessionUser = sessionStorage.getItem('user');
+    if (sessionUser) {
+      const parsed = JSON.parse(sessionUser);
+      const userObj = parsed.data || parsed;
+      
+      userUuid.value = userObj.uuid || userObj.id || userObj.user_uuid;
+      userName.value = userObj.name || userObj.username || userObj.user_name || userObj.first_name;
+      userEmail.value = userObj.email || userObj.user_email;
+      
+      if (userUuid.value && userName.value && userEmail.value) {
+        console.log('👤 User data loaded from sessionStorage');
+        return true;
+      }
+    }
+    
+    if (user.value) {
+      const userObj = user.value.data || user.value;
+      
+      userUuid.value = userObj.uuid || userObj.id || userObj.user_uuid;
+      userName.value = userObj.name || userObj.username || userObj.user_name || userObj.first_name;
+      userEmail.value = userObj.email || userObj.user_email;
+      
+      if (userUuid.value && userName.value && userEmail.value) {
+        console.log('👤 User data loaded from store');
+        return true;
+      }
+    }
+    
+    console.warn('⚠️ No user data found');
+    return false;
+  } catch (error) {
+    console.error('❌ Error parsing user data:', error);
+    return false;
+  }
+};
+
+// ========== Fetch Balance ==========
+const fetchBalance = async () => {
+  if (!userUuid.value || !userName.value || !userEmail.value) {
+    console.warn('⚠️ Missing user data, cannot fetch balance');
+    return;
+  }
+  
+  isLoading.value = true;
+  try {
+    const params = new URLSearchParams();
+    params.append('user_uuid', userUuid.value);
+    params.append('user_name', userName.value);
+    params.append('user_email', userEmail.value);
+    
+    const url = `/wallet/balance?${params.toString()}`;
+    console.log('💰 Fetching balance from:', url);
+    
+    const response = await apiRequest.get(url);
+    console.log('📦 Response data:', response.data);
+    
+    let balanceValue = 0;
+    
+    if (response.data) {
+      if (response.data.user_balance !== undefined) {
+        const rawBalance = response.data.user_balance;
+        balanceValue = typeof rawBalance === 'string' ? parseFloat(rawBalance) : rawBalance;
+      } else if (response.data.balance !== undefined) {
+        balanceValue = typeof response.data.balance === 'string' ? parseFloat(response.data.balance) : response.data.balance;
+      } else if (response.data.data?.balance !== undefined) {
+        balanceValue = typeof response.data.data.balance === 'string' ? parseFloat(response.data.data.balance) : response.data.data.balance;
+      } else if (typeof response.data === 'number') {
+        balanceValue = response.data;
+      }
+      
+      if (isNaN(balanceValue)) {
+        balanceValue = 0;
+      }
+    }
+    
+    balance.value = balanceValue;
+    console.log('💰 Final balance:', balance.value);
+    
+    // إذا كان الرصيد 0، امسح حقل المبلغ
+    if (balance.value === 0) {
+      displayValue.value = '';
+      amount.value = null;
+    }
+    
+  } catch (error) {
+    console.error('❌ Error fetching balance:', error);
+    balance.value = 0;
+    displayValue.value = '';
+    amount.value = null;
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+// ========== Submit Payout ==========
+const submitPayout = async () => {
+  if (!userName.value || !userEmail.value) {
+    const userLoaded = getUserData();
+    if (!userLoaded) {
+      alert('Benutzerdaten konnten nicht geladen werden. Bitte melden Sie sich erneut an.');
+      return;
+    }
+  }
+  
+  if (!isFormValid.value) {
+    console.warn('⚠️ Form is not valid');
+    alert('Bitte füllen Sie alle Felder korrekt aus.');
+    return;
+  }
+  
+  if (balance.value <= 0) {
+    alert('Sie haben kein verfügbares Guthaben.');
+    return;
+  }
+  
+  if (isSubmitting.value) {
+    console.warn('⚠️ Already submitting');
+    return;
+  }
+  
+  isSubmitting.value = true;
+  
+  try {
+    const [email, confirmEmail, password] = formFields.value;
+    
+    if (!userName.value || !userEmail.value) {
+      throw new Error('Benutzerdaten fehlen. Bitte laden Sie die Seite neu.');
+    }
+    
+    const formData = new FormData();
+    formData.append('date', new Date().toISOString().split('T')[0]);
+    formData.append('gross_amount', amount.value);
+    formData.append('paypal_email', email.value);
+    formData.append('user_name', userName.value);
+    formData.append('user_email', userEmail.value);
+    
+    console.log('📤 Submitting payout:', {
+      date: new Date().toISOString().split('T')[0],
+      gross_amount: amount.value,
+      paypal_email: email.value,
+      user_name: userName.value,
+      user_email: userEmail.value
+    });
+    
+    const response = await apiRequest.post('/credits', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    
+    console.log('✅ Payout submitted successfully');
+    router.push('/finale-msg');
+    
+  } catch (error) {
+    console.error('❌ Error submitting payout:', error);
+    
+    if (error.response?.data?.message) {
+      alert(`Fehler: ${error.response.data.message}`);
+    } else if (error.response?.data?.errors) {
+      const errors = Object.values(error.response.data.errors).flat();
+      alert(`Fehler: ${errors.join('\n')}`);
+    } else {
+      alert(error.message || 'Ein Fehler ist aufgetreten. Bitte versuche es später erneut.');
+    }
+  } finally {
+    isSubmitting.value = false;
+  }
+};
+
+// ========== Lifecycle ==========
+onMounted(async () => {
+  console.log('🚀 Component mounted');
+  
+  await getUserIp();
+  await dataStore.loadUser();
+  
+  const userLoaded = getUserData();
+  
+  if (!userLoaded) {
+    console.log('⏳ Retrying user data load...');
+    setTimeout(() => {
+      getUserData();
+    }, 500);
+  }
+  
+  if (userUuid.value && userName.value && userEmail.value) {
+    await fetchBalance();
+  } else {
+    console.warn('⚠️ Cannot fetch balance - missing user data');
+  }
+  
+  console.log('🏁 Page initialized:', {
+    balance: balance.value,
+    userName: userName.value,
+    userEmail: userEmail.value,
+    userUuid: userUuid.value
+  });
+});
+
+// ========== Watch for user changes ==========
+watch(
+  () => user.value,
+  (newUser) => {
+    if (newUser && !userUuid.value) {
+      console.log('🔄 User data changed in store, reloading...');
+      getUserData();
+      if (userUuid.value && userName.value && userEmail.value) {
+        fetchBalance();
+      }
+    }
+  },
+  { deep: true }
+);
+
+// ========== Expose ==========
+defineExpose({
+  refreshBalance: fetchBalance,
+  resetForm
+});
 </script>
+
 <style lang="scss" scoped>
 .main {
     display: flex;
     width: 100%;
-     height: calc(100vh - 71px - 50px);
+    height: calc(100vh - 71px - 50px);
     flex-direction: column;
     align-items: flex-start;
     gap: 20px;
@@ -386,7 +712,6 @@ const togglePassword = () => {
     display: flex;
     align-items: center;
     gap: 2px;
-    // padding-bottom: 55px;
     z-index: 10;
 }
 
@@ -446,6 +771,11 @@ const togglePassword = () => {
     text-align: center;
 }
 
+.form-CTA .Form .form-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .form-CTA .Form-btn {
     display: flex;
     padding: 16px 20px;
@@ -456,10 +786,15 @@ const togglePassword = () => {
     cursor: pointer;
     height: 46px;
 
-    &:hover {
+    &:hover:not(.btn-disabled) {
         background: var(--Strawberry);
         transition: .3s ease;
     }
+}
+
+.form-CTA .Form-btn.btn-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .form-CTA .Form-btn .p {
@@ -653,6 +988,12 @@ const togglePassword = () => {
     font-weight: 300;
     line-height: 1;
     text-decoration-line: underline;
+
+    &:hover {
+        color: var(--dark-red) !important;
+        text-decoration-line: none;
+        transition: .3s ease;
+    }
 }
 
 .row2 .column2 .p2 {
@@ -701,7 +1042,7 @@ const togglePassword = () => {
     outline: none;
     cursor: pointer;
 
-    &:hover {
+    &:hover:not(:disabled) {
         transition: .3s ease;
         background: var(--dark-red, #b00e44);
     }
@@ -741,106 +1082,98 @@ const togglePassword = () => {
     background: var(--Strawberry, #DD1155) !important;
 }
 
-.valid-style:hover {
+.valid-style:hover:not(:disabled) {
     background: var(--dark-red, #b00e44) !important;
 }
 
+.Form-row1 .form1 .title {
+    max-height: 10px;
+}
 
- .Form-row1 .form1 .title{
-        max-height: 10px;
-    }
+.CTAs .button-primary {
+    max-height: 36px;
+}
 
-    .CTAs .button-primary{
-        max-height: 36px;
-    }
 @media (min-width:1440px) and (max-width:1599px) {
-    .number-Big{
+    .number-Big {
         font-size: 120px;
         line-height: .7;
         letter-spacing: 6px;
     }
 
-    .title-row1{
+    .title-row1 {
         font-size: 14px;
         line-height: .8;
     }
 
-    .row2 .column2 .top-line{
+    .row2 .column2 .top-line {
         justify-content: center;
     }
-    .href{
+    .href {
         width: 138px;
         font-size: 15px;
     }
 
-
-    .row2 .column1 .p{
+    .row2 .column1 .p {
         font-size: 14px;
     }
-    .row2 .column1 .p span,.row2 .column2 .p2 div{
+    .row2 .column1 .p span,
+    .row2 .column2 .p2 div {
         font-size: 14px;
     }
 
-
-    .row2 .column2 .top-line{
+    .row2 .column2 .top-line {
         display: flex;
-justify-content: center;
-align-items: center;
-gap: 10px;
-align-self: stretch;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        align-self: stretch;
     }
-    .row2 .column2 .top-line .title{
+    .row2 .column2 .top-line .title {
         flex: 1 0 0;
-        
-font-size: 15px;
-
-    }
-
-
-    .row2 .column1 .title{
         font-size: 15px;
     }
-   
+
+    .row2 .column1 .title {
+        font-size: 15px;
+    }
 }
 
-
-
 @media (min-width:1600px) and (max-width:2074px) {
-    .number-Big{
+    .number-Big {
         line-height: .7;
         padding-top: 10px;
     }
 
-    .title-row1{
+    .title-row1 {
         font-size: 14px;
         line-height: .8;
     }
 
-
-    .row2 .column1 .p2 div, .row2 .column2 .p2 div{
+    .row2 .column1 .p2 div,
+    .row2 .column2 .p2 div {
         font-size: 14px;
     }
 
-
-    .row2 .column1 .p,.row2 .column1 .p span{
+    .row2 .column1 .p,
+    .row2 .column1 .p span {
         line-height: 1.5;
         font-size: 14px;
     }
 }
 
-@media (min-width:2075px) and (max-width:2560px){
-    .title-row1{
+@media (min-width:2075px) and (max-width:2560px) {
+    .title-row1 {
         font-size: 18px;
     }
 
-
-      .row2 .column1 .p2 div, .row2 .column2 .p2 div{
+    .row2 .column1 .p2 div,
+    .row2 .column2 .p2 div {
         font-size: 18px;
     }
 
-
-    .row2 .column1 .p,.row2 .column1 .p span{
-      
+    .row2 .column1 .p,
+    .row2 .column1 .p span {
         font-size: 18px;
     }
 }

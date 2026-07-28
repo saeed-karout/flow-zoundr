@@ -1,21 +1,39 @@
-```vue
 <template>
   <div class="tab-content">
     <div class="section">
       <div class="p">Deine Top Artists</div>
       <div class="top-song">
-        <div class="music-title" v-for="song in songs" :key="song.id">
-          <div class="background-layer"></div>
-          <div class="number-container">
-            <div :class="song.id === 1 ? 'number-1' : 'number'">{{ song.id }}.</div>
-          </div>
-          <div class="image-overlay" :style="{ backgroundColor: song.backgroundColor }" :data-title-first="song.title.slice(0, 2)" :data-title-second="song.title.slice(2, 4)"></div>
-          <div class="info">
-            <div class="title">
-              <div class="sub-title">{{ song.title }}</div>
+        <!-- Loading State -->
+        <div v-if="isLoading" class="loading-state">
+          <div class="spinner"></div>
+        </div>
+        
+        <!-- Artists List -->
+        <div v-else class="artists-container">
+          <div class="music-title" v-for="(artist, index) in data" :key="artist.name || index">
+            <div class="background-layer"></div>
+            <div class="number-container">
+              <div :class="index === 0 ? 'number-1' : 'number'">{{ index + 1 }}.</div>
             </div>
-            <div class="p">{{ song.streams }} Streams</div>
+            <div 
+              class="image-overlay" 
+              :style="{ backgroundColor: getRandomColor(index) }" 
+              :data-title-line1="getTitleLine1(artist.name || '?')"
+              :data-title-line2="getTitleLine2(artist.name || '?')"
+              :data-title-line3="getTitleLine3(artist.name || '?')"
+            ></div>
+            <div class="info">
+              <div class="title">
+                <div class="sub-title">{{ artist.name || 'Unknown Artist' }}</div>
+              </div>
+              <div class="p">{{ formatNumber(artist.streams) }} Streams</div>
+            </div>
           </div>
+        </div>
+        
+        <!-- Empty State -->
+        <div v-if="!isLoading && (!data || data.length === 0)" class="empty-state">
+          <div class="empty-message">Keine Artists gefunden</div>
         </div>
       </div>
     </div>
@@ -23,270 +41,339 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref } from 'vue';
 
-// افتراض بيانات من API
-const songs = ref([]);
+// ========== Props ==========
+const props = defineProps({
+  data: {
+    type: Array,
+    default: () => []
+  },
+  filters: {
+    type: Object,
+    default: () => ({})
+  }
+});
 
-const fetchSongs = async () => {
-    // محاكاة استدعاء API
-    const response = await new Promise(resolve => {
-        setTimeout(() => {
-            resolve([
-                { id: 1, title: "Song Title 1", streams: "23.115", backgroundColor: "#CF7502" },
-                { id: 2, title: "Digie", streams: "18.240", backgroundColor: "#5ACD96" },
-                { id: 3, title: "Epic Track 3", streams: "15.200", backgroundColor: "#28A745" },
-                { id: 4, title: "Melody Haven", streams: "12.800", backgroundColor: "#FFC107" },
-                { id: 5, title: "Rhythm Beat", streams: "10.000", backgroundColor: "#6F42C1" },
-                { id: 6, title: "Soul Vibe", streams: "8.900", backgroundColor: "#FD7E14" },
-                { id: 7, title: "Harmony Flow", streams: "7.500", backgroundColor: "#20C997" },
-                { id: 8, title: "Pulse Track", streams: "6.300", backgroundColor: "#DC3545" },
-                { id: 9, title: "Chill Sound", streams: "5.100", backgroundColor: "#007BFF" },
-                { id: 10, title: "Echo Wave", streams: "4.200", backgroundColor: "#6610F2" },
-                { id: 11, title: "Dream Song", streams: "3.800", backgroundColor: "#E83E8C" },
-                { id: 12, title: "Vibe Track", streams: "3.200", backgroundColor: "#17A2B8" },
-                { id: 13, title: "Star Beat", streams: "2.900", backgroundColor: "#343A40" },
-                { id: 14, title: "Night Melody", streams: "2.500", backgroundColor: "#F8F9FA" },
-                { id: 15, title: "Sky Rhythm", streams: "2.100", backgroundColor: "#6C757D" },
-                { id: 16, title: "Ocean Sound", streams: "1.800", backgroundColor: "#FFC107" },
-                { id: 17, title: "Fire Track", streams: "1.500", backgroundColor: "#28A745" },
-                { id: 18, title: "Moon Vibe", streams: "1.200", backgroundColor: "#DC3545" },
-                { id: 19, title: "Cloud Song", streams: "1.000", backgroundColor: "#007BFF" },
-                { id: 20, title: "Wind Beat", streams: "900", backgroundColor: "#6610F2" },
-            ]);
-        }, 1000);
-    });
-    songs.value = response;
+// ========== Reactive Data ==========
+const isLoading = ref(false);
+
+// Colors for artists
+const artistColors = [
+  '#CF7502', '#5ACD96', '#28A745', '#FFC107', '#6F42C1',
+  '#FD7E14', '#20C997', '#DC3545', '#007BFF', '#6610F2',
+  '#E83E8C', '#17A2B8', '#343A40', '#F8F9FA', '#6C757D'
+];
+
+// ========== Utility Functions ==========
+const formatNumber = (num) => {
+  if (!num && num !== 0) return '0';
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 };
 
-onMounted(() => {
-    fetchSongs();
-});
+const getRandomColor = (index) => {
+  return artistColors[index % artistColors.length];
+};
+
+// Get first two characters
+const getTitleLine1 = (title) => {
+  if (!title || title === '?') return '??';
+  const cleanTitle = title.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '');
+  if (cleanTitle.length === 0) return '??';
+  if (cleanTitle.length === 1) return cleanTitle.charAt(0).toUpperCase() + '?';
+  return cleanTitle.substring(0, 2).toUpperCase();
+};
+
+// Get second two characters (characters 3-4)
+const getTitleLine2 = (title) => {
+  if (!title || title === '?') return '??';
+  const cleanTitle = title.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '');
+  if (cleanTitle.length <= 2) return '';
+  if (cleanTitle.length === 3) return cleanTitle.charAt(2).toUpperCase();
+  return cleanTitle.substring(2, 4).toUpperCase();
+};
+
+// Get third two characters (characters 5-6) - optional
+const getTitleLine3 = (title) => {
+  if (!title || title === '?') return '??';
+  const cleanTitle = title.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '');
+  if (cleanTitle.length <= 4) return '';
+  if (cleanTitle.length === 5) return cleanTitle.charAt(4).toUpperCase();
+  return cleanTitle.substring(4, 6).toUpperCase();
+};
 </script>
 
 <style lang="scss" scoped>
 .tab-content {
-    display: flex;
-    align-items: flex-start;
-    align-self: stretch;
-    border-radius: 20px;
-    width: 100%;
-    max-width: 100%;
-    min-height: 281px;
+  display: flex;
+  align-items: flex-start;
+  align-self: stretch;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 100%;
+  min-height: 281px;
 }
 
 .section {
-    display: flex;
-    padding: 20px;
-    flex-direction: column;
-    justify-content: center;
-    align-items: flex-start;
-    gap: 20px;
-    flex: 1 0 0;
-    border-radius: 20px;
-    background: var(--Main-Colors-Slate, #26282D);
-    position: relative;
-    width: 100%;
-    max-width: 100%;
+  display: flex;
+  padding: 20px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 20px;
+  flex: 1 0 0;
+  border-radius: 20px;
+  background: var(--Main-Colors-Slate, #26282D);
+  position: relative;
+  width: 100%;
+  max-width: 100%;
 }
 
 .section .p {
-    color: #FFF;
-    font-family: Heebo;
-    font-size: 18px;
-    font-style: normal;
-    font-weight: 700;
-    line-height: 0.6;
-    letter-spacing: 0.9px;
-    text-transform: uppercase;
-    padding-top: 3px;
+  color: #FFF;
+  font-family: Heebo;
+  font-size: 18px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 0.6;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  padding-top: 3px;
 }
 
 .top-song {
-    display: flex;
-    align-items: flex-start;
-    gap: 20px;
-    align-self: stretch;
-    overflow-x: auto;
-    padding-right: 80px;
-    scrollbar-width: none;
-    border-radius: 20px;
-    flex-wrap: nowrap;
-    min-width: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  align-self: stretch;
+  overflow-x: auto;
+  // padding-right: 80px;
+  scrollbar-width: none;
+  border-radius: 20px;
+  flex-wrap: nowrap;
+  min-width: auto;
+}
+
+.artists-container {
+  display: flex;
+  gap: 20px;
+  flex-wrap: nowrap;
 }
 
 .top-song::-webkit-scrollbar {
-    height: 8px;
+  height: 8px;
 }
 
 .top-song::-webkit-scrollbar-track {
-    background: #26282D;
+  background: #26282D;
 }
 
 .top-song::-webkit-scrollbar-thumb {
-    background: #6A6C6D;
-    border-radius: 4px;
+  background: #6A6C6D;
+  border-radius: 4px;
 }
 
 .top-song::-webkit-scrollbar-thumb:hover {
-    background: #D15;
+  background: #D15;
 }
 
 .music-title {
-    display: flex;
-    width: 207px;
-    height: 207px;
-    justify-content: space-between;
-    align-items: flex-end;
-    border-radius: 20px;
-    position: relative;
-    cursor: pointer;
-    isolation: isolate;
-    flex-shrink: 0;
-    background: linear-gradient(135deg, rgba(0, 0, 0, 0.5), transparent);
+  display: flex;
+  width: 207px;
+  height: 207px;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-radius: 20px;
+  position: relative;
+  cursor: pointer;
+  isolation: isolate;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.5), transparent);
 }
 
 .background-layer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: 20px;
-    background: url('../../../assets/icons/dashboard/user/shadow.png') 50% / cover no-repeat;
-    z-index: 2;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 20px;
+  background: url('../../../assets/icons/dashboard/user/shadow.png') 50% / cover no-repeat;
+  z-index: 2;
 }
 
 .image-overlay {
-    display: flex;
-    padding: 16px;
-    flex-direction: column;
-    justify-content: flex-end;
-    align-items: flex-start;
-    flex: 1 0 0;
-    align-self: stretch;
-    border-radius: 20px;
-    position: relative;
-    z-index: 1;
-    isolation: isolate;
-    overflow: hidden;
-    filter: saturate(40%); /* الفلتر قبل التمرير */
-    transition: filter 0.6s ease; /* انتقال سلس كما في الكود الأول */
+  display: flex;
+  padding: 16px;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  flex: 1 0 0;
+  align-self: stretch;
+  border-radius: 20px;
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  overflow: hidden;
+  filter: saturate(40%);
+  transition: filter 0.6s ease;
 }
 
 .music-title:hover .image-overlay {
-    filter: saturate(100%); /* الفلتر عند التمرير */
+  filter: saturate(100%);
 }
 
 .image-overlay::before {
-    content: attr(data-title-first) "\A" attr(data-title-second);
-    white-space: pre;
-    position: absolute;
-    left: 12px;
-    bottom: -48px;
-    color: var(--Main-Colors-Slate-Dark, #1B1C20);
-    font-family: Heebo;
-    font-size: 160px;
-    font-style: normal;
-    font-weight: 900;
-    line-height: 120px;
-    text-transform: uppercase;
-    opacity: 0.5;
-    z-index: 0;
-    pointer-events: none;
+  content: attr(data-title-line1) "\A" attr(data-title-line2) "\A" attr(data-title-line3);
+  white-space: pre;
+  position: absolute;
+  left: 12px;
+  bottom: -170px;
+  color: var(--Main-Colors-Slate-Dark, #1B1C20);
+  font-family: Heebo;
+  font-size: 160px;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 120px;
+  text-transform: uppercase;
+  opacity: 0.5;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Hide empty lines */
+.image-overlay:not([data-title-line3=""])::before {
+  content: attr(data-title-line1) "\A" attr(data-title-line2) "\A" attr(data-title-line3);
 }
 
 .number-container {
-    position: absolute;
-    top: 16px;
-    left: 16px;
-    z-index: 5;
-    isolation: isolate;
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 5;
+  isolation: isolate;
 }
 
 .number,
 .number-1 {
-    display: flex;
-    width: 26px;
-    padding: 8px 6px;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 10px;
-    border-radius: 13px;
-    color: var(--Main-Colors-White, #FFF);
-    font-family: Heebo;
-    font-size: 14px;
-    font-style: normal;
-    font-weight: 400;
-    line-height: 0.6;
-    transition: opacity 0.3s ease;
-    z-index: 3;
-    background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  width: 26px;
+  padding: 8px 6px;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  border-radius: 13px;
+  color: var(--Main-Colors-White, #FFF);
+  font-family: Heebo;
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 0.6;
+  transition: opacity 0.3s ease;
+  z-index: 3;
+  background: rgba(0, 0, 0, 0.7);
 }
 
 .number-1 {
-    background: var(--Strawberry, #FF4D4F);
+  background: var(--Strawberry, #FF4D4F);
 }
 
 .number {
-    background: var(--secondary, #6A6C6D);
+  background: var(--secondary, #6A6C6D);
 }
 
 .info {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-    align-self: stretch;
-    position: absolute;
-    bottom: 16px;
-    left: 16px;
-    z-index: 100;
-    opacity: .7;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  align-self: stretch;
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 100;
+  opacity: .7;
 }
 
 .info .title {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-    align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  align-self: stretch;
 }
 
 .title .sub-title {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    color: #FFF;
-    text-overflow: ellipsis;
-    font-family: Heebo;
-    font-size: 18px;
-    font-style: normal;
-    font-weight: 700;
-    line-height: 0.6;
-    text-transform: uppercase;
-    transition: opacity 0.3s ease;
-    z-index: 150;
-    opacity: .7;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  color: #FFF;
+  text-overflow: ellipsis;
+  font-family: Heebo;
+  font-size: 18px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 0.6;
+  text-transform: uppercase;
+  transition: opacity 0.3s ease;
+  z-index: 150;
+  opacity: .7;
 }
 
 .info .p {
-    align-self: stretch;
-    color: #FFF;
-    font-family: Heebo;
-    font-size: 14px;
-    font-style: normal;
-    font-weight: 300;
-    line-height: 0.6;
-    padding-top: 2px;
-    transition: opacity 0.3s ease;
-    z-index: 150;
+  align-self: stretch;
+  color: #FFF;
+  font-family: Heebo;
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 300;
+  line-height: 0.6;
+  padding-top: 2px;
+  transition: opacity 0.3s ease;
+  z-index: 150;
 }
 
 .music-title:hover .sub-title,
 .music-title:hover .info .p,
 .music-title:hover .number,
 .music-title:hover .number-1 {
-    opacity:1;
+  opacity: 1;
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 207px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(221, 17, 85, 0.1);
+  border-top-color: #DD1155;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 207px;
+}
+
+.empty-message {
+  color: #FFF;
+  font-family: Heebo;
+  font-size: 16px;
+  font-weight: 300;
+  opacity: 0.5;
+  text-align: center;
 }
 </style>
-```

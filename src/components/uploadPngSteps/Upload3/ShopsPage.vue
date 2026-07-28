@@ -93,7 +93,6 @@
                   :key="country.id" 
                   class="search-result-item"
                   @mousedown.prevent="selectCountryResult(country, index)">
-                <!-- <img :src="country.flag" :alt="country.name" class="country-flag" /> -->
                 <span>{{ country.name }}</span>
               </div>
             </div>
@@ -155,7 +154,6 @@
                   :key="country.id" 
                   class="search-result-item"
                   @mousedown.prevent="selectExcludeResult(country, index)">
-                <!-- <img :src="country.flag" :alt="country.name" class="country-flag" /> -->
                 <span>{{ country.name }}</span>
               </div>
             </div>
@@ -183,7 +181,8 @@ import generalDataService from '@/services/generalData';
 
 const props = defineProps({
   selectedCardIndex: { type: Number, default: null },
-  releaseUuid: { type: String, required: true }
+  releaseUuid: { type: String, required: true },
+  storesList: { type: Array, default: () => [] }
 });
 
 const emit = defineEmits(['next', 'back', 'save-release']);
@@ -227,6 +226,23 @@ const showExcludeResults = ref(null);
 const countryInputsRefs = ref([]);
 const excludeInputsRefs = ref([]);
 
+// ========== قائمة المتاجر الاجتماعية ==========
+const SOCIAL_STORES = [
+  'META (Facebook, Instagram)',
+  'TikTok / Resso',
+  'TikTok PMVs (Video)',
+  'YouTube (Content ID)',
+  'YouTube Music',
+  'Spotify',
+  'Spotify (Video)',
+  'Spotify Audiobooks',
+  'Apple Music (Audiobook)',
+  'iTunes Store / Apple Music (VIDEO)',
+  'iTunes Store / Apple Music / Shazam (Service)',
+  'Pandora',
+  'Deezer'
+];
+
 // ========== دوال جلب البيانات من الـ API ==========
 
 const fetchData = async () => {
@@ -260,16 +276,66 @@ const fetchData = async () => {
       store.status === 'Online' || store.status === 'online' || store.status === 'active'
     );
     
-    stores.value = onlineStores.map((store, index) => ({
+    // تجهيز قائمة المتاجر
+    let processedStores = onlineStores.map((store, index) => ({
       id: store.id || index + 1,
       name: store.name || store,
       status: store.status || 'Online',
-      selected: false
+      selected: false,
+      isSocial: SOCIAL_STORES.some(socialName => 
+        store.name && store.name.toLowerCase().includes(socialName.toLowerCase())
+      )
     }));
     
-    console.log(`✅ تم تحميل ${onlineStores.length} متجر Online من أصل ${storesArray.length}`);
+    // ========== استخدام المتاجر من props إذا وجدت ==========
+    if (props.storesList && props.storesList.length > 0) {
+      console.log('📦 استخدام المتاجر من props:', props.storesList.length);
+      
+      // مزامنة التحديد من props.storesList
+      processedStores = processedStores.map(store => {
+        const matchedStore = props.storesList.find(s => s.name === store.name);
+        return {
+          ...store,
+          selected: matchedStore ? matchedStore.selected : false
+        };
+      });
+    }
     
-    // ========== معالجة بيانات الدول باستخدام code3 ==========
+    // ========== تطبيق التحديد التلقائي حسب الكارد ==========
+    if (props.selectedCardIndex === 0) {
+      // الكارد 1: Alle Stores - تحديد جميع المتاجر
+      processedStores = processedStores.map(store => ({
+        ...store,
+        selected: true
+      }));
+      allStoresSelected.value = true;
+      console.log('✅ Alle Stores: تم تحديد جميع المتاجر');
+      
+    } else if (props.selectedCardIndex === 1) {
+      // الكارد 2: Ohne Socials - تحديد جميع المتاجر ما عدا الاجتماعية
+      processedStores = processedStores.map(store => ({
+        ...store,
+        selected: !store.isSocial
+      }));
+      allStoresSelected.value = false;
+      console.log('✅ Ohne Socials: تم تحديد جميع المتاجر ما عدا الاجتماعية');
+      
+    } else if (props.selectedCardIndex === 2) {
+      // الكارد 3: Individuell - لا تحديد تلقائي
+      processedStores = processedStores.map(store => ({
+        ...store,
+        selected: false
+      }));
+      allStoresSelected.value = false;
+      console.log('✅ Individuell: لا تحديد تلقائي');
+    }
+    
+    stores.value = processedStores;
+    
+    console.log(`✅ تم تحميل ${processedStores.length} متجر Online`);
+    console.log(`📊 المتاجر المختارة: ${processedStores.filter(s => s.selected).length}`);
+    
+    // ========== معالجة بيانات الدول باستخدام code2 ==========
     let countriesArray = [];
     
     if (Array.isArray(countriesData)) {
@@ -281,12 +347,11 @@ const fetchData = async () => {
     countries.value = countriesArray.map((country, index) => ({
       id: country.id || index + 1,
       name: country.name || country,
-      code: country.code3 || country.code || country.iso || '', // استخدام code3 كأولوية
+      code: country.code || country.iso || country.iso2 || country.code2 || '',
       flag: country.flag || country.flag_url || '/icon/default-flag.png'
     }));
     
     console.log(`✅ تم تحميل ${countries.value.length} دولة`);
-    console.log('📊 أول 5 دول:', countries.value.slice(0, 5).map(c => `${c.name} (${c.code})`));
     
     // بعد جلب البيانات الأساسية، جلب بيانات الـ Release
     await fetchReleaseData();
@@ -298,6 +363,7 @@ const fetchData = async () => {
     isLoading.value = false;
   }
 };
+
 // دالة جلب بيانات الـ Release من السيرفر
 const fetchReleaseData = async () => {
   if (!props.releaseUuid) {
@@ -312,12 +378,17 @@ const fetchReleaseData = async () => {
     
     console.log('✅ تم جلب بيانات الـ Release:', releaseData);
     
-    // تحديث المتاجر المختارة - فقط المتاجر الموجودة في القائمة الحالية
-    if (releaseData.stores && Array.isArray(releaseData.stores)) {
+    // 🔥 التحقق مما إذا كانت بيانات المتاجر موجودة في السيرفر
+    const hasStoresData = releaseData.stores && Array.isArray(releaseData.stores) && releaseData.stores.length > 0;
+    
+    if (hasStoresData) {
+      // إذا كانت هناك بيانات متاجر من السيرفر، استخدمها
+      console.log('📦 استخدام بيانات المتاجر من السيرفر');
+      
       // إلغاء تحديد جميع المتاجر أولاً
       stores.value.forEach(store => { store.selected = false; });
       
-      // تحديد المتاجر الموجودة في البيانات (فقط إذا كانت في قائمة المتاجر الحالية)
+      // تحديد المتاجر الموجودة في البيانات
       releaseData.stores.forEach(storeName => {
         const store = stores.value.find(s => s.name === storeName);
         if (store) {
@@ -326,14 +397,32 @@ const fetchReleaseData = async () => {
           console.log(`⚠️ المتجر ${storeName} غير موجود في قائمة المتاجر Online`);
         }
       });
+    } else {
+      // 🔥 إذا لم تكن هناك بيانات متاجر من السيرفر، استخدم التحديد التلقائي بناءً على selectedCardIndex
+      console.log('📦 لا توجد بيانات متاجر من السيرفر، استخدام التحديد التلقائي بناءً على selectedCardIndex:', props.selectedCardIndex);
+      
+      // تطبيق التحديد التلقائي حسب الكارد
+      if (props.selectedCardIndex === 0) {
+        // Alle Stores - تحديد جميع المتاجر
+        stores.value.forEach(store => { store.selected = true; });
+        allStoresSelected.value = true;
+      } else if (props.selectedCardIndex === 1) {
+        // Ohne Socials - تحديد جميع المتاجر ما عدا الاجتماعية
+        stores.value.forEach(store => { 
+          store.selected = !store.isSocial; 
+        });
+        allStoresSelected.value = false;
+      } else if (props.selectedCardIndex === 2) {
+        // Individuell - لا تحديد تلقائي
+        stores.value.forEach(store => { store.selected = false; });
+        allStoresSelected.value = false;
+      }
     }
     
-    // تحديث countries_included باستخدام code3
+    // تحديث countries_included
     if (releaseData.countries_included && Array.isArray(releaseData.countries_included)) {
       if (releaseData.countries_included.length > 0) {
-        // إنشاء مصفوفة جديدة من حقول الإدخال
         const newInputs = releaseData.countries_included.map(code => {
-          // البحث عن الدولة باستخدام code3
           const country = countries.value.find(c => c.code === code);
           return {
             searchQuery: country ? country.name : code,
@@ -349,11 +438,10 @@ const fetchReleaseData = async () => {
       }
     }
     
-    // تحديث countries_excluded باستخدام code3
+    // نفس التعديل لـ countries_excluded
     if (releaseData.countries_excluded && Array.isArray(releaseData.countries_excluded)) {
       if (releaseData.countries_excluded.length > 0) {
         const newInputs = releaseData.countries_excluded.map(code => {
-          // البحث عن الدولة باستخدام code3
           const country = countries.value.find(c => c.code === code);
           return {
             searchQuery: country ? country.name : code,
@@ -375,9 +463,11 @@ const fetchReleaseData = async () => {
     // تحديث القيم السابقة
     previousValues.value = getCurrentData();
     
+    console.log('📊 بعد التحديث - المتاجر المختارة:', stores.value.filter(s => s.selected).length);
+    
   } catch (error) {
     console.error('❌ فشل جلب بيانات الـ Release:', error);
-    throw error; // نعيد الخطأ ليتم التعامل معه في الدالة الرئيسية
+    throw error;
   }
 };
 
@@ -406,17 +496,18 @@ const isButtonActive = computed(() => {
   return hasSelectedStores && hasCountries;
 });
 
-// دالة مساعدة لتحويل اسم الدولة إلى رمز (code2)
+// دالة مساعدة لتحويل اسم الدولة إلى رمز (code2 - ISO 3166-1 alpha-2)
 const getCountryCode = (countryName) => {
   const country = countries.value.find(c => c.name === countryName);
   return country?.code || countryName.substring(0, 2).toUpperCase();
 };
 
-// دالة عكسية لتحويل رمز ISO (code3) إلى اسم الدولة
+// دالة عكسية لتحويل رمز ISO (code2) إلى اسم الدولة
 const getCountryNameFromCode = (code) => {
   const country = countries.value.find(c => c.code === code);
   return country?.name || code;
 };
+
 // دالة تجميع البيانات الحالية مع التصحيح
 const getCurrentData = () => {
   const selectedStoreNames = stores.value
@@ -435,12 +526,12 @@ const getCurrentData = () => {
     stores: selectedStoreNames,
     countries_included: includedCountries,
     countries_excluded: excludedCountries,
-    catalog_number: '' // يمكن إضافته لاحقاً
+    catalog_number: ''
   };
 };
 
 // دالة إرسال التحديثات إلى السيرفر
-const sendUpdate = () => {
+const sendUpdate = async () => {
   if (!props.releaseUuid) {
     console.warn('⚠️ لا يوجد releaseUuid');
     return;
@@ -487,11 +578,25 @@ const sendUpdate = () => {
   
   console.log('📤 إرسال التحديثات إلى السيرفر:', payload);
   
-  // تحديث القيم السابقة
-  previousValues.value = { ...currentData };
-  
-  // إرسال إلى الأب (Upload3Component)
-  emit('save-release', payload);
+  try {
+    // 🔥 إرسال إلى السيرفر مباشرة
+    const response = await apiRequest.put(
+      `/releases/${props.releaseUuid}`,
+      payload
+    );
+    
+    console.log('✅ تم حفظ التغييرات بنجاح:', response.data);
+    
+    // تحديث القيم السابقة
+    previousValues.value = { ...currentData };
+    
+    // إرسال إلى الأب (Upload3Component)
+    emit('save-release', payload);
+    
+  } catch (error) {
+    console.error('❌ فشل حفظ التغييرات:', error);
+    throw error;
+  }
 };
 
 // إنشاء دالة debounce للإرسال
@@ -551,25 +656,12 @@ const filteredExcludeResults = (index) => {
   );
 };
 
-// دوال الإكمال التلقائي
-const isAutocompleteMatch = (query, countryName) => {
-  return countryName.toLowerCase().startsWith(query.toLowerCase());
-};
-
-const getAutocompleteSuggestion = (query, countryName) => {
-  if (!isAutocompleteMatch(query, countryName)) return countryName;
-  
-  const remaining = countryName.slice(query.length);
-  return query + remaining;
-};
-
 // دوال المتاجر
 const toggleAllStores = () => {
   allStoresSelected.value = !allStoresSelected.value;
   stores.value.forEach(store => {
     store.selected = allStoresSelected.value;
   });
-  // debouncedSendUpdate سيتم تشغيله تلقائياً عن طريق watch
 };
 
 const toggleStore = (storeId) => {
@@ -577,23 +669,19 @@ const toggleStore = (storeId) => {
   if (store) {
     store.selected = !store.selected;
   }
-  // debouncedSendUpdate سيتم تشغيله تلقائياً عن طريق watch
 };
 
 const toggleAutoAdd = () => {
   autoAddStores.value = !autoAddStores.value;
-  // يمكن إرسال هذه القيمة أيضاً إذا لزم الأمر
 };
 
 // دوال البحث والاختيار للدول
 const updateCountryResults = (index) => {
   countryInputs.value[index].isSelected = countryInputs.value[index].searchQuery.length > 0;
-  // debouncedSendUpdate سيتم تشغيله تلقائياً عن طريق watch
 };
 
 const updateExcludeResults = (index) => {
   excludeInputs.value[index].isSelected = excludeInputs.value[index].searchQuery.length > 0;
-  // debouncedSendUpdate سيتم تشغيله تلقائياً عن طريق watch
 };
 
 const handleCountryInput = (index) => {
@@ -611,15 +699,13 @@ const selectCountryResult = (country, index) => {
   countryInputs.value[index].isSelected = true;
   showCountryResults.value = null;
   
-  addCountryInput();
-  
   nextTick(() => {
     if (countryInputsRefs.value[countryInputs.value.length - 1]) {
       countryInputsRefs.value[countryInputs.value.length - 1].focus();
     }
   });
   
-  debouncedSendUpdate(); // إرسال فوري بعد الاختيار
+  debouncedSendUpdate();
 };
 
 const selectExcludeResult = (country, index) => {
@@ -629,15 +715,13 @@ const selectExcludeResult = (country, index) => {
   excludeInputs.value[index].isSelected = true;
   showExcludeResults.value = null;
   
-  addExcludeInput();
-  
   nextTick(() => {
     if (excludeInputsRefs.value[excludeInputs.value.length - 1]) {
       excludeInputsRefs.value[excludeInputs.value.length - 1].focus();
     }
   });
   
-  debouncedSendUpdate(); // إرسال فوري بعد الاختيار
+  debouncedSendUpdate();
 };
 
 // دوال إضافة وحذف المدخلات
@@ -650,7 +734,6 @@ const addCountryInput = () => {
     isFocused: false, 
     isSelected: false 
   });
-  // debouncedSendUpdate سيتم تشغيله تلقائياً عن طريق watch
 };
 
 const removeCountryInput = (index) => {
@@ -658,7 +741,7 @@ const removeCountryInput = (index) => {
   
   if (countryInputs.value.length > 1) {
     countryInputs.value.splice(index, 1);
-    debouncedSendUpdate(); // إرسال فوري بعد الحذف
+    debouncedSendUpdate();
   }
 };
 
@@ -671,7 +754,6 @@ const addExcludeInput = () => {
     isFocused: false, 
     isSelected: false 
   });
-  // debouncedSendUpdate سيتم تشغيله تلقائياً عن طريق watch
 };
 
 const removeExcludeInput = (index) => {
@@ -679,7 +761,7 @@ const removeExcludeInput = (index) => {
   
   if (excludeInputs.value.length > 1) {
     excludeInputs.value.splice(index, 1);
-    debouncedSendUpdate(); // إرسال فوري بعد الحذف
+    debouncedSendUpdate();
   }
 };
 
@@ -730,8 +812,8 @@ const handleExcludeBlur = (index) => {
   }, 200);
 };
 
-// ✅ دالة Next
-const handleNext = () => {
+// ✅ دالة Next - مع حفظ التغييرات
+const handleNext = async () => {
   if (isButtonActive.value) {
     console.log('ShopsPage: Next clicked', {
       selectedStores: selectedStoresCount.value,
@@ -739,10 +821,19 @@ const handleNext = () => {
       isButtonActive: isButtonActive.value
     });
     
-    // إرسال التحديثات فوراً قبل الانتقال
-    sendUpdate();
-    
-    emit('next'); // الانتقال للخطوة الرابعة
+    try {
+      // 🔥 إرسال التحديثات فوراً قبل الانتقال
+      await sendUpdate();
+      emit('next');
+    } catch (error) {
+      console.error('❌ فشل حفظ التغييرات قبل الانتقال:', error);
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: { 
+          message: 'Fehler beim Speichern der Daten. Bitte versuchen Sie es erneut.', 
+          type: 'error' 
+        }
+      }));
+    }
   }
 };
 
@@ -758,24 +849,22 @@ watch(() => countryInputs.value, (newInputs) => {
 // إرسال التحديثات عند إزالة المكون
 onUnmounted(() => {
   if (debouncedSendUpdate.flush) {
-    debouncedSendUpdate.flush(); // إرسال أي تحديثات معلقة
+    debouncedSendUpdate.flush();
   }
 });
 
 // جلب البيانات عند تحميل المكون
 onMounted(async () => {
   console.log('🚀 ShopsPage mounted with releaseUuid:', props.releaseUuid);
+  console.log('📌 selectedCardIndex:', props.selectedCardIndex);
   await fetchData();
 });
 </script>
-
-
 
 <style lang="scss" scoped>
 /* جميع الأنماط كما هي - لم يتم تغيير أي شيء */
 .main-shops {
   display: flex;
-  /* padding-right: 230px; */
   flex-direction: column;
   align-items: center;
   gap: 40px;
@@ -978,8 +1067,13 @@ onMounted(async () => {
   border: 0;
   color: #fff;
   font-family: Heebo;
-  font-size: 16px;
+  font-size: 18px;
   transition: opacity 0.3s ease;
+
+
+  &:hover{
+    border-radius: 5px 0 0 5px;
+  }
 }
 
 .section-input:not(.enabled) .input-field {
@@ -1045,15 +1139,14 @@ onMounted(async () => {
 }
 
 .section-input .spacer {
-  display: flex;
-  width: 34px;
-  height: 46px;
-  padding: 9px 10px;
-  align-items: center;
-  border-radius: 5px;
-  background: var(--secondary);
-  position: relative;
-  cursor: pointer;
+     display: flex;
+    width: 34px;
+    height: 46px;
+    padding: 9px 10px;
+    align-items: center;
+    border-radius: 5px;
+    position: relative;
+    cursor: pointer;
   transition: opacity 0.3s ease;
 }
 
@@ -1063,15 +1156,15 @@ onMounted(async () => {
 }
 
 .section-input .spacer .play {
-  display: flex;
-  padding: 13px 13px;
-  align-items: center;
-  position: absolute;
-  right: 20px;
-  opacity: 0;
-  border-radius: 0 5px 5px 0;
-  background: var(--primary);
-  transition: right 0.3s ease, opacity 0.3s ease;
+   display: flex;
+    padding: 13px 13px;
+    align-items: center;
+    position: absolute;
+    right: 20px;
+    opacity: 0;
+    border-radius: 0 5px 5px 0;
+    background: var(--primary);
+    transition: right 0.3s ease, opacity 0.3s ease;
 }
 
 .section-input.enabled .spacer .play.visible {
@@ -1093,7 +1186,7 @@ onMounted(async () => {
 /* أنماط نتائج البحث */
 .search-results {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 3px);
   left: 0;
   right: 0;
   background: var(--primary);
@@ -1103,7 +1196,7 @@ onMounted(async () => {
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
   overflow: auto;
   scrollbar-width: none;
-  width: 100%;
+  width: calc(100% + 10px);
 }
 
 .search-result-item {
@@ -1113,19 +1206,12 @@ onMounted(async () => {
   padding: 10px 12px;
   cursor: pointer;
   transition: background 0.2s ease;
-  color: #FFF;
- 
+  color: var(--Main-Colors-Slate-Light);
 }
 
 .search-result-item:hover {
-  background: var(--secondary);
-}
-
-.country-flag {
-  width: 24px;
-  height: 16px;
-  object-fit: cover;
-  border-radius: 2px;
+  // background: var(--secondary);
+  color: #fff;
 }
 
 /* أنماط زر Next */
@@ -1164,9 +1250,32 @@ onMounted(async () => {
   color: #fff;
 }
 
+/* أنماط التحميل */
+.loading-spinner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+  min-height: 300px;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 3px solid var(--Main-Colors-Slate-Dark, #1B1C20);
+  border-top-color: var(--Main-Colors-Strawberry, #D15);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 @media (min-width:1440px) and (max-width:1599px) {
     .top-shops{
-      padding-right: 204px; /*to 236px*/ 
+      padding-right: 204px; 
       gap: 20px;
     }
 
@@ -1184,7 +1293,7 @@ onMounted(async () => {
     }
 
     .bottom-shops{
-      padding-right: 204px; /*to 236px*/
+      padding-right: 204px;
     }
 
     .form-field .title{
@@ -1194,12 +1303,12 @@ onMounted(async () => {
 
 @media (min-width:1600px) and (max-width:2074px){
   .top-shops{
-      padding-right: 236px; /*to 331px*/ 
+      padding-right: 236px; 
       gap: 20px;
     }
 
     .bottom-shops{
-      padding-right: 236px; /*to 331px*/
+      padding-right: 236px;
     }
 
     .btn-right{
@@ -1209,13 +1318,12 @@ onMounted(async () => {
 
 @media (min-width:2075px) and (max-width:2560px){
   .top-shops{
-      padding-right: 331px; /*to 428px*/ 
+      padding-right: 331px; 
       gap: 20px;
     }
 
-    
     .bottom-shops{
-         padding-right: 331px; /*to 428px*/ 
+         padding-right: 331px; 
     }
 }
 </style>

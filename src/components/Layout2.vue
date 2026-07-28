@@ -240,7 +240,7 @@ main.no-height {
 }
 
 main.restrict-overflow {
-  overflow: hidden; /* Applied when restrictOverflow is true */
+  overflow: hidden;
 }
 
 .containerss {

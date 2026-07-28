@@ -44,7 +44,7 @@
           </div>
         </div>
         <div class="CTAs">
-          <div class="Button-primary" @click="enableEditing">Bearbeiten</div>
+          <div class="Button-primary"  @click="goToProfile" >Bearbeiten</div>
         </div>
       </div>
     </div>
@@ -52,6 +52,8 @@
 </template>
 
 <script setup>
+import { app_code, user_url } from '@/zoundr/constants';
+import { noSplashScreen } from '@/zoundr/utils';
 import { ref, onMounted } from 'vue';
 import { useDataStore } from '@/stores/data'; // Adjust path as needed
 
@@ -98,8 +100,19 @@ onMounted(async () => {
 });
 
 // Function to toggle edit mode
-const enableEditing = () => {
-  isEditable.value = !isEditable.value;
+const goToProfile = () => {
+  // إغلاق السايدبار إذا كان مفتوحاً (اختياري)
+  // يمكنك إضافة emit هنا إذا كان المكون يحتاج إلى إغلاق السايدبار
+  
+  // الانتقال إلى صفحة البروفايل
+  if (app_code === 'user') {
+    // استخدام Vue Router للتطبيق الرئيسي
+    router.push('/profile');
+  } else {
+    // استخدام الرابط المباشر للتطبيقات الفرعية
+    noSplashScreen();
+    window.location.href = user_url + '/profile';
+  }
 };
 </script>
 

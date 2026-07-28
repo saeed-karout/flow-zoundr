@@ -1,6 +1,7 @@
 <template>
-  <div>
-    <!-- العرض الأساسي -->
+  <!-- ✅ عرض Upload3Component فقط عندما يكون currentStep === 4 -->
+  <div v-if="props.currentStep === 4" class="upload3-container">
+    <!-- العرض الأساسي (كروت اختيار المتاجر) -->
     <div v-if="currentView === 'main'" class="content">
       <!-- كارد 1 -->
       <div class="option" @mouseenter="showCardField(0)" @mouseleave="hideCardField(0)">
@@ -57,21 +58,26 @@
       </div>
     </div>
 
-    <!-- ✅ عرض ShopsPage.vue -->
-    <div v-else-if="currentView === 'shopsPage'" class="shops-content">
+    <!-- ✅ عرض ShopsPage.vue داخل Upload3Component -->
+    <div v-else-if="currentView === 'shopsPage'" class="shops-content" key="shops-page-content">
       <ShopsPage 
+        ref="shopsPageRef"
         :selectedCardIndex="selectedCardIndex"
-        :release-uuid="releaseUuid"
+        :release-uuid="props.releaseUuid"
+        :stores-list="storesList"
         @back="handleBack"
         @next="handleNextStep"
         @save-release="handleSaveRelease"
+        @update:selected-stores="handleSelectedStoresUpdate"
       />
     </div>
   </div>
+  <!-- ✅ عرض فارغ إذا لم نكن في الخطوة 4 -->
+  <div v-else class="upload3-empty"></div>
 </template>
 
 <script setup>
-import { ref, reactive, defineProps, defineEmits, watch, onMounted } from 'vue';
+import { ref, reactive, defineProps, defineEmits, watch, onMounted, onBeforeUnmount } from 'vue';
 import ShopsPage from './ShopsPage.vue';
 import apiRequest from '@/lib/apiRequest';
 
@@ -87,12 +93,59 @@ const emit = defineEmits(['next', 'update:currentView', 'back', 'update:topLineI
 
 const currentView = ref('main');
 const selectedCardIndex = ref(null);
+const shopsPageRef = ref(null);
+const isInitialized = ref(false);
+const isMounted = ref(false);
 
 const cardFields = reactive({
   0: { visible: false },
   1: { visible: false },
   2: { visible: false },
 });
+
+// ========== قائمة المتاجر الاجتماعية ==========
+const SOCIAL_STORES = [
+  'META (Facebook, Instagram)',
+  'TikTok / Resso',
+  'TikTok PMVs (Video)',
+  'YouTube (Content ID)',
+  'YouTube Music',
+  'Spotify',
+  'Spotify (Video)',
+  'Spotify Audiobooks',
+  'Apple Music (Audiobook)',
+  'iTunes Store / Apple Music (VIDEO)',
+  'iTunes Store / Apple Music / Shazam (Service)',
+  'Pandora',
+  'Deezer'
+];
+
+// ========== قائمة المتاجر ==========
+const storesList = ref([]);
+
+// ========== جلب المتاجر من الـ API ==========
+const fetchStores = async () => {
+  try {
+    console.log('📡 جلب قائمة المتاجر...');
+    const response = await apiRequest.get('/stores');
+    const data = response.data.data || response.data;
+    
+    if (Array.isArray(data)) {
+      storesList.value = data.map(store => ({
+        id: store.id,
+        name: store.name,
+        status: store.status || 'Online',
+        selected: false,
+        isSocial: SOCIAL_STORES.some(socialName => 
+          store.name && store.name.toLowerCase().includes(socialName.toLowerCase())
+        )
+      }));
+      console.log(`✅ تم جلب ${storesList.value.length} متجر`);
+    }
+  } catch (error) {
+    console.error('❌ فشل جلب المتاجر:', error);
+  }
+};
 
 // بيانات الـ Release (سيتم تحديثها من ShopsPage)
 const releaseData = ref({
@@ -115,7 +168,6 @@ const handleSaveRelease = async (data) => {
   releaseData.value = { ...releaseData.value, ...data };
   
   try {
-    // تجهيز الـ payload - إرسال فقط الحقول المتغيرة
     const payload = {};
     
     if (data.catalog_number !== undefined) {
@@ -139,21 +191,35 @@ const handleSaveRelease = async (data) => {
       payload: payload
     });
     
-    // إرسال إلى الـ API
     const response = await apiRequest.put(
       `/releases/${props.releaseUuid}`,
       payload
     );
     
     console.log('✅ تم حفظ بيانات الـ Release بنجاح', response.data);
-    
-    // إرسال حدث للأب
     emit('save-release', response.data);
     
   } catch (error) {
     console.error('❌ فشل حفظ بيانات الـ Release:', error);
     console.error('تفاصيل الخطأ:', error.response?.data || error.message);
+    
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { 
+        message: 'Fehler beim Speichern der Daten. Bitte versuchen Sie es erneut.', 
+        type: 'error' 
+      }
+    }));
   }
+};
+
+// دالة معالجة تحديث المتاجر المختارة من ShopsPage
+const handleSelectedStoresUpdate = (selectedStores) => {
+  console.log('📌 [Upload3Component] Selected stores updated:', selectedStores);
+  // تحديث المتاجر في القائمة المحلية
+  storesList.value = storesList.value.map(store => ({
+    ...store,
+    selected: selectedStores.includes(store.name)
+  }));
 };
 
 const showCardField = (cardIndex) => {
@@ -166,15 +232,58 @@ const hideCardField = (cardIndex) => {
   cardFields[cardIndex].visible = false;
 };
 
-/* ✅ دالة handleNext المحدثة */
-const handleNext = (cardIndex) => {
+const handleNext = async (cardIndex) => {
   console.log(`Button clicked on card ${cardIndex + 1}`);
   selectedCardIndex.value = cardIndex;
   
-  // عرض ShopsPage داخلياً
-  currentView.value = 'shopsPage';
+  let selectedStoreNames = [];
   
-  // تحديث الصورة العلوية
+  if (cardIndex === 0) {
+    selectedStoreNames = storesList.value.map(s => s.name);
+  } else if (cardIndex === 1) {
+    selectedStoreNames = storesList.value
+      .filter(s => !s.isSocial)
+      .map(s => s.name);
+  } else if (cardIndex === 2) {
+    selectedStoreNames = [];
+  }
+  
+  console.log('📤 حفظ المتاجر المختارة:', selectedStoreNames);
+  
+  try {
+    const payload = {
+      stores: selectedStoreNames
+    };
+    
+    const response = await apiRequest.put(
+      `/releases/${props.releaseUuid}`,
+      payload
+    );
+    
+    console.log('✅ تم حفظ المتاجر بنجاح:', response.data);
+    
+    storesList.value = storesList.value.map(store => ({
+      ...store,
+      selected: selectedStoreNames.includes(store.name)
+    }));
+    
+    emit('save-release', { stores: selectedStoreNames });
+    
+  } catch (error) {
+    console.error('❌ فشل حفظ المتاجر:', error);
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { 
+        message: 'Fehler beim Speichern der Stores. Bitte versuchen Sie es erneut.', 
+        type: 'error' 
+      }
+    }));
+    return;
+  }
+  
+  // ✅ الانتقال إلى shopsPage
+  currentView.value = 'shopsPage';
+  emit('update:currentView', 'shopsPage');
+  
   const imageMap = {
     0: '/icons/top-line/lossless.png',
     1: '/icons/top-line/card2-image.png',
@@ -183,38 +292,97 @@ const handleNext = (cardIndex) => {
   emit('update:topLineImage', imageMap[cardIndex]);
 };
 
-/* ✅ العودة للشاشة الرئيسية */
 const handleBack = () => {
-  console.log('Back to main view');
+  console.log('Back to main view from ShopsPage');
   currentView.value = 'main';
+  emit('update:currentView', 'main');
   emit('update:topLineImage', null);
 };
 
-/* ✅ الانتقال للخطوة التالية (من ShopsPage) */
 const handleNextStep = () => {
   console.log('Next step from ShopsPage');
-  emit('next'); // الانتقال للخطوة التالية
+  emit('next');
 };
 
+// ========== مراقبة currentView ==========
 watch(currentView, (newView) => {
   emit('update:currentView', newView);
-  if (newView === 'infos') {
-    emit('update:topLineImage', '/icons/top-line/x.svg');
-  } else if (newView === 'main') {
+  if (newView === 'main') {
     emit('update:topLineImage', null);
   }
 });
 
-watch(() => [props.currentStep, props.sectionTitle, props.activeTab], ([newStep, newTitle, newTab]) => {
-  console.log('Upload3Component props:', { currentStep: newStep, sectionTitle: newTitle, activeTab: newTab });
+// ========== مراقبة props.currentStep للانتقال إلى shopsPage ==========
+watch(
+  () => props.currentStep,
+  (newStep) => {
+    console.log('📌 [Upload3Component] props.currentStep changed to:', newStep);
+    
+    // ✅ إذا كان currentStep = 4، انتقل إلى shopsPage فوراً
+    if (newStep === 4) {
+      currentView.value = 'shopsPage';
+      console.log('📌 [Upload3Component] ✅ Set currentView to shopsPage');
+      emit('update:currentView', 'shopsPage');
+    } else if (newStep === 3) {
+      // العودة إلى main
+      currentView.value = 'main';
+      console.log('📌 [Upload3Component] ✅ Set currentView to main');
+      emit('update:currentView', 'main');
+    }
+  },
+  { immediate: true }
+);
+
+// في onMounted
+onMounted(async () => {
+  if (isMounted.value) {
+    console.log('⚠️ [Upload3Component] Already mounted, skipping');
+    return;
+  }
+  
+  console.log('🚀 Upload3Component mounted with releaseUuid:', props.releaseUuid);
+  console.log('📌 props.currentStep:', props.currentStep);
+  isMounted.value = true;
+  
+  // ✅ تعيين currentView إلى 'main' دائماً عند التحميل
+  currentView.value = 'main';
+  console.log('📌 [Upload3Component] ✅ Set currentView to main');
+  emit('update:currentView', 'main');
+  
+  await fetchStores();
+  isInitialized.value = true;
 });
 
-onMounted(() => {
-  console.log('🚀 Upload3Component mounted with releaseUuid:', props.releaseUuid);
+onBeforeUnmount(() => {
+  console.log('🔄 [Upload3Component] unmounted');
+  isMounted.value = false;
 });
 </script>
 
 <style lang="scss" scoped>
+.upload3-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ✅ إخفاء العنصر الفارغ */
+.upload3-empty {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  position: absolute !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
+
 .content,
 .shops-content {
   display: flex;

@@ -5,7 +5,7 @@
          @dragenter.prevent="handleDragEnter"
          @dragleave.prevent="handleDragLeave"
          @drop.prevent="handleDrop"
-         :class="{ 'uploading': isUploadingActive }">
+         :class="{ 'uploading': isUploadingActive, 'has-image': finalImageUrl && !isUploadingActive }">
 
     <!-- الخلفية الثابتة (تظهر دائماً) -->
     <img src="@/assets/images/bg-card-release/1-min.png"
@@ -13,21 +13,24 @@
          class="background-image"
          aria-hidden="true" />
 
-    <!-- Dashed border فقط إذا ما فيش صورة أبدًا -->
+    <!-- Dashed border فقط إذا ما فيش صورة أبداً -->
     <div v-if="!finalImageUrl && !isUploadingActive" class="dashed-border"></div>
 
     <!-- الصورة النهائية (من السيرفر أو من الرفع المحلي) -->
     <img v-if="finalImageUrl && !isUploadingActive" :src="finalImageUrl" alt="Cover Image"
          class="schutzen-upload-icon uploaded-image" aria-hidden="true" />
 
-    <!-- النصوص تظهر فقط إذا ما فيش صورة -->
-    <span v-if="!finalImageUrl && !isUploadingActive" class="schutzen-file-icon">IMG</span>
-    <span v-if="!finalImageUrl && !isUploadingActive" class="schutzen-upload-text">Cover Ändern</span>
+    <!-- النصوص تظهر دائماً عند hover حتى لو存在 صورة -->
+    <span v-if="!finalImageUrl && !isUploadingActive" class="schutzen-file-icon">COVER</span>
+    
+    <span class="schutzen-upload-text" :class="{ 'has-image': finalImageUrl && !isUploadingActive }">
+      Cover Ändern
+    </span>
 
     <!-- Input مخفي -->
     <input id="cover-upload-input"
            type="file"
-           accept="image/jpeg,image/jpg,image/png"
+           accept="image/jpeg,image/jpg"
            class="hidden-input"
            @change="handleFileSelect"
            :disabled="isUploadingActive" />
@@ -57,7 +60,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import CircleProgress from 'vue3-circle-progress';
 import 'vue3-circle-progress/dist/circle-progress.css';
 
@@ -74,8 +77,9 @@ const isDragging = ref(false);
 const errorMessage = ref('');
 const localUploading = ref(false);
 const localProgress = ref(0);
-const circleSize = ref(352);
-const borderWidth = ref(12);
+const circleSize = ref(280);
+const borderWidth = ref(10);
+const isMounted = ref(false);
 
 // الحصول على STORAGE_URL من متغيرات البيئة
 const STORAGE_URL = import.meta.env.VITE_STORAGE_URL || 'https://zoundr-flow-api.davinda.dev/storage';
@@ -84,20 +88,17 @@ const STORAGE_URL = import.meta.env.VITE_STORAGE_URL || 'https://zoundr-flow-api
 const getFullImageUrl = (path) => {
   if (!path) return null;
   
-  // إذا كان الرابط كاملاً (يبدأ بـ http:// أو https:// أو blob:)
   if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:')) {
     return path;
   }
   
-  // إذا كان المسار يبدأ بـ /storage/ أو storage/
   let cleanPath = path;
   if (cleanPath.startsWith('/storage/')) {
-    cleanPath = cleanPath.substring(8); // إزالة /storage/
+    cleanPath = cleanPath.substring(8);
   } else if (cleanPath.startsWith('storage/')) {
-    cleanPath = cleanPath.substring(7); // إزالة storage/
+    cleanPath = cleanPath.substring(7);
   }
   
-  // دمج المسار مع STORAGE_URL
   return `${STORAGE_URL}/${cleanPath}`;
 };
 
@@ -111,41 +112,57 @@ const currentProgress = computed(() => {
 
 const finalImageUrl = computed(() => {
   const imageUrl = props.serverCoverUrl || props.uploadedImage;
+  if (!imageUrl) return null;
+  
+  if (imageUrl === '/img/bgCardSongs/card1.png' || imageUrl.includes('bgCardSongs/card1.png')) {
+    return null;
+  }
+  
   return getFullImageUrl(imageUrl);
 });
 
 watch(() => props.isUploading, (newVal) => {
-  console.log('📊 ImageUpload: props.isUploading changed to:', newVal);
+  if (!isMounted.value) return;
   if (!newVal) {
     localUploading.value = false;
     localProgress.value = 0;
   }
-});
+}, { immediate: true });
 
-watch(() => props.serverCoverUrl, (newUrl) => {
+watch(() => props.serverCoverUrl, (newUrl, oldUrl) => {
+  if (!isMounted.value) return;
+  if (newUrl === oldUrl) return;
+  
   if (newUrl) {
-    console.log('🖼️ ImageUpload: serverCoverUrl updated:', newUrl);
-    console.log('🖼️ Full image URL:', getFullImageUrl(newUrl));
     localUploading.value = false;
     localProgress.value = 0;
   }
-});
+}, { immediate: true });
 
+// تحديث حجم الدائرة
 const updateCircleSize = () => {
-  const screenWidth = window.innerWidth;
-  if (screenWidth < 1599) {
-    circleSize.value = 250;
+  const container = document.querySelector('.cards-upload-file');
+  if (!container) {
+    circleSize.value = 280;
+    borderWidth.value = 10;
+    return;
+  }
+  
+  const rect = container.getBoundingClientRect();
+  const size = Math.min(rect.width, rect.height);
+  
+  const circleSizeValue = Math.floor(size * 0.8);
+  circleSize.value = Math.max(circleSizeValue, 150);
+  
+  if (circleSize.value < 200) {
     borderWidth.value = 8;
-  } else if (screenWidth >= 1600 && screenWidth < 2075) {
-    circleSize.value = 300;
+  } else if (circleSize.value < 300) {
     borderWidth.value = 10;
   } else {
-    circleSize.value = 352;
     borderWidth.value = 12;
   }
 };
 
-// التحقق من أبعاد الصورة
 const validateImageDimensions = (file) => {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -169,25 +186,19 @@ const validateImageDimensions = (file) => {
   });
 };
 
-// التحقق من نوع الملف (JPEG أو PNG)
 const validateFileType = (file) => {
-  const validTypes = ['image/jpeg', 'image/png'];
-  const validExtensions = ['.jpg', '.jpeg', '.png'];
+  const validTypes = ['image/jpeg'];
+  const validExtensions = ['.jpg', '.jpeg'];
   const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
   
-  const isValidType = validTypes.includes(file.type);
-  const isValidExtension = validExtensions.includes(fileExtension);
-  
-  return isValidType && isValidExtension;
+  return validTypes.includes(file.type) && validExtensions.includes(fileExtension);
 };
 
-// التحقق من الحجم (10 MB)
 const validateFileSize = (file) => {
-  const maxSize = 10 * 1024 * 1024; // 10 MB
+  const maxSize = 10 * 1024 * 1024;
   return file.size <= maxSize;
 };
 
-// دوال Drag & Drop
 const handleDragOver = (e) => e.preventDefault();
 const handleDragEnter = (e) => { 
   e.preventDefault(); 
@@ -215,24 +226,19 @@ const handleFileSelect = (e) => {
   e.target.value = '';
 };
 
-// المعالجة الرئيسية للملف
 const processFile = async (file) => {
-  // مسح رسالة الخطأ السابقة
   errorMessage.value = '';
   
-  // 1. التحقق من نوع الملف (JPEG أو PNG)
   if (!validateFileType(file)) {
-    errorMessage.value = 'Nur JPEG oder PNG Dateien sind erlaubt.';
+    errorMessage.value = 'Nur JPEG Dateien sind erlaubt.';
     return;
   }
   
-  // 2. التحقق من الحجم (10 MB)
   if (!validateFileSize(file)) {
     errorMessage.value = 'Maximale Dateigröße ist 10 MB.';
     return;
   }
   
-  // 3. التحقق من الأبعاد (3000 x 3000 px)
   try {
     await validateImageDimensions(file);
   } catch (err) {
@@ -240,44 +246,52 @@ const processFile = async (file) => {
     return;
   }
   
-  // 4. ملاحظة: التحقق من RGB وعدم وجود شعارات يتم على السيرفر
-  // لأنها تتطلب معالجة متقدمة لا يمكن تنفيذها في المتصفح بشكل موثوق
-  
-  // بدء التحميل بعد اجتياز جميع التحققات
   localUploading.value = true;
   localProgress.value = 0;
   
-  // محاكاة تقدم الرفع
   const interval = setInterval(() => {
     if (localProgress.value < 90 && !props.isUploading) {
-      localProgress.value += 10;
+      localProgress.value += 5;
     } else {
       clearInterval(interval);
     }
-  }, 200);
+  }, 300);
   
-  // إنشاء preview محلي
   const previewUrl = URL.createObjectURL(file);
   emit('update:uploadedImage', previewUrl);
-  
-  // إرسال الملف إلى المكون الأب للمعالجة على السيرفر
   emit('file-selected', file);
   
-  // تنظيف الـ preview بعد دقيقة
-  setTimeout(() => URL.revokeObjectURL(previewUrl), 60000);
+  setTimeout(() => URL.revokeObjectURL(previewUrl), 300000);
   
-  // إيقاف المحاكاة بعد 2 ثانية
   setTimeout(() => {
     clearInterval(interval);
-  }, 2000);
+  }, 3000);
 };
 
 onMounted(() => {
-  updateCircleSize();
-  window.addEventListener('resize', updateCircleSize);
+  isMounted.value = true;
+  
+  nextTick(() => {
+    updateCircleSize();
+  });
+  
+  window.addEventListener('resize', () => {
+    updateCircleSize();
+  });
+  
+  if (window.ResizeObserver) {
+    const container = document.querySelector('.cards-upload-file');
+    if (container) {
+      const resizeObserver = new ResizeObserver(() => {
+        updateCircleSize();
+      });
+      resizeObserver.observe(container);
+    }
+  }
 });
 
 onBeforeUnmount(() => {
+  isMounted.value = false;
   window.removeEventListener('resize', updateCircleSize);
 });
 </script>
@@ -285,7 +299,6 @@ onBeforeUnmount(() => {
 <style lang="scss" scoped>
 .cards-upload-file {
   display: flex;
-  min-width: 470px;
   flex-direction: column;
   align-items: center;
   aspect-ratio: 1/1;
@@ -295,6 +308,53 @@ onBeforeUnmount(() => {
   gap: 32px;
   cursor: pointer;
   overflow: hidden;
+  transition: all 0.3s ease;
+  
+  /* 🔥 الأبعاد الأساسية - شاشات أقل من 1440px */
+  width: clamp(310px, 25vw, 310px);
+  max-width: 310px;
+  height: clamp(310px, 25vw, 310px);
+  max-height: 310px;
+}
+
+/* 🔥 شاشات 1440-1599px: من 310px إلى 366px */
+@media (min-width: 1440px) and (max-width: 1599px) {
+  .cards-upload-file {
+    width: clamp(310px, calc(310px + (366 - 310) * ((100vw - 1440px) / (1599 - 1440))), 366px);
+    height: clamp(310px, calc(310px + (366 - 310) * ((100vw - 1440px) / (1599 - 1440))), 366px);
+    max-width: 366px;
+    max-height: 366px;
+  }
+}
+
+/* 🔥 شاشات 1600-2074px: من 366px إلى 520px */
+@media (min-width: 1600px) and (max-width: 2074px) {
+  .cards-upload-file {
+    width: clamp(366px, calc(366px + (520 - 366) * ((100vw - 1600px) / (2074 - 1600))), 520px);
+    height: clamp(366px, calc(366px + (520 - 366) * ((100vw - 1600px) / (2074 - 1600))), 520px);
+    max-width: 520px;
+    max-height: 520px;
+  }
+}
+
+/* 🔥 شاشات 2075-2560px: من 378px إلى 503px */
+@media (min-width: 2075px) and (max-width: 2560px) {
+  .cards-upload-file {
+    width: clamp(378px, calc(378px + (503 - 378) * ((100vw - 2075px) / (2560 - 2075))), 503px);
+    height: clamp(378px, calc(378px + (503 - 378) * ((100vw - 2075px) / (2560 - 2075))), 503px);
+    max-width: 503px;
+    max-height: 503px;
+  }
+}
+
+/* 🔥 شاشات أكبر من 2560px */
+@media (min-width: 2561px) {
+  .cards-upload-file {
+    width: 503px;
+    height: 503px;
+    max-width: 503px;
+    max-height: 503px;
+  }
 }
 
 .cards-upload-file:hover {
@@ -305,7 +365,6 @@ onBeforeUnmount(() => {
   cursor: wait;
 }
 
-/* صورة الخلفية الثابتة */
 .background-image {
   position: absolute;
   top: 0;
@@ -318,7 +377,6 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-/* Overlay ثابت - يظهر فقط عند hover ولا يتحرك */
 .cards-upload-file::after {
   content: '';
   position: absolute;
@@ -332,6 +390,22 @@ onBeforeUnmount(() => {
 }
 
 .cards-upload-file:hover::after {
+  opacity: 1;
+}
+
+.cards-upload-file.has-image::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: rgba(35, 35, 35, 0.5);
+  border-radius: 20px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.cards-upload-file.has-image:hover::before {
   opacity: 1;
 }
 
@@ -366,7 +440,7 @@ onBeforeUnmount(() => {
   color: var(--Main-Colors-White, #FFF);
   text-align: center;
   font-family: Heebo;
-  font-size: 110px;
+  font-size: clamp(60px, 9vw, 85px);
   font-style: normal;
   font-weight: 700;
   line-height: 100%;
@@ -387,15 +461,19 @@ onBeforeUnmount(() => {
   justify-content: center;
   color: white;
   text-align: center;
-  font-size: 2.8rem;
+  font-size: clamp(1.5rem, 2.7vw, 2.8rem);
   font-weight: bold;
   text-transform: uppercase;
   border-radius: 20px;
   opacity: 0;
   transform: translateY(80px);
   transition: opacity 0.3s ease, transform 0.4s ease;
-  z-index: 2;
+  z-index: 3;
   pointer-events: none;
+}
+
+.schutzen-upload-text.has-image {
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
 }
 
 .cards-upload-file:hover .schutzen-file-icon {
@@ -404,6 +482,11 @@ onBeforeUnmount(() => {
 }
 
 .cards-upload-file:hover .schutzen-upload-text {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cards-upload-file.has-image:hover .schutzen-upload-text {
   opacity: 1;
   transform: translateY(0);
 }
@@ -417,10 +500,10 @@ onBeforeUnmount(() => {
   bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
-  color: var(--Strawberry, #DE1456);
+  color: #fff;
   font-size: 14px;
   font-weight: 500;
-  background: rgba(222, 20, 86, 0.15);
+  background: var(--secondary);
   padding: 8px 16px;
   border-radius: 8px;
   border: 1px solid var(--Strawberry);
@@ -430,7 +513,6 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(4px);
 }
 
-/* Progress bar styles */
 .progress-container {
   position: absolute;
   inset: 0;
@@ -455,7 +537,7 @@ onBeforeUnmount(() => {
 .progress-text {
   position: absolute;
   color: white;
-  font-size: 4rem;
+  font-size: clamp(2rem, 4vw, 4rem);
   font-weight: 700;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
   font-family: Heebo;
@@ -477,55 +559,5 @@ onBeforeUnmount(() => {
 :deep(.circle-progress__circle-foreground) {
   stroke: var(--Strawberry, #DE1456) !important;
   transition: stroke-dashoffset 0.1s linear;
-}
-
-/* Responsive */
-@media (min-width: 1440px) and (max-width: 1599px) {
-  .cards-upload-file {
-    width: clamp(310px, calc(308px + 54 * (100vw - 1440px) / 159), 362px);
-    height: clamp(310px, calc(308px + 54 * (100vw - 1440px) / 159), 362px);
-  }
-
-  .schutzen-file-icon {
-    font-size: 80px;
-  }
-
-  .schutzen-upload-text {
-    font-size: 2rem;
-  }
-
-  .progress-text {
-    font-size: 2rem;
-  }
-}
-
-@media (min-width: 1600px) and (max-width: 2075px) {
-  .cards-upload-file {
-    width: clamp(366px, calc(-171.3333px + 33.3333vw), 520px);
-    height: clamp(366px, calc(-171.3333px + 33.3333vw), 520px);
-  }
-
-  .schutzen-file-icon {
-    font-size: 95px;
-  }
-
-  .schutzen-upload-text {
-    font-size: 2.4rem;
-  }
-}
-
-@media (min-width: 2075px) and (max-width: 2560px) {
-  .cards-upload-file {
-    width: clamp(378px, calc(-173.048px + 33.3999vw), 503px);
-    height: clamp(378px, calc(-173.048px + 33.3999vw), 503px);
-  }
-
-  .schutzen-file-icon {
-    font-size: 110px;
-  }
-
-  .schutzen-upload-text {
-    font-size: 2.8rem;
-  }
 }
 </style>

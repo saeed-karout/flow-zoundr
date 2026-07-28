@@ -1,28 +1,75 @@
-```vue
 <template>
   <div class="tab-content">
     <div class="section">
-      <div class="p">Deine Top Songs</div>
+      <div class="p">Deine Top Saves</div>
       <div class="top-song">
-        <div class="music-title" v-for="i in 20" :key="i">
-          <div class="background-layer"></div>
-          <div class="number-container">
-            <div :class="i === 1 ? 'number-1' : 'number'">{{ i }}.</div>
-          </div>
-          <div class="image-overlay">
-            <div class="info">
-              <div class="title">
-                <div class="sub-title">Artist Music</div>
-                <div class="span">Amet sollicitudin</div>
+        <!-- Loading State -->
+        <div v-if="isLoading" class="loading-state">
+          <div class="spinner"></div>
+        </div>
+        
+        <!-- Saves List -->
+        <div v-else class="saves-container">
+          <div class="music-title" v-for="(save, index) in data" :key="save.uuid || index">
+            <div 
+              class="background-layer" 
+              :style="{ 
+                backgroundImage: `url(${save.picture || defaultImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center'
+              }"
+            ></div>
+            <div class="number-container">
+              <div :class="index === 0 ? 'number-1' : 'number'">{{ index + 1 }}.</div>
+            </div>
+            <div class="image-overlay">
+              <div class="info">
+                <div class="title">
+                  <div class="sub-title">Artist Music</div>
+                  <div class="span">{{ save.name || 'Unknown Song' }}</div>
+                </div>
+                <div class="p">{{ formatNumber(save.saves) }} Saves</div>
               </div>
-              <div class="p">23.115 Streams</div>
             </div>
           </div>
+        </div>
+        
+        <!-- Empty State -->
+        <div v-if="!isLoading && (!data || data.length === 0)" class="empty-state">
+          <div class="empty-message">Keine Saves gefunden</div>
         </div>
       </div>
     </div>
   </div>
 </template>
+
+<script setup>
+import { ref } from 'vue';
+
+// ========== Props ==========
+const props = defineProps({
+  data: {
+    type: Array,
+    default: () => []
+  },
+  filters: {
+    type: Object,
+    default: () => ({})
+  }
+});
+
+// ========== Reactive Data ==========
+const isLoading = ref(false);
+
+// صورة افتراضية في حالة عدم وجود صورة من الـ API
+const defaultImage = '/img/bgCardSongs/card1.png';
+
+// ========== Utility Functions ==========
+const formatNumber = (num) => {
+  if (!num && num !== 0) return '0';
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+};
+</script>
 
 <style lang="scss" scoped>
 .tab-content {
@@ -44,7 +91,7 @@
   align-items: flex-start;
   gap: 20px;
   flex: 1 0 0;
-  border-radius:  20px 0 20px 20px;
+  border-radius: 20px 0 20px 20px;
   background: var(--Main-Colors-Slate, #26282D);
   position: relative;
   width: 100%;
@@ -71,15 +118,34 @@
   gap: 20px;
   align-self: stretch;
   overflow-x: auto;
-  padding-right: 80px;
   scrollbar-width: none;
-
   border-radius: 20px;
   flex-wrap: nowrap;
   min-width: auto;
 }
 
+.saves-container {
+  display: flex;
+  gap: 20px;
+  flex-wrap: nowrap;
+}
 
+.top-song::-webkit-scrollbar {
+  height: 8px;
+}
+
+.top-song::-webkit-scrollbar-track {
+  background: #26282D;
+}
+
+.top-song::-webkit-scrollbar-thumb {
+  background: #6A6C6D;
+  border-radius: 4px;
+}
+
+.top-song::-webkit-scrollbar-thumb:hover {
+  background: #D15;
+}
 
 .music-title {
   display: flex;
@@ -101,7 +167,9 @@
   width: 100%;
   height: 100%;
   border-radius: 20px;
-  background: url('../../../assets/icons/catalog/releases/2.jpg') 50% / cover no-repeat;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   filter: saturate(var(--saturation, 20%));
   transition: filter 0.6s ease;
   z-index: 1;
@@ -151,6 +219,7 @@
   line-height: 0.6;
   transition: opacity 0.3s ease;
   z-index: 3;
+  background: rgba(0, 0, 0, 0.7);
 }
 
 .number-1 {
@@ -231,12 +300,47 @@
   opacity: 1;
 }
 
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 207px;
+}
 
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(221, 17, 85, 0.1);
+  border-top-color: #DD1155;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 207px;
+}
+
+.empty-message {
+  color: #FFF;
+  font-family: Heebo;
+  font-size: 16px;
+  font-weight: 300;
+  opacity: 0.5;
+  text-align: center;
+}
 
 @media (min-width:2075px) and (max-width:2560px) {
-    .section{
-      border-radius: 20px;
-    }
+  .section {
+    border-radius: 20px;
+  }
 }
 </style>
-```

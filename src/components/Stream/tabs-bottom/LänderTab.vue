@@ -1,21 +1,33 @@
-```vue
 <template>
   <div class="tab-content">
     <div class="section">
       <div class="p">Deine Top Länder</div>
       <div class="top-song">
-        <div class="music-title" v-for="song in songs" :key="song.id">
-          <div class="background-layer" :style="{ backgroundImage: `url(${song.flagUrl})` }"></div>
-          <div class="number-container">
-            <div :class="song.id === 1 ? 'number-1' : 'number'">{{ song.id }}.</div>
-          </div>
-          <div class="image-overlay"></div>
-          <div class="info">
-            <div class="title">
-              <div class="span">{{ song.title }}</div>
+        <!-- Loading State -->
+        <div v-if="isLoading" class="loading-state">
+          <div class="spinner"></div>
+        </div>
+
+        <!-- Countries List -->
+        <div v-else class="countries-container">
+          <div class="music-title" v-for="(country, index) in data" :key="country.name || index">
+            <div class="background-layer" :style="{ backgroundImage: `url(${getCountryFlag(country.name || '')})` }"></div>
+            <div class="number-container">
+              <div :class="index === 0 ? 'number-1' : 'number'">{{ index + 1 }}.</div>
             </div>
-            <div class="p">{{ song.streams }} Streams</div>
+            <div class="image-overlay"></div>
+            <div class="info">
+              <div class="title">
+                <div class="span">{{ country.name || 'Unknown Country' }}</div>
+              </div>
+              <div class="p">{{ formatNumber(country.streams) }} Streams</div>
+            </div>
           </div>
+        </div>
+
+        <!-- Empty State -->
+        <div v-if="!isLoading && (!data || data.length === 0)" class="empty-state">
+          <div class="empty-message">Keine Länder gefunden</div>
         </div>
       </div>
     </div>
@@ -23,48 +35,136 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import Ger from '@/assets/images/Lander/G.png';
-import at from '@/assets/images/Lander/at.png';
-import us from '@/assets/images/Lander/us.png';
+import { ref } from 'vue';
 
-// افتراض بيانات من API
-const songs = ref([]);
+// ========== Props ==========
+const props = defineProps({
+  data: {
+    type: Array,
+    default: () => []
+  },
+  filters: {
+    type: Object,
+    default: () => ({})
+  }
+});
 
-const fetchSongs = async () => {
-    // محاكاة استدعاء API
-    const response = await new Promise(resolve => {
-        setTimeout(() => {
-            resolve([
-                { id: 1, title: "Germany", streams: "15.242", flagUrl: Ger },
-                { id: 2, title: "Austria", streams: "18.240", flagUrl: at },
-                { id: 3, title: "United States", streams: "15.200", flagUrl: us },
-                { id: 4, title: "France", streams: "12.800", flagUrl: "https://example.com/flags/france.jpg" },
-                { id: 5, title: "Italy", streams: "10.000", flagUrl: "https://example.com/flags/italy.jpg" },
-                { id: 6, title: "Spain", streams: "8.900", flagUrl: "https://example.com/flags/spain.jpg" },
-                { id: 7, title: "Portugal", streams: "7.500", flagUrl: "https://example.com/flags/portugal.jpg" },
-                { id: 8, title: "Netherlands", streams: "6.300", flagUrl: "https://example.com/flags/netherlands.jpg" },
-                { id: 9, title: "Belgium", streams: "5.100", flagUrl: "https://example.com/flags/belgium.jpg" },
-                { id: 10, title: "Denmark", streams: "4.200", flagUrl: "https://example.com/flags/denmark.jpg" },
-                { id: 11, title: "Sweden", streams: "3.800", flagUrl: "https://example.com/flags/sweden.jpg" },
-                { id: 12, title: "Norway", streams: "3.200", flagUrl: "https://example.com/flags/norway.jpg" },
-                { id: 13, title: "Finland", streams: "2.900", flagUrl: "https://example.com/flags/finland.jpg" },
-                { id: 14, title: "Poland", streams: "2.500", flagUrl: "https://example.com/flags/poland.jpg" },
-                { id: 15, title: "Czech Republic", streams: "2.100", flagUrl: "https://example.com/flags/czech.jpg" },
-                { id: 16, title: "Hungary", streams: "1.800", flagUrl: "https://example.com/flags/hungary.jpg" },
-                { id: 17, title: "Slovakia", streams: "1.500", flagUrl: "https://example.com/flags/slovakia.jpg" },
-                { id: 18, title: "Croatia", streams: "1.200", flagUrl: "https://example.com/flags/croatia.jpg" },
-                { id: 19, title: "Slovenia", streams: "1.000", flagUrl: "https://example.com/flags/slovenia.jpg" },
-                { id: 20, title: "Romania", streams: "900", flagUrl: "https://example.com/flags/romania.jpg" },
-            ]);
-        }, 1000);
-    });
-    songs.value = response;
+// ========== Reactive Data ==========
+const isLoading = ref(false);
+
+// خريطة لتحويل أسماء الدول إلى رموزها (كود البلد المكون من حرفين)
+const countryNameToCode = {
+  'germany': 'DE',
+  'deutschland': 'DE',
+  'austria': 'AT',
+  'österreich': 'AT',
+  'united states': 'US',
+  'usa': 'US',
+  'france': 'FR',
+  'italy': 'IT',
+  'italien': 'IT',
+  'spain': 'ES',
+  'spanien': 'ES',
+  'portugal': 'PT',
+  'netherlands': 'NL',
+  'niederlande': 'NL',
+  'belgium': 'BE',
+  'belgien': 'BE',
+  'denmark': 'DK',
+  'dänemark': 'DK',
+  'sweden': 'SE',
+  'schweden': 'SE',
+  'norway': 'NO',
+  'norwegen': 'NO',
+  'finland': 'FI',
+  'finnland': 'FI',
+  'poland': 'PL',
+  'polen': 'PL',
+  'czech republic': 'CZ',
+  'tschechien': 'CZ',
+  'hungary': 'HU',
+  'ungarn': 'HU',
+  'slovakia': 'SK',
+  'slowakei': 'SK',
+  'croatia': 'HR',
+  'kroatien': 'HR',
+  'slovenia': 'SI',
+  'slowenien': 'SI',
+  'romania': 'RO',
+  'rumänien': 'RO',
+  'united kingdom': 'GB',
+  'uk': 'GB',
+  'großbritannien': 'GB',
+  'canada': 'CA',
+  'australia': 'AU',
+  'australien': 'AU',
+  'japan': 'JP',
+  'south korea': 'KR',
+  'korea': 'KR',
+  'brazil': 'BR',
+  'brasilien': 'BR',
+  'mexico': 'MX',
+  'mexiko': 'MX',
+  'india': 'IN',
+  'indien': 'IN',
+  'switzerland': 'CH',
+  'schweiz': 'CH',
+  'turkey': 'TR',
+  'türkei': 'TR',
+  'greece': 'GR',
+  'griechenland': 'GR',
+  'ireland': 'IE',
+  'irland': 'IE',
+  'new zealand': 'NZ',
+  'neuseeland': 'NZ',
+  'south africa': 'ZA',
+  'südafrika': 'ZA',
+  'argentina': 'AR',
+  'argentinien': 'AR',
+  'chile': 'CL',
+  'colombia': 'CO',
+  'kolumbien': 'CO',
+  'peru': 'PE',
+  'venezuela': 'VE',
+  'egypt': 'EG',
+  'ägypten': 'EG',
+  'saudi arabia': 'SA',
+  'saudi-arabien': 'SA',
+  'united arab emirates': 'AE',
+  'uae': 'AE',
+  'israel': 'IL',
+  'russia': 'RU',
+  'russland': 'RU',
+  'china': 'CN',
+  'thailand': 'TH',
+  'vietnam': 'VN',
+  'malaysia': 'MY',
+  'singapore': 'SG',
+  'indonesia': 'ID',
+  'philippines': 'PH',
+  'pakistan': 'PK',
+  'nigeria': 'NG',
+  'kenya': 'KE',
+  'morocco': 'MA',
+  'marokko': 'MA',
 };
 
-onMounted(() => {
-    fetchSongs();
-});
+// ========== Utility Functions ==========
+const formatNumber = (num) => {
+  if (!num && num !== 0) return '0';
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+};
+
+const getCountryFlag = (countryName) => {
+  if (!countryName) return '';
+  const normalizedName = countryName.toLowerCase().trim();
+  const countryCode = countryNameToCode[normalizedName];
+  if (countryCode) {
+    // استخدام CDN للأعلام الدائرية
+    return `https://cdn.jsdelivr.net/npm/flag-icons@7.0.0/flags/4x3/${countryCode.toLowerCase()}.svg`;
+  }
+  return '';
+};
 </script>
 
 <style lang="scss" scoped>
@@ -111,11 +211,17 @@ onMounted(() => {
   gap: 20px;
   align-self: stretch;
   overflow-x: auto;
-  padding-right: 80px;
+  // padding-right: 80px;
   scrollbar-width: none;
   border-radius: 20px;
   flex-wrap: nowrap;
   min-width: auto;
+}
+
+.countries-container {
+  display: flex;
+  gap: 20px;
+  flex-wrap: nowrap;
 }
 
 .top-song::-webkit-scrollbar {
@@ -164,7 +270,7 @@ onMounted(() => {
 }
 
 .music-title:hover .background-layer {
-  filter: saturate(80%);
+  filter: saturate(80%) brightness(1.1);
 }
 
 .image-overlay {
@@ -230,7 +336,6 @@ onMounted(() => {
   z-index: 150;
   opacity: 0.7;
   transition: opacity 0.3s ease;
-  transform: translateZ(0); /* تحسين الأداء لمنع الـ "jump" */
 }
 
 .music-title:hover .info {
@@ -271,5 +376,42 @@ onMounted(() => {
   padding-top: 2px;
   z-index: 150;
 }
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 207px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(221, 17, 85, 0.1);
+  border-top-color: #DD1155;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 207px;
+}
+
+.empty-message {
+  color: #FFF;
+  font-family: Heebo;
+  font-size: 16px;
+  font-weight: 300;
+  opacity: 0.5;
+  text-align: center;
+}
 </style>
-```

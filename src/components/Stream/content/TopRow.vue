@@ -19,17 +19,24 @@ import FilterComboBox from './dropDown/FilterDropdown.vue';
 import Switch from './Switch.vue';
 
 defineProps(['isSwitchActive']);
-defineEmits(['toggle-switch']);
+const emit = defineEmits(['toggle-switch', 'filters-changed']);
 
 const zeitraumDropdown = ref(null);
 const filterDropdown = ref(null);
 
 const handleZeitraumSelect = (value) => {
   console.log('Zeitraum selected:', value);
+  if (value && typeof value === 'object') {
+    emit('filters-changed', value);
+    return;
+  }
+
+  emit('filters-changed', { dateType: value });
 };
 
 const handleFilterSelect = (value) => {
   console.log('Filter selected:', value);
+  emit('filters-changed', value);
 };
 </script>
 

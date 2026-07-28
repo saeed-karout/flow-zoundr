@@ -7,18 +7,18 @@
     <div v-else class="containers">
       <div class="first-row">
         <div class="hero-section">
-          <div class="row1">
+          
             <EinnahmenChart />
-          </div>
+         
           <div class="row2">
-            <EinnahmenChart />
+            <StreamsChart />
           </div>
         </div>
         <div class="second-col">
           <div class="box-werk">
             <div class="info">
               <div class="box-title">Aktuelles Guthaben</div>
-              <div class="total_money">2.761,66 EUR</div>
+              <div class="total_money">{{ formattedBalance }}</div>
             </div>
             <router-link to="/catalog" class="buttons">
               <span>Auszahlen</span>
@@ -102,7 +102,7 @@
                       <span>{{ release.artist_name || 'Artist' }}</span>
                       <h1>{{ release.title || 'Untitled' }}</h1>
                     </div>
-                    <p>5.240 Streams</p>
+                    <p>{{ formatStreams(release.streams) || '0' }} Streams</p>
                   </div>
                 </div>
               </div>
@@ -129,15 +129,24 @@ import apiRequest from "@/lib/apiRequest";
 import { storage_url } from "@/constants";
 import shadows from "@/assets/icons/dashboard/user/shadow.png";
 import EinnahmenChart from "@/components/Dashboard/EinnahmenChart.vue";
+import StreamsChart from "@/components/Dashboard/StreamsChart.vue";
+
 import Start from "@/components/Dashboard/Start.vue"; 
+import { useSubscriptionStore } from '@/stores/subscription';
+
+const subscriptionStore = useSubscriptionStore();
 
 const router = useRouter();
 const questionModalRef = ref(null);
 const settings = ref({});
 const releases = ref([]);
-const isLoading = ref(true); // متغير للتأكد من اكتمال التحميل
+const isLoading = ref(true);
+const balance = ref(0);
+const userUuid = ref(null);
+const userName = ref(null);
+const userEmail = ref(null);
 
-// متغير للتحكم بعرض Start - سيتم تحديثه بناءً على وجود Releases
+// متغير للتحكم بعرض Start
 const showStart = ref(true); 
 
 const contactImageUrl = computed(() => {
@@ -146,61 +155,225 @@ const contactImageUrl = computed(() => {
     : "../assets/icons/dashboard/user/user.jpg";
 });
 
-// جلب آخر 10 Releases
+// تنسيق الرصيد
+const formattedBalance = computed(() => {
+  if (balance.value === null || balance.value === undefined) {
+    return '0,00 EUR';
+  }
+  
+  const formatted = balance.value.toLocaleString('de-DE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+  
+  return `${formatted} EUR`;
+});
+
+// تنسيق عدد الاستماعات
+const formatStreams = (streams) => {
+  if (!streams && streams !== 0) return '0';
+  return streams.toLocaleString('de-DE');
+};
+
+// جلب بيانات المستخدم من localStorage أو store
+const getUserData = () => {
+  try {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      const parsed = JSON.parse(userData);
+      userUuid.value = parsed.uuid || parsed.id;
+      userName.value = parsed.name || parsed.username;
+      userEmail.value = parsed.email;
+      console.log('👤 User data loaded from localStorage:', { 
+        uuid: userUuid.value, 
+        name: userName.value, 
+        email: userEmail.value 
+      });
+      return true;
+    }
+    
+    const sessionUser = sessionStorage.getItem('user');
+    if (sessionUser) {
+      const parsed = JSON.parse(sessionUser);
+      userUuid.value = parsed.uuid || parsed.id;
+      userName.value = parsed.name || parsed.username;
+      userEmail.value = parsed.email;
+      console.log('👤 User data loaded from sessionStorage:', { 
+        uuid: userUuid.value, 
+        name: userName.value, 
+        email: userEmail.value 
+      });
+      return true;
+    }
+    
+    console.warn('⚠️ No user data found in storage');
+    return false;
+  } catch (error) {
+    console.error('❌ Error parsing user data:', error);
+    return false;
+  }
+};
+
+// جلب الرصيد من API
+const fetchBalance = async () => {
+  try {
+    if (!userUuid.value || !userName.value || !userEmail.value) {
+      console.warn('⚠️ Missing user data, cannot fetch balance');
+      return;
+    }
+    
+    const params = new URLSearchParams({
+      user_uuid: userUuid.value,
+      user_name: encodeURIComponent(userName.value),
+      user_email: encodeURIComponent(userEmail.value)
+    });
+    
+    const url = `/wallet/balance?${params.toString()}`;
+    console.log('💰 Fetching balance from:', url);
+    
+    const response = await apiRequest.get(url);
+    console.log('✅ Balance response:', response.data);
+    
+    if (response.data) {
+      if (typeof response.data === 'number') {
+        balance.value = response.data;
+      } 
+      else if (response.data.balance !== undefined) {
+        balance.value = response.data.balance;
+      }
+      else if (response.data.data && response.data.data.balance !== undefined) {
+        balance.value = response.data.data.balance;
+      }
+      else if (response.data.amount !== undefined) {
+        balance.value = response.data.amount;
+      }
+      else {
+        const possibleFields = ['total', 'amount', 'value', 'credit', 'balance_amount'];
+        let found = false;
+        for (const field of possibleFields) {
+          if (response.data[field] !== undefined && typeof response.data[field] === 'number') {
+            balance.value = response.data[field];
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          console.warn('⚠️ Could not find balance in response:', response.data);
+          balance.value = 0;
+        }
+      }
+    } else {
+      balance.value = 0;
+    }
+    
+    console.log('💰 Final balance:', balance.value);
+  } catch (error) {
+    console.error('❌ Error fetching balance:', error);
+    balance.value = 0;
+    
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      console.warn('⚠️ Authentication error, user may not be logged in');
+    }
+  }
+};
+
+// ========== جلب الـ Releases من API /releases ==========
 const fetchReleases = async () => {
   try {
-    const response = await apiRequest.get("/releases?per_page=10");
-    releases.value = response.data.data || [];
-    console.log("📦 Releases fetched:", releases.value);
-    console.log("📊 Number of releases:", releases.value.length);
+    console.log('📡 Fetching releases from /releases');
     
-    // تحديث showStart بناءً على وجود Releases
-    // إذا كان هناك Releases، نخفي Start ونظهر containers
+    // جلب جميع الـ Releases (يمكنك تحديد عدد معين)
+    const response = await apiRequest.get("/latest-releases");
+    console.log('📦 API Response:', response.data);
+    
+    // معالجة البيانات حسب هيكل الـ Response
+    let releasesData = [];
+    
+    if (response.data?.data && Array.isArray(response.data.data)) {
+      releasesData = response.data.data;
+    } else if (Array.isArray(response.data)) {
+      releasesData = response.data;
+    } else {
+      console.warn('⚠️ Unexpected data format from /releases:', response.data);
+      releasesData = [];
+    }
+    
+    releases.value = releasesData;
+    console.log(`✅ Loaded ${releases.value.length} releases`);
+    
+    // 🔥 التحقق من وجود Releases لتحديد عرض Start أم لا
     if (releases.value.length > 0) {
       showStart.value = false;
-      console.log("✅ Releases found, hiding Start and showing containers");
+      console.log('✅ Releases found, hiding Start and showing containers');
     } else {
       showStart.value = true;
-      console.log("❌ No releases found, showing Start");
+      console.log('❌ No releases found, showing Start');
     }
     
   } catch (error) {
     console.error("❌ Error fetching releases:", error);
     releases.value = [];
-    showStart.value = true; // في حالة الخطأ، نظهر Start
+    showStart.value = true;
   }
 };
 
 // الحصول على آخر 10 Releases (مرتبة حسب تاريخ الإنشاء)
 const recentReleases = computed(() => {
-  const sorted = [...releases.value].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 10);
-  console.log("📋 Recent releases:", sorted.length);
+  // ترتيب حسب created_at أو release_date
+  const sorted = [...releases.value].sort((a, b) => 
+    new Date(b.created_at || b.release_date || b.date) - 
+    new Date(a.created_at || a.release_date || a.date)
+  ).slice(0, 10);
+  
+  console.log(`📋 Recent releases: ${sorted.length} items`);
   return sorted;
 });
 
 // الحصول على رابط الصورة
 const getCoverUrl = (coverPath) => {
   if (!coverPath) return '';
-  return coverPath.startsWith('http') 
-    ? coverPath 
-    : `${storage_url}/${coverPath}`;
+  if (coverPath.startsWith('http')) return coverPath;
+  return `${storage_url}/${coverPath}`;
 };
 
 // الانتقال إلى صفحة تفاصيل الـ Release
 const goToReleaseDetail = (uuid) => {
-  router.push(`/releases/${uuid}`);
+  if (uuid) {
+    router.push(`/releases/${uuid}`);
+  }
 };
+
 
 onMounted(async () => {
   isLoading.value = true;
   
   try {
-    // جلب الإعدادات
+    // 1. جلب بيانات المستخدم أولاً
+    const userLoaded = getUserData();
+    
+    // 2. جلب الإعدادات
     const settingsResponse = await apiRequest.get("/settings");
     settings.value = settingsResponse.data || {};
     
-    // جلب الـ Releases - هذه الدالة ستقوم بتحديث showStart تلقائياً
+    // 3. جلب الرصيد (إذا توفرت بيانات المستخدم)
+    if (userLoaded) {
+      await fetchBalance();
+    } else {
+      console.warn('⚠️ Skipping balance fetch - no user data');
+      balance.value = 0;
+    }
+    
+    // 4. 🔥 جلب الـ Releases من API /releases
     await fetchReleases();
+    
+    // 5. 🔥 جلب حالة الاشتراك من API /subscription
+    try {
+      await subscriptionStore.fetchSubscription();
+      console.log('✅ Subscription status loaded:', subscriptionStore.isActive ? 'Active' : 'Inactive');
+    } catch (subError) {
+      console.warn('⚠️ Could not load subscription:', subError);
+      // لا نوقف التطبيق إذا فشل جلب الاشتراك
+    }
     
   } catch (error) {
     console.error("Error fetching data:", error);
@@ -213,23 +386,32 @@ onMounted(async () => {
       contact_image: null,
     };
     releases.value = [];
-    showStart.value = true; // في حالة الخطأ، نظهر Start
+    showStart.value = true;
+    balance.value = 0;
     
   } finally {
     isLoading.value = false;
-    console.log("🏁 Final showStart value:", showStart.value);
-    console.log("🏁 Final releases count:", releases.value.length);
+    console.log("🏁 Final state:", {
+      showStart: showStart.value,
+      releases: releases.value.length,
+      balance: balance.value,
+      subscriptionActive: subscriptionStore.isActive
+    });
   }
 });
-
+// ========== Functions ==========
 const makeCall = () => {
   const phone = settings.value.contact_phone;
-  window.location.href = `tel:${phone}`;
+  if (phone) {
+    window.location.href = `tel:${phone}`;
+  }
 };
 
 const openWhatsApp = () => {
   const whatsapp = settings.value.contact_whatsapp;
-  window.open(`https://wa.me/${whatsapp}`, "_blank");
+  if (whatsapp) {
+    window.open(`https://wa.me/${whatsapp}`, "_blank");
+  }
 };
 
 const openQuestionModal = () => {
@@ -245,7 +427,7 @@ const handleImageError = () => {
 </script>
 
 <style lang="scss" scoped>
-/* جميع الأنماط كما هي - لم يتغير شيء */
+/* جميع الأنماط كما هي - لم تتغير */
 .monthlyData,
 .dailyData {
   width: 100%;
@@ -299,21 +481,6 @@ main {
   gap: 20px;
   flex: 1 0 0;
   align-self: stretch;
-}
-
-.row1 {
-  display: flex;
-  height: 100%;
-  padding: 20px 30px 15px 30px;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 24px;
-  align-self: stretch;
-  border-radius: 20px;
-  background: var(--secondary);
-  position: relative;
-  min-height: 213px;
 }
 
 .row1 p,

@@ -14,7 +14,7 @@ const tiltRef = ref(null);
 onMounted(() => {
   if (tiltRef.value) {
     VanillaTilt.init(tiltRef.value, {
-      max: 15,
+      max: 5,
       speed: 400,
       scale: 1.02,
       glare: true,

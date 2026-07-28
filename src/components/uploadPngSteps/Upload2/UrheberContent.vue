@@ -6,11 +6,11 @@
         <div class="title">Komponist</div>
         <div
           v-for="(input, index) in komponistInputs"
-          :key="index"
+          :key="'komponist-' + index"
           class="form-field"
           :class="{ 
             'is-hovered': input.isHovered, 
-            'has-checkmark': input.value && input.value.trim() !== '' 
+            'has-checkmark': isValidName(input.value)
           }"
           @mouseenter="input.isHovered = true"
           @mouseleave="input.isHovered = false"
@@ -19,16 +19,16 @@
             type="text"
             class="input-field"
             v-model="input.value"
-            placeholder="Name Komponist"
+            placeholder="Vor- und Familienname"
             @input="updateKomponistValue(index, $event.target.value)"
           />
-          <div v-if="input.value && input.value.trim() !== ''" class="checkmark">
+          <div v-if="isValidName(input.value)" class="checkmark">
             <img src="@/assets/icons/y.png" class="icon-y" alt="checkmark" />
           </div>
           
-          <!-- Plus Icon - يظهر دائماً عند الهوفر على الحقل الأول -->
+          <!-- ✅ Plus icon يظهر عند hover فقط (بدون شرط isValidName) -->
           <div
-            v-if="index === 0 && input.isHovered"
+            v-if="index === 0 "
             class="plus-icon"
             @click="addKomponistInput"
           >
@@ -38,9 +38,8 @@
             </svg>
           </div>
           
-          <!-- Minus Icon - يظهر دائماً عند الهوفر على الحقول الإضافية -->
           <div
-            v-if="index > 0 && input.isHovered"
+            v-if="index > 0 "
             class="minus-icon"
             @click="removeKomponistInput(index)"
           >
@@ -49,11 +48,12 @@
             </svg>
           </div>
           
-          <div class="spacer" @click="emit('openVideoPopup', 'komponist')">
+          <div v-if="index === 0" class="spacer" @click="emit('openVideoPopup', 'komponist')">
             <div class="play" :class="{ visible: input.isHovered }">
               <img :src="iconPlay" class="icon" alt="play icon" />
             </div>
           </div>
+          <div v-else class="spacer-empty"></div>
         </div>
       </div>
 
@@ -62,11 +62,11 @@
         <div class="title">Textdichter</div>
         <div
           v-for="(input, index) in textdichterInputs"
-          :key="index"
+          :key="'textdichter-' + index"
           class="form-field"
           :class="{ 
             'is-hovered': input.isHovered, 
-            'has-checkmark': input.value && input.value.trim() !== '' 
+            'has-checkmark': isValidName(input.value)
           }"
           @mouseenter="input.isHovered = true"
           @mouseleave="input.isHovered = false"
@@ -75,16 +75,15 @@
             type="text"
             class="input-field"
             v-model="input.value"
-            placeholder="Name Textdichter"
+            placeholder="Vor- und Familienname"
             @input="updateTextdichterValue(index, $event.target.value)"
           />
-          <div v-if="input.value && input.value.trim() !== ''" class="checkmark">
+          <div v-if="isValidName(input.value)" class="checkmark">
             <img src="@/assets/icons/y.png" class="icon-y" alt="checkmark" />
           </div>
           
-          <!-- Plus Icon - يظهر دائماً عند الهوفر على الحقل الأول -->
           <div
-            v-if="index === 0 && input.isHovered"
+            v-if="index === 0"
             class="plus-icon"
             @click="addTextdichterInput"
           >
@@ -94,7 +93,6 @@
             </svg>
           </div>
           
-          <!-- Minus Icon - يظهر دائماً عند الهوفر على الحقول الإضافية -->
           <div
             v-if="index > 0 && input.isHovered"
             class="minus-icon"
@@ -105,11 +103,12 @@
             </svg>
           </div>
           
-          <div class="spacer" @click="emit('openVideoPopup', 'textdichter')">
+          <div v-if="index === 0" class="spacer" @click="emit('openVideoPopup', 'textdichter')">
             <div class="play" :class="{ visible: input.isHovered }">
               <img :src="iconPlay" class="icon" alt="play icon" />
             </div>
           </div>
+          <div v-else class="spacer-empty"></div>
         </div>
       </div>
     </div>
@@ -120,7 +119,7 @@
         <div class="title">Verlag</div>
         <div
           v-for="(input, index) in verlagInputs"
-          :key="index"
+          :key="'verlag-' + index"
           class="form-field"
           :class="{ 
             'is-hovered': input.isHovered, 
@@ -140,9 +139,8 @@
             <img src="@/assets/icons/y.png" class="icon-y" alt="checkmark" />
           </div>
           
-          <!-- Plus Icon - يظهر دائماً عند الهوفر على الحقل الأول -->
           <div
-            v-if="index === 0 && input.isHovered"
+            v-if="index === 0 "
             class="plus-icon"
             @click="addVerlagInput"
           >
@@ -152,7 +150,6 @@
             </svg>
           </div>
           
-          <!-- Minus Icon - يظهر دائماً عند الهوفر على الحقول الإضافية -->
           <div
             v-if="index > 0 && input.isHovered"
             class="minus-icon"
@@ -163,11 +160,12 @@
             </svg>
           </div>
           
-          <div class="spacer" @click="emit('openVideoPopup', 'verlag')">
+          <div v-if="index === 0" class="spacer" @click="emit('openVideoPopup', 'verlag')">
             <div class="play" :class="{ visible: input.isHovered }">
               <img :src="iconPlay" class="icon" alt="play icon" />
             </div>
           </div>
+          <div v-else class="spacer-empty"></div>
         </div>
       </div>
 
@@ -176,7 +174,7 @@
         <div class="title">C-Line</div>
         <div
           v-for="(input, index) in cLineInputs"
-          :key="index"
+          :key="'cline-' + index"
           class="form-field"
           :class="{ 
             'is-hovered': input.isHovered, 
@@ -196,19 +194,6 @@
             <img src="@/assets/icons/y.png" class="icon-y" alt="checkmark" />
           </div>
           
-          <!-- Plus Icon - يظهر دائماً عند الهوفر على الحقل الأول -->
-          <div
-            v-if="index === 0 && input.isHovered"
-            class="plus-icon"
-            @click="addCLineInput"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-          </div>
-          
-          <!-- Minus Icon - يظهر دائماً عند الهوفر على الحقول الإضافية -->
           <div
             v-if="index > 0 && input.isHovered"
             class="minus-icon"
@@ -219,11 +204,12 @@
             </svg>
           </div>
           
-          <div class="spacer" @click="emit('openVideoPopup', 'cline')">
+          <div v-if="index === 0" class="spacer" @click="emit('openVideoPopup', 'cline')">
             <div class="play" :class="{ visible: input.isHovered }">
               <img :src="iconPlay" class="icon" alt="play icon" />
             </div>
           </div>
+          <div v-else class="spacer-empty"></div>
         </div>
       </div>
     </div>
@@ -231,7 +217,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import iconPlay from '@/assets/icons/play.png';
 import { debounce } from '@/utils/debounce';
 
@@ -243,10 +229,22 @@ const props = defineProps({
   formData: {
     type: Object,
     default: () => ({})
+  },
+  activeTab: {
+    type: String,
+    default: 'urheber'
+  },
+  releaseCLine: {
+    type: String,
+    default: ''
   }
 });
 
 const emit = defineEmits(['openVideoPopup', 'update:form-data', 'save-song']);
+
+// ──── حالة حفظ البيانات ────
+const isSaving = ref(false);
+const saveQueue = ref([]);
 
 // ──── تهيئة البيانات المحلية ────
 const komponistInputs = ref([{ value: '', isHovered: false }]);
@@ -262,73 +260,275 @@ const previousValues = ref({
   c_line: []
 });
 
+
+
+// ──── دوال Autofill لـ Verlag ────
+const initializeVerlag = () => {
+  if (verlagInputs.value.length === 1 && 
+      (!verlagInputs.value[0].value || verlagInputs.value[0].value.trim() === '')) {
+    verlagInputs.value[0].value = 'Copyright Control';
+    updateVerlagValue(0, 'Copyright Control');
+    console.log('📌 Verlag initialized with Copyright Control');
+  }
+};
+
+// ──── دالة تهيئة C-Line من الـ Release ────
+const initializeCLineFromRelease = () => {
+  if (props.releaseCLine && props.releaseCLine.trim() !== '') {
+    const currentValues = cLineInputs.value.map(i => i.value);
+    const releaseCLineValue = props.releaseCLine.trim();
+    
+    if (!currentValues.includes(releaseCLineValue)) {
+      cLineInputs.value = [{ value: releaseCLineValue, isHovered: false }];
+      previousValues.value.c_line = [releaseCLineValue];
+      console.log('📌 C-Line initialized from Release:', releaseCLineValue);
+    }
+  }
+};
+
+// في UrheberContent.vue
+const isTabComplete = (tabId) => {
+  if (tabId !== 'urheber') return true;
+  
+  // ✅ التحقق من Komponist - يجب أن يكون لدينا على الأقل اسم واحد صالح
+  const komponistValid = komponistInputs.value.some(input => 
+    input.value && input.value.trim() !== '' && isValidName(input.value)
+  );
+  
+  // ✅ التحقق من Textdichter - يجب أن يكون لدينا على الأقل اسم واحد صالح
+  const textdichterValid = textdichterInputs.value.some(input => 
+    input.value && input.value.trim() !== '' && isValidName(input.value)
+  );
+  
+  // ✅ التحقق من Verlag - يجب أن يكون لدينا على الأقل قيمة واحدة غير فارغة
+  const verlagValid = verlagInputs.value.some(input => 
+    input.value && input.value.trim() !== ''
+  );
+  
+  // ✅ التحقق من C-Line - يجب أن يكون لدينا على الأقل قيمة واحدة غير فارغة
+  const cLineValid = cLineInputs.value.some(input => 
+    input.value && input.value.trim() !== ''
+  );
+  
+  const isComplete = komponistValid && textdichterValid && verlagValid && cLineValid;
+  
+  console.log(`📌 [UrheberContent] isTabComplete: ${isComplete}`);
+  console.log(`   - Komponist valid: ${komponistValid}`);
+  console.log(`   - Textdichter valid: ${textdichterValid}`);
+  console.log(`   - Verlag valid: ${verlagValid}`);
+  console.log(`   - C-Line valid: ${cLineValid}`);
+  
+  return isComplete;
+};
+
+// دالة التحقق من صحة الاسم (4 أحرف على الأقل + مسافة)
+const isValidName = (value) => {
+  if (!value || value.trim() === '') return false;
+  const trimmed = value.trim();
+  const lettersOnly = trimmed.replace(/\s/g, '');
+  return lettersOnly.length >= 4 && trimmed.includes(' ');
+};
+// ========== ✅ دالة إرسال تحديث الاكتمال ==========
+const emitTabCompletion = () => {
+  const isComplete = isTabComplete('urheber');
+  console.log('📌 [UrheberContent] Emitting tab completion:', isComplete);
+  
+  emit('update:form-data', {
+    tab: 'urheber',
+    data: { isComplete }
+  });
+};
+
 // ──── تحديث البيانات من props ────
 const updateFromProps = () => {
   if (!props.currentSong?.uuid) return;
 
   console.log('🔄 UrheberContent: تحديث من currentSong', props.currentSong);
 
-  // Komponist - من authors.composer
-  if (props.currentSong.authors?.composer) {
+  // ✅ Komponist
+  if (props.currentSong.authors?.composer && props.currentSong.authors.composer.length > 0) {
     const composerArray = Array.isArray(props.currentSong.authors.composer) 
       ? props.currentSong.authors.composer 
-      : props.currentSong.authors.composer ? [props.currentSong.authors.composer] : [];
+      : [props.currentSong.authors.composer];
     
-    komponistInputs.value = composerArray.length > 0 
-      ? composerArray.map(value => ({ value: value || '', isHovered: false }))
-      : [{ value: '', isHovered: false }];
-    
+    const currentValues = komponistInputs.value.map(i => i.value);
+    if (JSON.stringify(currentValues) !== JSON.stringify(composerArray)) {
+      komponistInputs.value = composerArray.map(value => ({ value: value || '', isHovered: false }));
+    }
     previousValues.value.komponist = [...composerArray];
+  } else {
+    komponistInputs.value = [{ value: '', isHovered: false }];
+    previousValues.value.komponist = [];
   }
 
-  // Textdichter - من authors.lyricist
-  if (props.currentSong.authors?.lyricist) {
+  // ✅ Textdichter
+  if (props.currentSong.authors?.lyricist && props.currentSong.authors.lyricist.length > 0) {
     const lyricistArray = Array.isArray(props.currentSong.authors.lyricist) 
       ? props.currentSong.authors.lyricist 
-      : props.currentSong.authors.lyricist ? [props.currentSong.authors.lyricist] : [];
+      : [props.currentSong.authors.lyricist];
     
-    textdichterInputs.value = lyricistArray.length > 0 
-      ? lyricistArray.map(value => ({ value: value || '', isHovered: false }))
-      : [{ value: '', isHovered: false }];
-    
+    const currentValues = textdichterInputs.value.map(i => i.value);
+    if (JSON.stringify(currentValues) !== JSON.stringify(lyricistArray)) {
+      textdichterInputs.value = lyricistArray.map(value => ({ value: value || '', isHovered: false }));
+    }
     previousValues.value.textdichter = [...lyricistArray];
+  } else {
+    textdichterInputs.value = [{ value: '', isHovered: false }];
+    previousValues.value.textdichter = [];
   }
 
-  // Verlag - من authors.verlog (ملاحظة: verlog وليس verlag)
-  if (props.currentSong.authors?.verlog) {
+  // ✅ Verlag
+  if (props.currentSong.authors?.verlog && props.currentSong.authors.verlog.length > 0) {
     const verlogArray = Array.isArray(props.currentSong.authors.verlog) 
       ? props.currentSong.authors.verlog 
-      : props.currentSong.authors.verlog ? [props.currentSong.authors.verlog] : [];
+      : [props.currentSong.authors.verlog];
     
-    verlagInputs.value = verlogArray.length > 0 
-      ? verlogArray.map(value => ({ value: value || '', isHovered: false }))
-      : [{ value: '', isHovered: false }];
-    
+    const currentValues = verlagInputs.value.map(i => i.value);
+    if (JSON.stringify(currentValues) !== JSON.stringify(verlogArray)) {
+      verlagInputs.value = verlogArray.map(value => ({ value: value || '', isHovered: false }));
+    }
     previousValues.value.verlag = [...verlogArray];
+  } else {
+    if (!verlagInputs.value[0]?.value || verlagInputs.value[0].value.trim() === '') {
+      verlagInputs.value = [{ value: 'Copyright Control', isHovered: false }];
+      previousValues.value.verlag = ['Copyright Control'];
+    }
   }
 
-  // C-Line - من authors.c_line
-  if (props.currentSong.authors?.c_line) {
+  // ✅ C-Line
+  initializeCLineFromRelease();
+  
+  if (props.currentSong.authors?.c_line && props.currentSong.authors.c_line.length > 0) {
     const cLineArray = Array.isArray(props.currentSong.authors.c_line) 
       ? props.currentSong.authors.c_line 
-      : props.currentSong.authors.c_line ? [props.currentSong.authors.c_line] : [];
+      : [props.currentSong.authors.c_line];
     
-    cLineInputs.value = cLineArray.length > 0 
-      ? cLineArray.map(value => ({ value: value || '', isHovered: false }))
-      : [{ value: '', isHovered: false }];
-    
+    const currentValues = cLineInputs.value.map(i => i.value);
+    if (JSON.stringify(currentValues) !== JSON.stringify(cLineArray)) {
+      cLineInputs.value = cLineArray.map(value => ({ value: value || '', isHovered: false }));
+    }
     previousValues.value.c_line = [...cLineArray];
+  } else if (!props.releaseCLine || props.releaseCLine.trim() === '') {
+    cLineInputs.value = [{ value: '', isHovered: false }];
+    previousValues.value.c_line = [];
   }
+
+  setTimeout(() => {
+    emitTabCompletion();
+  }, 100);
 };
 
-// ──── دالة إرسال التحديثات - ترسل فقط القيم المتغيرة ────
+// ──── دالة معالجة نجاح الحفظ ────
+const handleSaveComplete = (event) => {
+  const { success, songUuid, error } = event.detail || {};
+  
+  if (success) {
+    console.log('✅ UrheberContent: تم استلام إشارة نجاح الحفظ للأغنية:', songUuid);
+  } else {
+    console.warn('⚠️ UrheberContent: فشل الحفظ:', error);
+  }
+  
+  isSaving.value = false;
+  
+  setTimeout(() => {
+    if (saveQueue.value.length > 0) {
+      console.log(`📦 UrheberContent: معالجة ${saveQueue.value.length} عناصر في قائمة الانتظار`);
+      processSaveQueue();
+    }
+  }, 200);
+};
+
+// ──── دالة معالجة قائمة الانتظار ────
+const processSaveQueue = () => {
+  if (saveQueue.value.length === 0) {
+    isSaving.value = false;
+    console.log('✅ UrheberContent: جميع التغييرات تم حفظها');
+    return;
+  }
+  
+  const latestSave = saveQueue.value.pop();
+  saveQueue.value = [];
+  
+  const payload = {};
+  let hasChanges = false;
+  
+  if (JSON.stringify(latestSave.komponist) !== JSON.stringify(previousValues.value.komponist)) {
+    payload['authors'] = payload['authors'] || {};
+    payload['authors']['composer'] = latestSave.komponist;
+    hasChanges = true;
+  }
+  
+  if (JSON.stringify(latestSave.textdichter) !== JSON.stringify(previousValues.value.textdichter)) {
+    payload['authors'] = payload['authors'] || {};
+    payload['authors']['lyricist'] = latestSave.textdichter;
+    hasChanges = true;
+  }
+  
+  if (JSON.stringify(latestSave.verlag) !== JSON.stringify(previousValues.value.verlag)) {
+    payload['authors'] = payload['authors'] || {};
+    payload['authors']['verlog'] = latestSave.verlag;
+    hasChanges = true;
+  }
+  
+  if (JSON.stringify(latestSave.c_line) !== JSON.stringify(previousValues.value.c_line)) {
+    payload['authors'] = payload['authors'] || {};
+    payload['authors']['c_line'] = latestSave.c_line;
+    hasChanges = true;
+  }
+  
+  if (!hasChanges) {
+    isSaving.value = false;
+    return;
+  }
+  
+  if (payload['authors'] && Object.keys(payload['authors']).length === 0) {
+    delete payload['authors'];
+  }
+  
+  previousValues.value = {
+    komponist: [...latestSave.komponist],
+    textdichter: [...latestSave.textdichter],
+    verlag: [...latestSave.verlag],
+    c_line: [...latestSave.c_line]
+  };
+  
+  isSaving.value = true;
+  emit('save-song', payload);
+};
+
+// ──── دالة إرسال التحديثات ────
 const sendUpdate = () => {
   if (!props.currentSong?.uuid) {
     console.warn('⚠️ UrheberContent: لا يوجد UUID للأغنية');
     return;
   }
 
-  // تجميع القيم الحالية
+  if (isSaving.value) {
+    const dataToSave = {
+      komponist: komponistInputs.value
+        .map(input => (input.value || '').trim())
+        .filter(value => value !== ''),
+      textdichter: textdichterInputs.value
+        .map(input => (input.value || '').trim())
+        .filter(value => value !== ''),
+      verlag: verlagInputs.value
+        .map(input => (input.value || '').trim())
+        .filter(value => value !== ''),
+      c_line: cLineInputs.value
+        .map(input => (input.value || '').trim())
+        .filter(value => value !== '')
+    };
+    
+    const isDuplicate = saveQueue.value.some(item => 
+      JSON.stringify(item) === JSON.stringify(dataToSave)
+    );
+    
+    if (!isDuplicate) {
+      saveQueue.value.push(dataToSave);
+    }
+    return;
+  }
+
   const currentKomponist = komponistInputs.value
     .map(input => (input.value || '').trim())
     .filter(value => value !== '');
@@ -348,58 +548,42 @@ const sendUpdate = () => {
   const payload = {};
   let hasChanges = false;
 
-  // مقارنة Komponist
   if (JSON.stringify(currentKomponist) !== JSON.stringify(previousValues.value.komponist)) {
     payload['authors'] = payload['authors'] || {};
-    payload['authors']['composer'] = currentKomponist.length > 0 ? currentKomponist : [];
-    console.log('🔄 تغيير في Komponist:', { 
-      قديم: previousValues.value.komponist, 
-      جديد: currentKomponist 
-    });
+    payload['authors']['composer'] = currentKomponist;
     hasChanges = true;
   }
 
-  // مقارنة Textdichter
   if (JSON.stringify(currentTextdichter) !== JSON.stringify(previousValues.value.textdichter)) {
     payload['authors'] = payload['authors'] || {};
-    payload['authors']['lyricist'] = currentTextdichter.length > 0 ? currentTextdichter : [];
-    console.log('🔄 تغيير في Textdichter:', { 
-      قديم: previousValues.value.textdichter, 
-      جديد: currentTextdichter 
-    });
+    payload['authors']['lyricist'] = currentTextdichter;
     hasChanges = true;
   }
 
-  // مقارنة Verlag (ملاحظة: verlog وليس verlag)
   if (JSON.stringify(currentVerlag) !== JSON.stringify(previousValues.value.verlag)) {
     payload['authors'] = payload['authors'] || {};
-    payload['authors']['verlog'] = currentVerlag.length > 0 ? currentVerlag : [];
-    console.log('🔄 تغيير في Verlag:', { 
-      قديم: previousValues.value.verlag, 
-      جديد: currentVerlag 
-    });
+    payload['authors']['verlog'] = currentVerlag;
     hasChanges = true;
   }
 
-  // مقارنة C-Line
   if (JSON.stringify(currentCLine) !== JSON.stringify(previousValues.value.c_line)) {
     payload['authors'] = payload['authors'] || {};
-    payload['authors']['c_line'] = currentCLine.length > 0 ? currentCLine : [];
-    console.log('🔄 تغيير في C-Line:', { 
-      قديم: previousValues.value.c_line, 
-      جديد: currentCLine 
-    });
+    payload['authors']['c_line'] = currentCLine;
     hasChanges = true;
   }
 
   if (!hasChanges) {
     console.log('ℹ️ UrheberContent: لا توجد تغييرات');
+    isSaving.value = false;
     return;
   }
 
-  console.log('📤 UrheberContent: إرسال التغييرات فقط:', payload);
+  if (payload['authors'] && Object.keys(payload['authors']).length === 0) {
+    delete payload['authors'];
+  }
 
-  // تحديث القيم السابقة
+  console.log('📤 UrheberContent: إرسال التغييرات:', payload);
+  
   previousValues.value = {
     komponist: [...currentKomponist],
     textdichter: [...currentTextdichter],
@@ -407,31 +591,63 @@ const sendUpdate = () => {
     c_line: [...currentCLine]
   };
 
-  // إرسال فقط التغييرات
+  isSaving.value = true;
   emit('save-song', payload);
 };
 
-// ──── إنشاء دالة debounce للإرسال ────
-const debouncedSendUpdate = debounce(sendUpdate, 1500);
+const debouncedSendUpdate = debounce(() => {
+  sendUpdate();
+}, 1200);
 
 // ──── دوال إدارة Komponist ────
 const updateKomponistValue = (index, value) => {
   if (komponistInputs.value[index]) {
     komponistInputs.value[index].value = value || '';
     debouncedSendUpdate();
+    setTimeout(() => emitTabCompletion(), 300);
   }
 };
 
+// ✅ دالة الإضافة - تعمل بشكل مباشر ومتكرر
 const addKomponistInput = () => {
   komponistInputs.value.push({ value: '', isHovered: false });
-  debouncedSendUpdate();
+  // تعيين isHovered على العنصر الجديد فوراً
+  const newIndex = komponistInputs.value.length - 1;
+  komponistInputs.value[newIndex].isHovered = true;
+  // إزالة isHovered من جميع العناصر الأخرى
+  komponistInputs.value.forEach((item, i) => {
+    if (i !== newIndex) {
+      item.isHovered = false;
+    }
+  });
+  if (!isSaving.value) debouncedSendUpdate();
+  setTimeout(() => emitTabCompletion(), 300);
 };
 
+// ✅ دالة الحذف - تعمل بشكل مباشر ومتكرر
 const removeKomponistInput = (index) => {
   if (komponistInputs.value.length > 1) {
     komponistInputs.value.splice(index, 1);
-    debouncedSendUpdate();
+    // تعيين isHovered على العنصر التالي فوراً
+    if (komponistInputs.value[index]) {
+      komponistInputs.value[index].isHovered = true;
+      komponistInputs.value.forEach((item, i) => {
+        if (i !== index) {
+          item.isHovered = false;
+        }
+      });
+    } else if (komponistInputs.value.length > 0) {
+      const lastIndex = komponistInputs.value.length - 1;
+      komponistInputs.value[lastIndex].isHovered = true;
+      komponistInputs.value.forEach((item, i) => {
+        if (i !== lastIndex) {
+          item.isHovered = false;
+        }
+      });
+    }
+    if (!isSaving.value) debouncedSendUpdate();
   }
+  setTimeout(() => emitTabCompletion(), 300);
 };
 
 // ──── دوال إدارة Textdichter ────
@@ -439,19 +655,45 @@ const updateTextdichterValue = (index, value) => {
   if (textdichterInputs.value[index]) {
     textdichterInputs.value[index].value = value || '';
     debouncedSendUpdate();
+    setTimeout(() => emitTabCompletion(), 300);
   }
 };
 
 const addTextdichterInput = () => {
   textdichterInputs.value.push({ value: '', isHovered: false });
-  debouncedSendUpdate();
+  const newIndex = textdichterInputs.value.length - 1;
+  textdichterInputs.value[newIndex].isHovered = true;
+  textdichterInputs.value.forEach((item, i) => {
+    if (i !== newIndex) {
+      item.isHovered = false;
+    }
+  });
+  if (!isSaving.value) debouncedSendUpdate();
+  setTimeout(() => emitTabCompletion(), 300);
 };
 
 const removeTextdichterInput = (index) => {
   if (textdichterInputs.value.length > 1) {
     textdichterInputs.value.splice(index, 1);
-    debouncedSendUpdate();
+    if (textdichterInputs.value[index]) {
+      textdichterInputs.value[index].isHovered = true;
+      textdichterInputs.value.forEach((item, i) => {
+        if (i !== index) {
+          item.isHovered = false;
+        }
+      });
+    } else if (textdichterInputs.value.length > 0) {
+      const lastIndex = textdichterInputs.value.length - 1;
+      textdichterInputs.value[lastIndex].isHovered = true;
+      textdichterInputs.value.forEach((item, i) => {
+        if (i !== lastIndex) {
+          item.isHovered = false;
+        }
+      });
+    }
+    if (!isSaving.value) debouncedSendUpdate();
   }
+  setTimeout(() => emitTabCompletion(), 300);
 };
 
 // ──── دوال إدارة Verlag ────
@@ -459,19 +701,45 @@ const updateVerlagValue = (index, value) => {
   if (verlagInputs.value[index]) {
     verlagInputs.value[index].value = value || '';
     debouncedSendUpdate();
+    setTimeout(() => emitTabCompletion(), 300);
   }
 };
 
 const addVerlagInput = () => {
   verlagInputs.value.push({ value: '', isHovered: false });
-  debouncedSendUpdate();
+  const newIndex = verlagInputs.value.length - 1;
+  verlagInputs.value[newIndex].isHovered = true;
+  verlagInputs.value.forEach((item, i) => {
+    if (i !== newIndex) {
+      item.isHovered = false;
+    }
+  });
+  if (!isSaving.value) debouncedSendUpdate();
+  setTimeout(() => emitTabCompletion(), 300);
 };
 
 const removeVerlagInput = (index) => {
   if (verlagInputs.value.length > 1) {
     verlagInputs.value.splice(index, 1);
-    debouncedSendUpdate();
+    if (verlagInputs.value[index]) {
+      verlagInputs.value[index].isHovered = true;
+      verlagInputs.value.forEach((item, i) => {
+        if (i !== index) {
+          item.isHovered = false;
+        }
+      });
+    } else if (verlagInputs.value.length > 0) {
+      const lastIndex = verlagInputs.value.length - 1;
+      verlagInputs.value[lastIndex].isHovered = true;
+      verlagInputs.value.forEach((item, i) => {
+        if (i !== lastIndex) {
+          item.isHovered = false;
+        }
+      });
+    }
+    if (!isSaving.value) debouncedSendUpdate();
   }
+  setTimeout(() => emitTabCompletion(), 300);
 };
 
 // ──── دوال إدارة C-Line ────
@@ -479,39 +747,110 @@ const updateCLineValue = (index, value) => {
   if (cLineInputs.value[index]) {
     cLineInputs.value[index].value = value || '';
     debouncedSendUpdate();
+    setTimeout(() => emitTabCompletion(), 300);
   }
 };
 
 const addCLineInput = () => {
   cLineInputs.value.push({ value: '', isHovered: false });
-  debouncedSendUpdate();
+  const newIndex = cLineInputs.value.length - 1;
+  cLineInputs.value[newIndex].isHovered = true;
+  cLineInputs.value.forEach((item, i) => {
+    if (i !== newIndex) {
+      item.isHovered = false;
+    }
+  });
+  if (!isSaving.value) debouncedSendUpdate();
+  setTimeout(() => emitTabCompletion(), 300);
 };
 
 const removeCLineInput = (index) => {
   if (cLineInputs.value.length > 1) {
     cLineInputs.value.splice(index, 1);
-    debouncedSendUpdate();
+    if (cLineInputs.value[index]) {
+      cLineInputs.value[index].isHovered = true;
+      cLineInputs.value.forEach((item, i) => {
+        if (i !== index) {
+          item.isHovered = false;
+        }
+      });
+    } else if (cLineInputs.value.length > 0) {
+      const lastIndex = cLineInputs.value.length - 1;
+      cLineInputs.value[lastIndex].isHovered = true;
+      cLineInputs.value.forEach((item, i) => {
+        if (i !== lastIndex) {
+          item.isHovered = false;
+        }
+      });
+    }
+    if (!isSaving.value) debouncedSendUpdate();
   }
+  setTimeout(() => emitTabCompletion(), 300);
 };
 
 // ──── مراقبة تغييرات currentSong ────
-watch(() => props.currentSong, (newSong) => {
+watch(() => props.currentSong, (newSong, oldSong) => {
+  if (newSong?.uuid === oldSong?.uuid && oldSong) {
+    console.log('⏭️ UrheberContent: تخطي watch (نفس UUID)');
+    return;
+  }
+  
   if (newSong?.uuid) {
+    if (newSong.authors?.composer) {
+      previousValues.value.komponist = [...newSong.authors.composer];
+    }
+    if (newSong.authors?.lyricist) {
+      previousValues.value.textdichter = [...newSong.authors.lyricist];
+    }
+    if (newSong.authors?.verlog) {
+      previousValues.value.verlag = [...newSong.authors.verlog];
+    }
+    if (newSong.authors?.c_line) {
+      previousValues.value.c_line = [...newSong.authors.c_line];
+    }
     updateFromProps();
   }
 }, { deep: true, immediate: true });
 
-// ──── إرسال تحديث فوري عند إزالة المكون ────
-onUnmounted(() => {
-  console.log('🗑️ UrheberContent: تم إزالة المكون');
-  if (debouncedSendUpdate.flush) {
-    debouncedSendUpdate.flush();
+// ──── مراقبة تغييرات releaseCLine ────
+watch(() => props.releaseCLine, (newCLine) => {
+  if (newCLine && newCLine.trim() !== '') {
+    const currentValues = cLineInputs.value.map(i => i.value);
+    if (!currentValues.includes(newCLine.trim())) {
+      cLineInputs.value = [{ value: newCLine.trim(), isHovered: false }];
+      previousValues.value.c_line = [newCLine.trim()];
+      console.log('📌 C-Line updated from Release:', newCLine);
+      emitTabCompletion();
+    }
   }
-});
+}, { immediate: true });
 
+// ──── دورة الحياة ────
 onMounted(() => {
   console.log('🚀 UrheberContent: تم التحميل');
   updateFromProps();
+  initializeVerlag();
+  window.addEventListener('save-song-complete', handleSaveComplete);
+});
+
+onUnmounted(() => {
+  console.log('🗑️ UrheberContent: تم إزالة المكون');
+  window.removeEventListener('save-song-complete', handleSaveComplete);
+  
+  if (debouncedSendUpdate.cancel) {
+    debouncedSendUpdate.cancel();
+  }
+  
+  if (saveQueue.value.length > 0) {
+    if (!isSaving.value) {
+      processSaveQueue();
+    }
+  }
+});
+
+// ========== ✅ تصدير الدوال ==========
+defineExpose({
+  isTabComplete
 });
 </script>
 
@@ -523,7 +862,6 @@ onMounted(() => {
   flex-direction: column;
   gap: 20px;
   width: 100%;
-  padding-right: 40px;
 }
 
 .frame {
@@ -603,6 +941,7 @@ onMounted(() => {
   width: 18px;
 }
 
+/* ✅ أيقونات تظهر عند hover مع z-index عالي */
 .form-field .plus-icon,
 .form-field .minus-icon {
   position: absolute;
@@ -616,12 +955,22 @@ onMounted(() => {
   cursor: pointer;
   border-radius: 50%;
   color: var(--primary);
-  transition: opacity 0.3s ease-in-out;
+  transition: opacity 0.2s ease-in-out;
   opacity: 0;
+  z-index: 10;
+  align-items: center;
+  justify-content: center;
 }
 
+/* ✅ تظهر عند hover على الحقل */
 .form-field:hover .plus-icon,
 .form-field:hover .minus-icon {
+  opacity: 1;
+}
+
+/* ✅ تظهر أيضاً عندما يكون isHovered = true */
+.form-field.is-hovered .plus-icon,
+.form-field.is-hovered .minus-icon {
   opacity: 1;
 }
 
@@ -645,6 +994,16 @@ onMounted(() => {
   border-radius: 5px;
   position: relative;
   cursor: pointer;
+}
+
+.form-field .spacer-empty {
+  display: flex;
+  width: 34px;
+  height: 46px;
+  padding: 9px 10px;
+  align-items: center;
+  border-radius: 5px;
+  position: relative;
 }
 
 .form-field .spacer .play {

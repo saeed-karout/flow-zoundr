@@ -4,33 +4,838 @@ import { defineStore } from "pinia";
 export const useReleaseStore = defineStore('release', {
   state: () => ({
     releaseType: null,
+    releaseTypeValue: null,
     currentReleaseId: null,
     pendingCoverFile: null,
     songUuid: null,         
     currentSongTitle: null,
+    currentSongNumber: null,
+    currentStep: 1,
+    metasPage: 'right',
+    isMetasComplete: false,
+    isSongsComplete: false,
+    isShopsComplete: false,
+    isPublishComplete: false,
+    draftRelease: null,
+    serverCoverUrl: null,
+    _startComplete: false,
+    _isUpdating: false,
+    _isReturningFromSongs: false,
+    _preserveSongsComplete: false,
+    
+    // ✅ tabCompletion - مخزن حالات اكتمال التبويبات
+    tabCompletion: {
+      infos: false,
+      urheber: false,
+      mitwirkende: false,
+      deals: false,
+      'pre-release': false
+    },
+    
+    metasData: {
+      title: '',
+      subtitle: '',
+      releaseDate: null,
+      artists: [],
+      releasePrice: null,
+      songPrice: null,
+      mainGenre: '',
+      subGenre: '',
+      label: '',
+      productionYear: null,
+      cLineYear: null,
+      cLineName: '',
+      pLineYear: null,
+      pLineName: '',
+      gtin: '',
+      catalogNumber: ''
+    }
   }),
+  
+  getters: {
+    hasCover: (state) => {
+      if (state.metasData?.cover) return true;
+      if (state.serverCoverUrl && state.serverCoverUrl !== '/img/bgCardSongs/card1.png') return true;
+      if (state.draftRelease?.cover) return true;
+      return false;
+    },
+    
+    isStartComplete: (state) => {
+      if (state._startComplete !== undefined && state._startComplete !== null) {
+        return state._startComplete === true;
+      }
+      const hasReleaseType = !!(state.releaseType || state.releaseTypeValue);
+      return hasReleaseType && state.hasCover;
+    },
+    
+    isCurrentStepComplete: (state) => {
+      switch (state.currentStep) {
+        case 1: return state.isStartComplete === true;
+        case 2: return state.isMetasComplete === true;
+        case 3: return state.isSongsComplete === true;
+        case 4: return state.isShopsComplete === true;
+        case 5: return state.isPublishComplete === true;
+        default: return false;
+      }
+    },
+    
+    hasBasicMetasData: (state) => {
+      const hasTitle = Boolean(state.metasData.title && state.metasData.title.trim() !== '');
+      const hasArtists = Boolean(
+        state.metasData.artists &&
+        state.metasData.artists.length > 0 && 
+        state.metasData.artists.some(a => a && a.trim() !== '')
+      );
+      const hasReleaseDate = Boolean(state.metasData.releaseDate && state.metasData.releaseDate.trim() !== '');
+      return hasTitle && hasArtists && hasReleaseDate;
+    },
+    
+    getMetasData: (state) => {
+      return { ...state.metasData };
+    },
+    
+    getMetasPage: (state) => {
+      return state.metasPage;
+    },
+    
+    // ✅ Getter للتحقق من اكتمال تبويب معين
+    isTabComplete: (state) => (tabId) => {
+      return state.tabCompletion[tabId] || false;
+    },
+    
+    // ✅ Getter للحصول على جميع التبويبات المكتملة
+    getCompletedTabs: (state) => {
+      return Object.keys(state.tabCompletion).filter(key => state.tabCompletion[key] === true);
+    },
+    
+    // ✅ Getter للتحقق من أن جميع التبويبات مكتملة
+    areAllTabsComplete: (state) => {
+      return Object.values(state.tabCompletion).every(value => value === true);
+    }
+  },
+  
   actions: {
+    setStartComplete(value) {
+      const booleanValue = value === true;
+      if (this._startComplete !== booleanValue) {
+        this._startComplete = booleanValue;
+        console.log('📌 Store: _startComplete set to', booleanValue);
+        
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('store-updated', {
+            detail: { 
+              type: 'start-complete', 
+              value: booleanValue,
+              timestamp: Date.now()
+            }
+          }));
+        }
+      }
+    },
+    
     setReleaseType(type) {
       this.releaseType = type;
+      this.updateStartComplete();
     },
+    
+    setReleaseTypeValue(value) {
+      this.releaseTypeValue = value;
+      this.updateStartComplete();
+    },
+    
+    updateStartComplete() {
+      const hasReleaseType = !!(this.releaseType || this.releaseTypeValue);
+      const hasCover = this.hasCover;
+      const isComplete = hasReleaseType && hasCover;
+      
+      if (this._startComplete !== isComplete) {
+        this._startComplete = isComplete;
+        console.log('📌 Store: _startComplete auto-updated to', isComplete);
+        
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('store-updated', {
+            detail: { 
+              type: 'start-complete', 
+              value: isComplete,
+              timestamp: Date.now()
+            }
+          }));
+        }
+      }
+    },
+    
     setCurrentReleaseId(id) {
       this.currentReleaseId = id;
     },
+    
     setPendingCover(file) {
       this.pendingCoverFile = file;
     },
+    
     clearPendingCover() {
       this.pendingCoverFile = null;
     },
-    setCurrentSongTitle(title) { // إضافة هذه الدالة
-      this.currentSongTitle = title
+    
+    setDraftRelease(release) {
+      this.draftRelease = release;
+      if (release?.cover) {
+        const STORAGE_URL = import.meta.env.VITE_STORAGE_URL || 'https://zoundr-flow-api.davinda.dev/storage';
+        const coverUrl = release.cover.startsWith('http') ? release.cover : `${STORAGE_URL}/${release.cover}`;
+        this.serverCoverUrl = coverUrl;
+        console.log('🖼️ Store: draftRelease and serverCoverUrl updated');
+        this.updateStartComplete();
+      }
     },
-    setSongUuid(uuid) {       // ← جديد
+    
+    setServerCoverUrl(url) {
+      this.serverCoverUrl = url;
+      console.log('🖼️ Store: serverCoverUrl set to:', url);
+      this.updateStartComplete();
+    },
+    
+    setCurrentSongTitle(title) {
+      this.currentSongTitle = title;
+      console.log('🎵 Store: currentSongTitle set to:', title);
+    },
+    
+    setCurrentSongNumber(number) {
+      this.currentSongNumber = number;
+      console.log('🔢 Store: currentSongNumber set to:', number);
+    },
+    
+    getFullSongTitle() {
+      if (this.currentSongNumber && this.currentSongTitle) {
+        return `${this.currentSongNumber} ${this.currentSongTitle}`;
+      }
+      return this.currentSongTitle || '';
+    },
+    
+    setSongUuid(uuid) {
       this.songUuid = uuid;
+      console.log('🎵 Store: songUuid set to:', uuid);
     },
-    clearSongUuid() {         // ← جديد (اختياري)
+    
+    clearSongUuid() {
       this.songUuid = null;
-      this.currentSongTitle = null
+      this.currentSongTitle = null;
+      this.currentSongNumber = null;
+      console.log('🗑️ Store: songUuid and song details cleared');
+    },
+    
+    setCurrentStep(step) {
+      if (step >= 1 && step <= 5) {
+        if (this.currentStep !== step) {
+          // 🔥 إذا كنا ننتقل من Songs إلى Metas
+          if (this.currentStep === 3 && step === 2) {
+            console.log('🔄 Store: الانتقال من Songs إلى Metas - الحفاظ على isMetasComplete:', this.isMetasComplete);
+            console.log('🔄 Store: الانتقال من Songs إلى Metas - الحفاظ على isSongsComplete:', this.isSongsComplete);
+            this._isReturningFromSongs = true;
+            this._preserveSongsComplete = true;
+          }
+          
+          this.currentStep = step;
+          console.log('📌 Store: currentStep set to', step);
+        }
+      }
+    },
+    
+    resetCurrentStep() {
+      this.currentStep = 1;
+    },
+    
+    setMetasComplete(value) {
+      const booleanValue = value === true;
+      
+      if (this._isUpdating) {
+        console.log('⏳ Store: Update already in progress, skipping setMetasComplete');
+        return;
+      }
+      
+      // 🔥 إذا كنا عائدين من Songs، لا نغير isMetasComplete
+      if (this._isReturningFromSongs) {
+        console.log('🔄 Store: عودة من Songs، الحفاظ على isMetasComplete:', this.isMetasComplete);
+        return;
+      }
+      
+      if (this.isMetasComplete !== booleanValue) {
+        this._isUpdating = true;
+        this.isMetasComplete = booleanValue;
+        console.log('📌 Store: isMetasComplete set to', booleanValue);
+        
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('store-updated', {
+            detail: { 
+              type: 'metas-complete',
+              value: booleanValue,
+              timestamp: Date.now()
+            }
+          }));
+        }
+        
+        setTimeout(() => {
+          this._isUpdating = false;
+          console.log('🔓 Store: Update lock released');
+        }, 100);
+      } else {
+        console.log('📌 Store: isMetasComplete unchanged (already', booleanValue, ')');
+      }
+    },
+    
+    setSongsComplete(value) {
+      const booleanValue = value === true;
+      
+      if (this._isUpdating) {
+        console.log('⏳ Store: Update already in progress, skipping setSongsComplete');
+        return;
+      }
+      
+      // 🔥 إذا كنا عائدين من Songs، نحافظ على isSongsComplete
+      if (this._preserveSongsComplete) {
+        console.log('🔄 Store: عودة من Songs، الحفاظ على isSongsComplete:', this.isSongsComplete);
+        return;
+      }
+      
+      if (this.isSongsComplete !== booleanValue) {
+        this._isUpdating = true;
+        this.isSongsComplete = booleanValue;
+        console.log('📌 Store: isSongsComplete set to', booleanValue);
+        
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('store-updated', {
+            detail: { 
+              type: 'songs-complete',
+              value: booleanValue,
+              timestamp: Date.now()
+            }
+          }));
+        }
+        
+        setTimeout(() => {
+          this._isUpdating = false;
+        }, 100);
+      } else {
+        console.log('📌 Store: isSongsComplete unchanged (already', booleanValue, ')');
+      }
+    },
+    
+    setShopsComplete(value) {
+      const booleanValue = value === true;
+      
+      if (this._isUpdating) {
+        console.log('⏳ Store: Update already in progress, skipping setShopsComplete');
+        return;
+      }
+      
+      if (this.isShopsComplete !== booleanValue) {
+        this._isUpdating = true;
+        this.isShopsComplete = booleanValue;
+        console.log('📌 Store: isShopsComplete set to', booleanValue);
+        
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('store-updated', {
+            detail: { 
+              type: 'shops-complete',
+              value: booleanValue,
+              timestamp: Date.now()
+            }
+          }));
+        }
+        
+        setTimeout(() => {
+          this._isUpdating = false;
+        }, 100);
+      } else {
+        console.log('📌 Store: isShopsComplete unchanged (already', booleanValue, ')');
+      }
+    },
+    
+    setPublishComplete(value) {
+      const booleanValue = value === true;
+      
+      if (this._isUpdating) {
+        console.log('⏳ Store: Update already in progress, skipping setPublishComplete');
+        return;
+      }
+      
+      if (this.isPublishComplete !== booleanValue) {
+        this._isUpdating = true;
+        this.isPublishComplete = booleanValue;
+        console.log('📌 Store: isPublishComplete set to', booleanValue);
+        
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('store-updated', {
+            detail: { 
+              type: 'publish-complete',
+              value: booleanValue,
+              timestamp: Date.now()
+            }
+          }));
+        }
+        
+        setTimeout(() => {
+          this._isUpdating = false;
+        }, 100);
+      } else {
+        console.log('📌 Store: isPublishComplete unchanged (already', booleanValue, ')');
+      }
+    },
+    
+    setMetasPage(page) {
+      if (this.metasPage !== page) {
+        this.metasPage = page;
+        console.log('📌 Store: metasPage set to', page);
+      }
+    },
+    
+    // ========== ✅ إدارة tabCompletion ==========
+    
+    /**
+     * تحديث حالة اكتمال التبويبات
+     * @param {Object} completion - كائن يحتوي على حالات الاكتمال
+     * @example updateTabCompletion({ infos: true, urheber: true })
+     */
+    updateTabCompletion(completion) {
+      if (!completion || typeof completion !== 'object') {
+        console.warn('⚠️ Store: invalid completion data', completion);
+        return;
+      }
+      
+      // ✅ تحديث فقط المفاتيح الموجودة في tabCompletion
+      const validKeys = Object.keys(this.tabCompletion);
+      let hasChanges = false;
+      
+      Object.keys(completion).forEach(key => {
+        if (validKeys.includes(key) && typeof completion[key] === 'boolean') {
+          if (this.tabCompletion[key] !== completion[key]) {
+            this.tabCompletion[key] = completion[key];
+            hasChanges = true;
+          }
+        }
+      });
+      
+      if (hasChanges) {
+        console.log('📌 Store: tabCompletion updated:', this.tabCompletion);
+        
+        // ✅ إرسال حدث للتحديث
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tab-completion-updated', {
+            detail: { 
+              tabCompletion: { ...this.tabCompletion },
+              timestamp: Date.now()
+            }
+          }));
+        }
+      }
+    },
+    
+    /**
+     * إعادة تعيين tabCompletion إلى القيم الافتراضية
+     */
+    resetTabCompletion() {
+      this.tabCompletion = {
+        infos: false,
+        urheber: false,
+        mitwirkende: false,
+        deals: false,
+        'pre-release': false
+      };
+      console.log('📌 Store: tabCompletion reset');
+    },
+    
+    /**
+     * إعادة تعيين tabCompletion مع الحفاظ على deals = true
+     * (يستخدم عند تغيير الأغنية أو العودة من pre-release)
+     */
+    resetTabCompletionForNewSong() {
+      this.tabCompletion = {
+        infos: false,
+        urheber: false,
+        mitwirkende: false,
+        deals: true,
+        'pre-release': true
+      };
+      console.log('🧹 Store: tabCompletion reset for new song (deals=true, pre-release=true)');
+    },
+    
+    /**
+     * التحقق من اكتمال تبويب معين (بديل للـ getter)
+     */
+    checkTabComplete(tabId) {
+      return this.tabCompletion[tabId] || false;
+    },
+    
+    /**
+     * الحصول على التبويب التالي غير المكتمل
+     * @param {string} currentTab - التبويب الحالي
+     * @param {Array} tabOrder - ترتيب التبويبات
+     * @returns {string|null} - التبويب التالي أو null
+     */
+    getNextIncompleteTab(currentTab, tabOrder) {
+      const order = tabOrder || ['infos', 'urheber', 'mitwirkende', 'deals', 'pre-release'];
+      const currentIndex = order.indexOf(currentTab);
+      
+      if (currentIndex === -1) return null;
+      
+      for (let i = currentIndex + 1; i < order.length; i++) {
+        const tabId = order[i];
+        if (!this.tabCompletion[tabId]) {
+          return tabId;
+        }
+      }
+      return null;
+    },
+    
+    /**
+     * الحصول على أول تبويب غير مكتمل
+     * @param {Array} tabOrder - ترتيب التبويبات
+     * @returns {string|null} - أول تبويب غير مكتمل أو null
+     */
+    getFirstIncompleteTab(tabOrder) {
+      const order = tabOrder || ['infos', 'urheber', 'mitwirkende', 'deals', 'pre-release'];
+      
+      for (let i = 0; i < order.length; i++) {
+        const tabId = order[i];
+        if (!this.tabCompletion[tabId]) {
+          return tabId;
+        }
+      }
+      return null;
+    },
+    
+    // ========== نهاية إدارة tabCompletion ==========
+    
+    updateMetasData(data) {
+      // 🔥 إذا كنا عائدين من Songs، لا نغير isMetasComplete
+      if (this._isReturningFromSongs) {
+        console.log('🔄 Store: عودة من Songs، تحديث metasData فقط دون تغيير isMetasComplete');
+        // ✅ فقط نحدث البيانات بدون تغيير isMetasComplete
+        this.metasData = {
+          ...this.metasData,
+          ...data
+        };
+        console.log('📌 Store: metasData updated (preserving isMetasComplete:', this.isMetasComplete, ')');
+        return;
+      }
+      
+      // ✅ التحديث العادي
+      this.metasData = {
+        ...this.metasData,
+        ...data
+      };
+      
+      const hasTitle = Boolean(this.metasData.title && this.metasData.title.trim() !== '');
+      const hasArtists = Boolean(
+        this.metasData.artists &&
+        this.metasData.artists.length > 0 &&
+        this.metasData.artists.some(a => a && a.trim() !== '')
+      );
+      const hasReleaseDate = Boolean(this.metasData.releaseDate && this.metasData.releaseDate.trim() !== '');
+      
+      const isComplete = hasTitle && hasArtists && hasReleaseDate;
+      
+      if (this.isMetasComplete !== isComplete) {
+        this.setMetasComplete(isComplete);
+      }
+      
+      console.log('📌 Store: metasData updated, complete:', isComplete);
+    },
+    
+    resetAllData() {
+      this.releaseType = null;
+      this.releaseTypeValue = null;
+      this.currentReleaseId = null;
+      this.pendingCoverFile = null;
+      this.songUuid = null;
+      this.currentSongTitle = null;
+      this.currentSongNumber = null;
+      this.currentStep = 1;
+      this.metasPage = 'right';
+      this.isMetasComplete = false;
+      this.isSongsComplete = false;
+      this.isShopsComplete = false;
+      this.isPublishComplete = false;
+      this.draftRelease = null;
+      this.serverCoverUrl = null;
+      this._startComplete = false;
+      this._isUpdating = false;
+      this._isReturningFromSongs = false;
+      this._preserveSongsComplete = false;
+      
+      // ✅ إعادة تعيين tabCompletion
+      this.resetTabCompletion();
+      
+      this.metasData = {
+        title: '',
+        subtitle: '',
+        releaseDate: null,
+        artists: [],
+        releasePrice: null,
+        songPrice: null,
+        mainGenre: '',
+        subGenre: '',
+        label: '',
+        productionYear: null,
+        cLineYear: null,
+        cLineName: '',
+        pLineYear: null,
+        pLineName: '',
+        gtin: '',
+        catalogNumber: ''
+      };
+      
+      try {
+        localStorage.removeItem('upload_server_cover_url');
+        localStorage.removeItem('upload2_state');
+        localStorage.removeItem('upload2_selectedType');
+        localStorage.removeItem('upload1_state');
+        localStorage.removeItem('upload_component_state');
+        localStorage.removeItem('upload3_state');
+        localStorage.removeItem('upload4_state');
+        localStorage.removeItem('last_metas_page');
+      } catch (e) {
+        console.warn('⚠️ Could not clear localStorage:', e);
+      }
+      
+      console.log('🔄 Store: All data reset including serverCoverUrl and localStorage');
+    },
+    
+    isStepComplete(stepNumber) {
+      switch (stepNumber) {
+        case 1: return this.isStartComplete === true;
+        case 2: return this.isMetasComplete === true;
+        case 3: return this.isSongsComplete === true;
+        case 4: return this.isShopsComplete === true;
+        case 5: return this.isPublishComplete === true;
+        default: return false;
+      }
+    },
+    
+    canNavigateToStep(stepNumber, currentStep) {
+      const current = currentStep || this.currentStep;
+      
+      if (stepNumber === 1) return true;
+      if (stepNumber > current + 1) return false;
+      if (stepNumber <= current) return true;
+      
+      return this.isStepComplete(current);
+    },
+    
+    determineMetasPage(release) {
+      if (!release) return 'right';
+      
+      const hasAdvancedData = release.label || 
+                             release.production_year || 
+                             release.c_line_name || 
+                             release.c_line_year || 
+                             release.p_line_name || 
+                             release.p_line_year;
+      
+      if (hasAdvancedData) {
+        console.log('📌 توجد بيانات متقدمة → NewRight2');
+        this.setMetasPage('newRight2');
+        return 'newRight2';
+      }
+      
+      const hasPricingData = release.release_price || 
+                            release.price_per_song || 
+                            release.main_genre || 
+                            release.sub_genre;
+      
+      if (hasPricingData) {
+        console.log('📌 توجد بيانات السعر والنوع → NewRight');
+        this.setMetasPage('newRight');
+        return 'newRight';
+      }
+      
+      if (this.metasPage && this.metasPage !== 'right') {
+        console.log(`📌 استعادة الصفحة المحفوظة: ${this.metasPage}`);
+        return this.metasPage;
+      }
+      
+      console.log('📌 الصفحة الافتراضية → Right');
+      this.setMetasPage('right');
+      return 'right';
+    },
+    
+    determineStepFromRelease(release, updateCurrentStep = true, preserveMetasComplete = false, preserveSongsComplete = false) {
+      if (!release) {
+        console.warn('⚠️ No release data provided, defaulting to step 2');
+        return 2;
+      }
+
+      console.log('📌 Determining step from release data:', release.uuid);
+
+      // ✅ تحديث draftRelease
+      this.setDraftRelease(release);
+
+      // ========== 1. تحليل بيانات Metas ==========
+      const hasTitle = Boolean(release.title && release.title.trim() !== '');
+      const hasArtists = Boolean(release.artists && release.artists.length > 0);
+      const hasReleaseDate = Boolean(release.release_date);
+      const isMetasComplete = hasTitle && hasArtists && hasReleaseDate;
+      
+      // 🔥 إذا كنا نحافظ على isMetasComplete، لا نغيرها
+      if (preserveMetasComplete || this._isReturningFromSongs) {
+        console.log(`📌 الحفاظ على isMetasComplete: ${this.isMetasComplete} (لا نغير)`);
+        // ✅ فقط نحدث البيانات بدون تغيير isMetasComplete
+        this.metasData = {
+          ...this.metasData,
+          title: release.title || '',
+          subtitle: release.subtitle || '',
+          releaseDate: release.release_date || null,
+          artists: release.artists || [],
+          releasePrice: release.release_price || null,
+          songPrice: release.price_per_song || null,
+          mainGenre: release.main_genre || '',
+          subGenre: release.sub_genre || '',
+          label: release.label || '',
+          productionYear: release.production_year || null,
+          cLineYear: release.c_line_year || null,
+          cLineName: release.c_line_name || '',
+          pLineYear: release.p_line_year || null,
+          pLineName: release.p_line_name || '',
+          gtin: release.GTIN || '',
+          catalogNumber: release.catalog_number || ''
+        };
+        console.log('📌 Store: metasData updated (preserving isMetasComplete:', this.isMetasComplete, ')');
+      } else {
+        // تحديث عادي
+        if (this.isMetasComplete !== isMetasComplete) {
+          this.setMetasComplete(isMetasComplete);
+          console.log(`📌 Store: isMetasComplete set to ${isMetasComplete}`);
+        }
+        
+        // تحديث MetasData
+        this.updateMetasData({
+          title: release.title || '',
+          subtitle: release.subtitle || '',
+          releaseDate: release.release_date || null,
+          artists: release.artists || [],
+          releasePrice: release.release_price || null,
+          songPrice: release.price_per_song || null,
+          mainGenre: release.main_genre || '',
+          subGenre: release.sub_genre || '',
+          label: release.label || '',
+          productionYear: release.production_year || null,
+          cLineYear: release.c_line_year || null,
+          cLineName: release.c_line_name || '',
+          pLineYear: release.p_line_year || null,
+          pLineName: release.p_line_name || '',
+          gtin: release.GTIN || '',
+          catalogNumber: release.catalog_number || ''
+        });
+      }
+
+      // ========== 2. تحليل بيانات Songs ==========
+      const songs = release.songs || [];
+      const hasSongs = songs.length > 0;
+
+      // 🔥 إذا كنا نحافظ على isSongsComplete، لا نغيرها
+      if (preserveSongsComplete || this._preserveSongsComplete) {
+        console.log(`📌 الحفاظ على isSongsComplete: ${this.isSongsComplete} (لا نغير)`);
+      } else {
+        let newSongsComplete = false;
+        if (hasSongs) {
+          console.log(`📌 تحليل ${songs.length} أغاني...`);
+          newSongsComplete = songs.every(song => {
+            const hasSongTitle = song.title && song.title.trim() !== '';
+            const hasSongFile = song.song_file !== null && song.song_file !== undefined && song.song_file !== '';
+            const hasCover = song.cover !== null && song.cover !== undefined && song.cover !== '';
+            const hasAuthors = song.composers && song.composers.length > 0;
+            return hasSongTitle && hasSongFile && hasCover && hasAuthors;
+          });
+          
+          if (this.isSongsComplete !== newSongsComplete) {
+            this.setSongsComplete(newSongsComplete);
+          }
+          console.log(`📌 Songs ${newSongsComplete ? 'مكتملة ✅' : 'غير مكتملة ❌'}`);
+        } else {
+          if (this.isSongsComplete !== false) {
+            this.setSongsComplete(false);
+          }
+          console.log('📌 لا توجد Songs ❌');
+        }
+      }
+
+      // ========== 3. تحليل بيانات Shops ==========
+      const hasStores = release.stores && release.stores.length > 0;
+      if (this.isShopsComplete !== hasStores) {
+        this.setShopsComplete(hasStores);
+      }
+      console.log(`📌 Shops ${hasStores ? 'محددة ✅' : 'غير محددة ❌'}`);
+
+      // ========== 4. تحليل بيانات Publish ==========
+      const isPublishReady = release.status === 'draft' && 
+                             this.isMetasComplete && 
+                             hasSongs && 
+                             this.isSongsComplete && 
+                             hasStores;
+      
+      if (this.isPublishComplete !== isPublishReady) {
+        this.setPublishComplete(isPublishReady);
+      }
+
+      // ========== 5. عرض تحليلات للتصحيح ==========
+      console.log('📊 تحليل البيانات:');
+      console.log('  📌 Metas:', { hasTitle, hasArtists, hasReleaseDate, isMetasComplete: this.isMetasComplete });
+      console.log('  📌 Songs:', { hasSongs, isSongsComplete: this.isSongsComplete });
+      console.log('  📌 Shops:', { hasStores });
+      console.log('  📌 Publish:', { isPublishReady });
+      console.log('  📌 Current Step:', this.currentStep);
+
+      // ========== 6. تحديث metasPage ==========
+      this.determineMetasPage(release);
+
+      // ========== 7. تحديد الخطوة المناسبة ==========
+      let targetStep = this.currentStep;
+
+      // 🔥🔥🔥 نستخدم isSongsComplete من الـ Store
+      const songsComplete = this.isSongsComplete;
+
+      if (songsComplete) {
+        console.log('📌 Songs مكتملة ✅ → الانتقال إلى Songs (الخطوة 3)');
+        targetStep = 3;
+      } else if (isPublishReady) {
+        console.log('📌 Publish جاهز ✅ → الانتقال إلى Publish (الخطوة 5)');
+        targetStep = 5;
+      } else if (hasStores && hasSongs) {
+        console.log('📌 Shops محددة والأغاني موجودة → الانتقال إلى Shops (الخطوة 4)');
+        targetStep = 4;
+      } else if (hasSongs) {
+        console.log('📌 توجد Songs → الانتقال إلى Songs (الخطوة 3)');
+        targetStep = 3;
+      } else if (this.isMetasComplete) {
+        console.log('📌 Metas مكتملة ✅ → الانتقال إلى Metas (الخطوة 2)');
+        targetStep = 2;
+      } else if (release.cover && !hasTitle && !hasArtists && !hasReleaseDate && !hasSongs) {
+        console.log('📌 يوجد cover فقط → البقاء في Start (الخطوة 1)');
+        targetStep = 1;
+      } else {
+        console.log('📌 لا توجد بيانات كافية → البقاء في Start (الخطوة 1)');
+        targetStep = 1;
+      }
+
+      console.log(`✅ الخطوة النهائية: ${targetStep}`);
+      console.log(`📌 updateCurrentStep: ${updateCurrentStep}, currentStep الحالي: ${this.currentStep}`);
+
+      if (updateCurrentStep) {
+        if (this.currentStep !== targetStep) {
+          this.setCurrentStep(targetStep);
+          console.log(`📌 تم تحديث currentStep إلى: ${targetStep}`);
+        } else {
+          console.log(`📌 currentStep unchanged (already ${this.currentStep})`);
+        }
+        return targetStep;
+      }
+      
+      console.log(`📌 updateCurrentStep = false, keeping currentStep at ${this.currentStep}`);
+      return this.currentStep;
+    },
+    
+    resetReturningFromSongs() {
+      this._isReturningFromSongs = false;
+      this._preserveSongsComplete = false;
+      console.log('🔄 Store: reset _isReturningFromSongs and _preserveSongsComplete to false');
     }
   }
 });

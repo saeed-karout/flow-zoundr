@@ -1,9 +1,9 @@
 <template>
-    <div class="main">
-            <router-link to='/auszahlung' class="p">
+    <router-link to="/auszahlung" class="main">
+            <div class="p">
             Guthaben auszahlen
-            </router-link>
-    </div>
+            </div>
+    </router-link>
 </template>
 
 

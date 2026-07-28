@@ -6,7 +6,11 @@
         v-for="(tab, index) in tabs"
         :key="tab.id"
         class="tab-buttons"
-        :class="{ active: activeTab === tab.id }"
+        :class="{ 
+          active: activeTab === tab.id,
+          completed: isTabCompleted(tab.id) && activeTab !== tab.id,
+          disabled: !isTabAccessible(tab.id) && activeTab !== tab.id
+        }"
       >
         <div class="top-corner">
           <div class="image-blur"></div>
@@ -19,15 +23,23 @@
           @mouseleave="isHovered[tab.id] = false"
           :style="getTabBackground(index)"
         >
-          <!-- طبقة الفلتر فقط للتب النشط -->
           <div v-if="activeTab === tab.id" class="tab-blur-overlay"></div>
 
-          <!-- المحتوى يبقى واضحاً -->
           <div class="tab-content">
             <div class="icons">
               <img :src="tab.icon" class="icon" alt="">
             </div>
             <div class="title">{{ tab.title }}</div>
+            
+            <!-- ✅ علامة التشيك للتبويبات المكتملة (تظهر دائماً) -->
+            <div v-if="isTabCompleted(tab.id)" class="checkmark-tab">
+              <img src="/icon/y.png" class="checkmark-icon" alt="completed" />
+            </div>
+            
+            <!-- ✅ علامة القفل للتبويبات غير القابلة للوصول -->
+            <div v-if="!isTabAccessible(tab.id) && activeTab !== tab.id" class="lock-tab">
+              <!-- <img src="/icon/lock.svg" class="lock-icon" alt="locked" /> -->
+            </div>
           </div>
         </div>
 
@@ -40,27 +52,27 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue';
+import { ref, reactive, watch, computed, onMounted } from 'vue';
+import { useReleaseStore } from '@/stores/release';
 
-// استقبال رابط الكفر من الأب
 const props = defineProps({
-  serverCoverUrl: {
-    type: String,
-    default: null
-  }
+  serverCoverUrl: { type: String, default: null },
+  activeTab: { type: String, default: 'infos' }
 });
 
 const emit = defineEmits(['update-tab', 'back']);
 
+const releaseStore = useReleaseStore();
+
 const tabs = [
-  { id: 'infos',        title: 'infos',        icon: '/icon/info-step2/Angebot.svg' },
+  { id: 'infos',        title: 'Infos',        icon: '/icon/info-step2/Angebot.svg' },
   { id: 'urheber',      title: 'Urheber',      icon: '/icon/info-step2/urheber (1).svg' },
-  { id: 'mitwirkende',  title: 'Mitwirkende',  icon: '/icon/info-step2/Vector (4).svg' },
+  { id: 'mitwirkende',  title: 'ROLLEN',       icon: '/icon/info-step2/Vector (4).svg' },
   { id: 'deals',        title: 'Deals',        icon: '/icon/info-step2/share.svg' },
   { id: 'pre-release',  title: 'Pre-Release',  icon: '/icon/info-step2/Group.svg' },
 ];
 
-const activeTab = ref('infos');
+const activeTab = ref(props.activeTab || 'infos');
 const isHovered = reactive({
   infos: false,
   urheber: false,
@@ -69,38 +81,188 @@ const isHovered = reactive({
   'pre-release': false,
 });
 
-const selectTab = (tabId) => {
-  activeTab.value = tabId;
-  emit('update-tab', tabId);
+// ========== ترتيب التبويبات ==========
+const tabOrder = ['infos', 'urheber', 'mitwirkende', 'deals', 'pre-release'];
+
+// ✅ التابوات التي تتطلب اكتمال للوصول إلى التالي
+const tabsRequiringCompletion = ['infos', 'urheber', 'mitwirkende'];
+
+// ========== الحصول على فهرس التبويب ==========
+const getTabIndex = (tabId) => {
+  return tabOrder.indexOf(tabId);
 };
 
-// دالة لإرجاع الـ style الديناميكي مع الحفاظ على position/size الأصلي
+// ========== ✅ دالة خلفية التبويب ==========
 const getTabBackground = (index) => {
-  if (activeTab.value !== tabs[index].id || !props.serverCoverUrl) {
+  if (activeTab.value !== tabs[index]?.id || !props.serverCoverUrl) {
     return {};
   }
 
-  // نفس الإحداثيات والأبعاد الأصلية لكل تب
   const positions = [
-    { btn: '0px -20.437px / 100% 579.439%', top: '0px -0.009px / 1035% 1336.875%', down: '0px -40.437px / 1035% 1336.875%' },
-    { btn: '0px -74.437px / 100% 579.439%', top: '0px -54.015px / 1200% 1550%', down: '0px -94.437px / 1200% 1550%' },
-    { btn: '0px -128.002px / 100% 579.439%', top: '0px -107.996px / 1200% 1550%', down: '0px -148.002px / 1200% 1550%' },
-    { btn: '0px -181.994px / 100% 579.439%', top: '0px -162.005px / 1200% 1550%', down: '0px -202.005px / 1200% 1550%' },
-    { btn: '0px -238.883px / 100% 579.439%', top: '0px -215.995px / 1200% 1550%', down: '0px -258.883px / 1200% 1550%' }
+    { backgroundPosition: '0px -20.437px', backgroundSize: '100% 579.439%' },
+    { backgroundPosition: '0px -74.437px', backgroundSize: '100% 579.439%' },
+    { backgroundPosition: '0px -128.002px', backgroundSize: '100% 579.439%' },
+    { backgroundPosition: '0px -181.994px', backgroundSize: '100% 579.439%' },
+    { backgroundPosition: '0px -238.883px', backgroundSize: '100% 579.439%' }
   ];
 
   const pos = positions[index] || positions[0];
 
   return {
-    background: `url(${props.serverCoverUrl})  ${pos.btn} no-repeat`,
-    backgroundSize: 'cover', // لضمان ملء الصورة بشكل جيد
-    backgroundPosition: ' center center' // تحسين العرض
+    backgroundImage: `url(${props.serverCoverUrl})`,
+    backgroundPosition: pos.backgroundPosition,
+    backgroundSize: pos.backgroundSize,
+    backgroundRepeat: 'no-repeat'
   };
 };
+
+// ========== ✅ دالة التحقق من اكتمال التبويب ==========
+const isTabCompleted = (tabId) => {
+  // ✅ deals دائماً true (Coming Soon)
+  if (tabId === 'deals') {
+    console.log(`📌 [Column2] isTabCompleted: deals = true (always)`);
+    return true;
+  }
+  
+  // ✅ التحقق من القيمة في Store مباشرة
+  const value = releaseStore.tabCompletion?.[tabId];
+  
+  // ✅ إذا كانت القيمة boolean، نعيدها كما هي
+  if (typeof value === 'boolean') {
+    console.log(`📌 [Column2] isTabCompleted: ${tabId} = ${value}`);
+    return value;
+  }
+  
+  // ✅ إذا كانت القيمة غير محددة، نعيد false
+  console.log(`📌 [Column2] isTabCompleted: ${tabId} = false (not set)`);
+  return false;
+};
+
+// ========== ✅ دالة التحقق من إمكانية الوصول ==========
+const isTabAccessible = (tabId) => {
+  // التبويب النشط دائماً قابل للوصول
+  if (tabId === activeTab.value) return true;
+  
+  // ✅ إذا كان التبويب مكتملاً، يمكن الوصول إليه دائماً
+  if (isTabCompleted(tabId)) return true;
+  
+  const currentIndex = getTabIndex(activeTab.value);
+  const targetIndex = getTabIndex(tabId);
+  
+  // التبويبات السابقة دائماً قابلة للوصول
+  if (targetIndex < currentIndex) return true;
+  
+  // ✅ التبويبات التالية
+  if (targetIndex > currentIndex) {
+    // ✅ deals دائماً قابلة للوصول (تجريبية)
+    if (tabId === 'deals') {
+      return true;
+    }
+    
+    // ✅ للوصول إلى pre-release
+    if (tabId === 'pre-release') {
+      // ✅ يمكن الوصول من deals مباشرة
+      if (activeTab.value === 'deals') {
+        console.log('   - ✅ Allowing access to pre-release from deals');
+        return true;
+      }
+      // ✅ إذا كنا في pre-release بالفعل
+      if (activeTab.value === 'pre-release') {
+        return true;
+      }
+    }
+    
+    const isCurrentComplete = isTabCompleted(activeTab.value);
+    
+    let allPreviousComplete = true;
+    for (let i = 0; i < targetIndex; i++) {
+      const prevTabId = tabOrder[i];
+      // ✅ deals مستثنى من التحقق
+      if (prevTabId === 'deals') continue;
+      if (prevTabId !== activeTab.value && !isTabCompleted(prevTabId)) {
+        allPreviousComplete = false;
+        break;
+      }
+    }
+    
+    console.log(`📌 [Column2] isTabAccessible: target=${tabId}, current=${activeTab.value}`);
+    console.log(`   - isCurrentComplete: ${isCurrentComplete}`);
+    console.log(`   - allPreviousComplete: ${allPreviousComplete}`);
+    
+    return isCurrentComplete && allPreviousComplete;
+  }
+  
+  return false;
+};
+
+// ========== اختيار التبويب ==========
+const selectTab = (tabId) => {
+  if (tabId === activeTab.value) return;
+  
+  console.log(`📌 [Column2] selectTab: ${tabId}`);
+  console.log(`📌 [Column2] tabCompletion from Store:`, releaseStore.tabCompletion);
+  
+  if (!isTabAccessible(tabId)) {
+    console.warn(`⚠️ [Column2] Cannot navigate to ${tabId}`);
+    
+    const tabName = tabs.find(t => t.id === activeTab.value)?.title || activeTab.value;
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { 
+        message: `Bitte vervollständige zuerst "${tabName}".`,
+        type: 'warning'
+      }
+    }));
+    return;
+  }
+  
+  activeTab.value = tabId;
+  emit('update-tab', tabId);
+};
+
+// ========== مراقبة التغييرات في prop.activeTab ==========
+watch(
+  () => props.activeTab,
+  (newTab) => {
+    if (newTab && newTab !== activeTab.value) {
+      console.log('📌 [Column2] تحديث التبويب من prop:', newTab);
+      activeTab.value = newTab;
+    }
+  },
+  { immediate: true }
+);
+
+// ========== مراقبة التغييرات في Store tabCompletion ==========
+watch(
+  () => releaseStore.tabCompletion,
+  (newVal, oldVal) => {
+    console.log('📌 [Column2] Store tabCompletion updated:', newVal);
+    console.log('📌 [Column2] old tabCompletion:', oldVal);
+    
+    // ✅ تأكد من أن deals دائماً true في الـ Store
+    if (newVal && newVal.deals !== true) {
+      // ✅ تحديث الـ Store مباشرة
+      releaseStore.updateTabCompletion({ deals: true });
+    }
+  },
+  { deep: true, immediate: true }
+);
+
+// ========== دورة الحياة ==========
+onMounted(() => {
+  console.log('📌 [Column2] Mounted, tabCompletion from Store:', releaseStore.tabCompletion);
+});
+
+// ========== تصدير الدوال ==========
+defineExpose({
+  isTabCompleted,
+  isTabAccessible,
+  selectTab,
+  getTabBackground
+});
 </script>
 
 <style lang="scss" scoped>
-/* الستايل الأصلي كامل بدون أي تغيير */
+/* نفس الـ style الموجود */
 .column2 {
   display: flex;
   padding: 0 0 20px 0px;
@@ -168,6 +330,12 @@ const getTabBackground = (index) => {
   z-index: 20;
 }
 
+@media (max-width:1599px) {
+  .title{
+    font-size: 15px !important;
+  }
+}
+
 .tab-buttons .btn-tab {
   display: flex;
   padding: 15px 12px 15px 30px;
@@ -181,13 +349,13 @@ const getTabBackground = (index) => {
   position: relative;
   z-index: 2;
   transition: color 0.3s ease;
-
-  &:hover {
-    color: #FFF;
-  }
 }
 
-/* طبقة الفلتر - تظهر فقط للتب النشط */
+.tab-buttons.active .btn-tab {
+  color: #FFF;
+  z-index: 12;
+}
+
 .tab-blur-overlay {
   position: absolute;
   top: 0;
@@ -201,7 +369,6 @@ const getTabBackground = (index) => {
   pointer-events: none;
 }
 
-/* المحتوى يبقى واضحاً فوق الفلتر */
 .tab-content {
   display: flex;
   align-items: center;
@@ -227,7 +394,6 @@ const getTabBackground = (index) => {
 .top-corner  { top: -20px; }
 .down-corner { bottom: -20px; }
 
-/* تطبيق الفلتر على الزوايا */
 .top-corner .image-blur,
 .down-corner .image-blur {
   position: absolute;
@@ -244,25 +410,25 @@ const getTabBackground = (index) => {
   display: block;
 }
 
-/* حذف كل الخلفيات الثابتة تمامًا - الآن يتم التحكم بها من :style في الـ template */
-
-.image-blur {
-  background: rgba(38, 40, 45, 0.80);
-  backdrop-filter: blur(10px);
-}
-
 .title {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
   flex: 1 0 0;
+  overflow: hidden;
+  color: #6A6C6D;
+  leading-trim: both;
+  text-edge: cap;
+  text-overflow: ellipsis;
+  font-family: Heebo;
+  font-size: 20px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: normal;
+  text-transform: uppercase;
 }
 
-/* جعل before و after ظاهرين فوق الفلتر */
 .tab-buttons.active .btn-tab {
-  color: #FFF;
-  z-index: 12;
-
   &::before {
     content: '';
     position: absolute;
@@ -290,14 +456,15 @@ const getTabBackground = (index) => {
   }
 }
 
-/* تأكد من أن الزوايا تحت before و after */
 .tab-buttons.active .top-corner,
 .tab-buttons.active .down-corner {
   z-index: 4;
 }
 
 .tab-buttons.active .icons { filter: brightness(0) invert(1); }
+.tab-buttons.active .title { color: #FFF; }
 .btn-tab:hover .icons { filter: brightness(0) invert(1); }
+.btn-tab:hover .title { color: #FFF; }
 
 .btn-tab .icons {
   display: flex;
@@ -312,7 +479,64 @@ const getTabBackground = (index) => {
   aspect-ratio: 1/1;
 }
 
-img, svg { vertical-align: 0; }
+.checkmark-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  flex-shrink: 0;
+  min-width: 20px;
+}
+
+.checkmark-tab .checkmark-icon {
+  width: 16px;
+  height: 16px;
+  filter: brightness(0) invert(1);
+}
+
+.lock-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  flex-shrink: 0;
+  min-width: 20px;
+}
+
+.lock-tab .lock-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.5;
+}
+
+.tab-buttons.completed .btn-tab {
+  color: #FFF;
+}
+
+.tab-buttons.completed .btn-tab .title {
+  // color: #FFF;
+}
+
+.tab-buttons.completed .checkmark-tab .checkmark-icon {
+  filter: brightness(0) invert(1);
+}
+
+.tab-buttons.disabled .btn-tab {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.tab-buttons.disabled .btn-tab .title {
+  color: #6A6C6D;
+}
+
+.tab-buttons.disabled:hover .btn-tab .icons {
+  filter: none;
+}
+
+.tab-buttons.disabled .lock-tab .lock-icon {
+  opacity: 0.4;
+}
 
 @media (min-width:2075px) and (max-width:2560px) {
   .tabs { width: 286px; }

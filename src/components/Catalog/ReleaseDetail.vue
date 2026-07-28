@@ -39,7 +39,7 @@
                   {{ getReleasePillLabel(release.release_status) }}
                 </div>
                 <div class="Buttons">
-                  <div class="buttonCom">Trends</div>
+                  <router-link to="/trends" class="buttonCom">Trends</router-link>
                   <div class="buttonCom">Labelcopy</div>
                   <div class="buttonCom" @click="handleTakedown">Takedown</div>
                 </div>
@@ -165,6 +165,7 @@ import Deals from '@/components/releases/content-tabs/Deals.vue'
 import Services from '@/components/releases/content-tabs/Services.vue'
 import Gebiete from '@/components/releases/content-tabs/Gebiete.vue'
 import { storage_url } from '@/constants'
+import router from '@/router'
 
 const route = useRoute()
 

@@ -73,7 +73,7 @@ defineEmits(['set-active-tab']);
     flex-direction: column;
     justify-content: center;
     align-items: flex-start;
-    flex: 1 0 0;
+    // flex: 1 0 0;
     align-self: stretch;
     position: relative;
 }

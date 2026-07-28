@@ -275,6 +275,15 @@ export default {
   .heroRelease{
     height: 300px;
   }
+
+
+  .info-text span{
+    font-size: 26px;
+  }
+
+  .info-text p{
+    font-size: 13px;
+  }
 }
 @media (min-width: 1600px) and (max-width: 2074px){
   .release-info{

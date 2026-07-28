@@ -1,31 +1,93 @@
-```vue
 <template>
   <div class="tab-content">
     <div class="section">
-      <div class="p">Deine Top Songs</div>
+      <div class="p">Deine Top Songs </div>
       <div class="top-song">
-        <div class="music-title" v-for="i in 20" :key="i">
-          <div class="background-layer"></div>
-          <div class="number-container">
-            <div :class="i === 1 ? 'number-1' : 'number'">{{ i }}.</div>
-          </div>
-          <div class="image-overlay">
-            <div class="info">
-              <div class="title">
-                <div class="sub-title">Artist Music</div>
-               <span>At malesuada quamus</span>
+        <!-- Loading State -->
+        <div v-if="isLoading" class="loading-state">
+          <div class="spinner"></div>
+        </div>
+        
+        <!-- Songs List -->
+        <div v-else class="songs-container">
+          <div class="music-title" v-for="(song, index) in data" :key="song.uuid || index">
+            <div 
+              class="background-layer" 
+              :style="{ 
+                backgroundImage: `url(${song.picture || defaultImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center'
+              }"
+            ></div>
+            <div class="image-overlay">
+              <div class="number-container">
+                <div :class="index === 0 ? 'number-1' : 'number'">{{ index + 1 }}.</div>
               </div>
-              <div class="numbers">
-                <div class="p">518,73 EUR</div>
-                <div class="p">13,42 %</div>
+              <div class="info">
+                <div class="title">
+                  <div class="sub-title">Artist Music</div>
+                  <div class="span">{{ song.name || 'Untitled' }}</div>
+                </div>
+                 <div class="numbers">
+                  <div class="p">{{ formatCurrency(song.revenue) }}</div>
+                  <div class="p">{{ getPercentage(song.revenue) }}</div>
+                </div>
               </div>
             </div>
           </div>
+        </div>
+        
+        <!-- Empty State -->
+        <div v-if="!isLoading && (!data || data.length === 0)" class="empty-state">
+          <div class="empty-message">Keine Songs gefunden</div>
         </div>
       </div>
     </div>
   </div>
 </template>
+
+<script setup>
+import { computed } from 'vue';
+import { ref } from 'vue';
+
+// ========== Props ==========
+const props = defineProps({
+  data: {
+    type: Array,
+    default: () => []
+  },
+  filters: {
+    type: Object,
+    default: () => ({})
+  }
+});
+
+// ========== Reactive Data ==========
+const isLoading = ref(false);
+
+// صورة افتراضية
+const defaultImage = '/img/bgCardSongs/card1.png';
+// ========== Computed ==========
+const totalRevenue = computed(() => {
+  return props.data.reduce((sum, item) => sum + (item.revenue || 0), 0);
+});
+// ========== Utility Functions ==========
+const formatCurrency = (num) => {
+  if (!num && num !== 0) return '€0.00';
+  return new Intl.NumberFormat('de-DE', { 
+    style: 'currency', 
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(num);
+};
+
+const getPercentage = (revenue) => {
+  if (!revenue || totalRevenue.value === 0) return '0%';
+  const percentage = (revenue / totalRevenue.value) * 100;
+  return percentage.toFixed(2) + '%';
+};
+</script>
 
 <style lang="scss" scoped>
 .tab-content {
@@ -35,6 +97,8 @@
   border-radius: 20px;
   width: 100%;
   max-width: 100%;
+  min-height: 281px;
+  height: 100%;
 }
 
 .section {
@@ -45,11 +109,12 @@
   align-items: flex-start;
   gap: 20px;
   flex: 1 0 0;
-  border-radius: 0 20px 20px 20px;
+  border-radius: 20px;
   background: var(--Main-Colors-Slate, #26282D);
   position: relative;
   width: 100%;
   max-width: 100%;
+  height: 100%;
 }
 
 .section .p {
@@ -62,29 +127,42 @@
   letter-spacing: 0.9px;
   text-transform: uppercase;
   padding-top: 3px;
-  z-index: 111;
+  flex-shrink: 0;
 }
-
+.numbers {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  align-self: stretch;
+}
 .top-song {
   display: flex;
   align-items: flex-start;
   gap: 20px;
   align-self: stretch;
   overflow-x: auto;
-  padding-right: 80px;
+  // padding-right: 80px;
   scrollbar-width: none;
-
   border-radius: 20px;
   flex-wrap: nowrap;
   min-width: auto;
+  flex: 1;
+  min-height: 0;
 }
 
-
+.songs-container {
+  display: flex;
+  gap: 20px;
+  flex-wrap: nowrap;
+  height: 100%;
+}
 
 .music-title {
   display: flex;
   width: 207px;
-  height: 207px;
+  min-width: 207px;
+  height: 100%;
+  min-height: 207px;
   justify-content: space-between;
   align-items: flex-end;
   border-radius: 20px;
@@ -101,7 +179,9 @@
   width: 100%;
   height: 100%;
   border-radius: 20px;
-  background: url('../../../assets/icons/catalog/releases/2.jpg') 50% / cover no-repeat;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   filter: saturate(var(--saturation, 20%));
   transition: filter 0.6s ease;
   z-index: 1;
@@ -151,6 +231,7 @@
   line-height: 0.6;
   transition: opacity 0.3s ease;
   z-index: 3;
+  background: rgba(0, 0, 0, 0.7);
 }
 
 .number-1 {
@@ -192,30 +273,24 @@
   transition: opacity 0.3s ease;
 }
 
-
-.title span{
- overflow: hidden;
-color: var(--Main-Colors-White, #FFF);
-text-overflow: ellipsis;
-font-family: Heebo;
-font-size: 18px;
-font-style: normal;
-font-weight: 700;
-line-height: .9;
-text-transform: uppercase;
-display: -webkit-box;
--webkit-box-orient: vertical;
--webkit-line-clamp: 1;
-align-self: stretch;
-opacity: .7;
+.title .span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  align-self: stretch;
+  color: var(--Main-Colors-White, #FFF);
+  text-overflow: ellipsis;
+  font-family: Heebo;
+  font-size: 18px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 0.6;
+  text-transform: uppercase;
+  opacity: 0.7;
+  padding-top: 2px;
+  padding-bottom: 0.8px;
+  transition: opacity 0.3s ease;
 }
 
-.numbers{
-  display: flex;
-justify-content: space-between;
-align-items: center;
-align-self: stretch;
-}
 .info .p {
   align-self: stretch;
   color: var(--Main-Colors-White, #FFF);
@@ -230,45 +305,48 @@ align-self: stretch;
 }
 
 .music-title:hover .sub-title,
-.music-title:hover span,
+.music-title:hover .span,
 .music-title:hover .info .p,
 .music-title:hover .number,
 .music-title:hover .number-1 {
   opacity: 1;
 }
 
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 207px;
+}
 
-@media (min-width:1440px) and (max-width:1599px) {
-    .music-title {
-      width: 160px;
-      height: 160px;
-    }
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(221, 17, 85, 0.1);
+  border-top-color: #DD1155;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
 
-    .title .sub-title{
-      overflow: hidden;
-      text-overflow: ellipsis;
-      line-height: 1;
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 
-    }
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 207px;
+}
 
-    .title .sub-title{
-      font-size: 14px;
-       overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-
-    .info .p{
-      font-size: 12px;
-    }
-
-    .title  span{
-      font-size: 17px;
-      line-height: .9;
-    }
-
-
-   
+.empty-message {
+  color: #FFF;
+  font-family: Heebo;
+  font-size: 16px;
+  font-weight: 300;
+  opacity: 0.5;
+  text-align: center;
 }
 </style>
-```

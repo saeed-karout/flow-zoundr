@@ -116,3 +116,21 @@ a{
 .secondary-btn {
     background-color: #3A3E42;
 }
+
+
+.leaflet-pane > svg path.leaflet-interactive {
+  outline: none !important;
+}
+
+.leaflet-interactive {
+  outline: none !important;
+}
+
+.leaflet-container:focus {
+  outline: none;
+}
+
+/* إزالة تأثير التركيز على العناصر التفاعلية */
+.leaflet-interactive:focus {
+  outline: none !important;
+}

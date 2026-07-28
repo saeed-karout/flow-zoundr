@@ -13,7 +13,12 @@
           
           <!-- Uploaded image covering the entire card -->
           <div v-if="uploadedImage && !isUploading" class="uploaded-image-container">
-            <img :src="storage_url+'/'+uploadedImage" alt="Uploaded Cover" class="uploaded-image-full" />
+            <img 
+              :src="uploadedImage" 
+              alt="Uploaded Cover" 
+              class="uploaded-image-full"
+              @error="handleImageError"
+            />
           </div>
           
           <!-- Default content when no image -->
@@ -46,16 +51,16 @@
       <!-- Text content that appears over the image - HIDDEN WHEN IMAGE IS UPLOADED -->
       <div class="text-content-overlay" v-if="!isUploading && !uploadedImage">
         <div class="text1">
-          <span>Cover Upload via Drag & Drop</span>
+          <span>Cover Upload per Drag & Drop</span>
           <div class="text-link-bold">
-            Or <span @click="triggerFileInput" :class="{ 'disabled': !isPreReleaseActive }">browse your file.</span>
+            ODER <span @click="triggerFileInput" :class="{ 'disabled': !isPreReleaseActive }">suche deine Datei.</span>
           </div>
         </div>
 
         <div class="text2">
-          <span>Don't have a cover for this single yet?</span>
+          <span>Du hast (noch) kein Cover für diese Single?</span>
           <div class="text-link">
-            <span>Use album cover image</span>
+            <span>Coverbild des Albums übernehmen</span>
           </div>
         </div>
       </div>
@@ -64,7 +69,7 @@
     <div class="column2">
       <div class="preRelease-info">
         <div class="top-line">
-          <span>Do you want to pre-release this song?</span>
+          <span>Du möchtest diesen Song Pre-releasen?</span>
           <div class="btn-switch" :class="{ active: isPreReleaseActive }" @click="togglePreRelease">
             <img src="/icon/circle.svg" class="circle" alt="circle image" />
           </div>
@@ -72,13 +77,17 @@
 
         <div class="infos" :class="{ 'active-opacity': isPreReleaseActive }">
           <div class="headline">
-            <div class="title" :class="{ 'active-text': isPreReleaseActive }">{{ props.currentSong?.artist_name || 'artist name' }}</div>
-            <div class="subtitle" :class="{ 'active-text': isPreReleaseActive }">{{ props.currentSong?.title || 'song title' }}</div>
+            <div class="title" :class="{ 'active-text': isPreReleaseActive }">
+              {{ artistName }}
+            </div>
+            <div class="subtitle" :class="{ 'active-text': isPreReleaseActive }">
+              {{ songTitle }}
+            </div>
           </div>
 
           <div class="Form">
             <div class="top-line" style="gap: 16px;">
-              <span>Should the entire release be pre-orderable with this single?</span>
+              <span>Soll der gesamte Release mit dieser Single vorbestellbar sein?</span>
               <div class="btn-switch" :class="{ active: isPreOrderActive }" @click="togglePreOrder">
                 <img src="/icon/circle.svg" class="circle" alt="circle image" />
               </div>
@@ -93,21 +102,23 @@
                   'has-checkmark': isReleaseDateSelected 
                 }"
                 @mouseenter="isHoveredReleaseDate = true"
-                @mouseleave="isHoveredReleaseDate = false; if (!isInputFocusedReleaseDate) isCalendarVisibleReleaseDate = false">
+                @mouseleave="isHoveredReleaseDate = false"
+              >
                 <input 
                   type="text" 
                   class="input-field" 
                   :value="selectedReleaseDate" 
                   readonly
-                  @focus="isInputFocusedReleaseDate = true; isCalendarVisibleReleaseDate = true"
-                  placeholder="DD/MM/YY" 
+                  @focus="openCalendar"
+                  :placeholder="dynamicPlaceholder"
                   :disabled="!isPreReleaseActive"
                 />
                 <div v-if="isReleaseDateSelected" class="checkmark">
                   <img src="../../../assets/icons/y.png" class="icon-y" alt="checkmark icon" />
                 </div>
-                <div class="spacer" @click="$emit('openVideoPopup', 'releaseDate')">
-                  <div class="play" :class="{ visible: isInputFocusedReleaseDate || isHoveredReleaseDate }">
+                <!-- ✅ spacer يظهر فقط عند التمرير -->
+                <div class="spacer" @click="openCalendar">
+                  <div class="play" :class="{ visible: isHoveredReleaseDate || isInputFocusedReleaseDate }">
                     <img :src="iconPlay" class="icon" alt="image icon" />
                   </div>
                 </div>
@@ -121,6 +132,7 @@
                   v-if="isCalendarVisibleReleaseDate" 
                   class="calendar-picker" 
                   @select="updateReleaseDate($event)" 
+                  @close="closeCalendar"
                 />
               </div>
             </div>
@@ -129,164 +141,510 @@
       </div>
     </div>
 
-
-    <div class="btn-right" 
-       :class="{
-         'active': !isPreReleaseActive || (uploadedImage && isReleaseDateSelected),
-         'inactive': isPreReleaseActive && (!uploadedImage || !isReleaseDateSelected)
-       }"
-       @click="GotoFirstSection">
-       Zur Tracklist
-     </div>
-    
-   
   </div>
-  
+  <div class="btn-right" 
+     :class="{
+       'active': canGoToTracklist,
+       'inactive': !canGoToTracklist
+     }"
+     @click="GotoFirstSection">
+     Zur Tracklist
+   </div>
+
+  <!-- ✅ Popup للتحذير من التاريخ القريب (خاص بـ Pre-Release) -->
+  <PreReleasePopup 
+    :showPopup="showPreReleasePopup"
+    :selectedDate="popupSelectedDate"
+    :daysDifference="popupDaysDifference"
+    @update-date="handlePopupUpdateDate"
+    @close="handlePopupClose"
+  />
 </template>
 
 <script setup>
-  import { ref, onMounted, onBeforeUnmount, watch, defineProps, nextTick } from 'vue';
-  import CalendarPicker from '@/components/CalendarPicker.vue';
-  import CircleProgress from 'vue3-circle-progress';
-  import iconPlay from '@/assets/icons/play.png';
-  import { storage_url } from '@/constants';
+import { ref, onMounted, onBeforeUnmount, watch, defineProps, nextTick, computed } from 'vue';
+import CalendarPicker from '@/components/CalendarPicker.vue';
+import CircleProgress from 'vue3-circle-progress';
+import iconPlay from '@/assets/icons/play.png';
+import { storage_url } from '@/constants';
+import PreReleasePopup from '@/components/modals/PreReleasePopup.vue'; // ✅ استيراد البوب اب الجديد
+
+
+const props = defineProps({
+  currentSong: {
+    type: Object,
+    default: () => ({})
+  },
+  formData: {
+    type: Object,
+    default: () => ({})
+  },
+  activeTab: {
+    type: String,
+    default: 'pre-release'
+  },
+  releaseArtists: {
+    type: Array,
+    default: () => []
+  }
+});
+
+const emit = defineEmits([
+  'update:form-data',
+  'save-song',
+  'openVideoPopup',
+  'next',
+  'enter-sub-layout',
+  'exit-sub-layout',
+  'back-to-tracklist'
+]);
+
+// ========== متغير حالة المكون ==========
+const isMounted = ref(false);
+
+// ──── حالة حفظ البيانات ────
+const isSaving = ref(false);
+const saveQueue = ref([]);
+
+// ──── Data initialization ────
+const isPreReleaseActive = ref(false);
+const isPreOrderActive = ref(false);
+const uploadedImage = ref(null);
+const uploadedImageBase64 = ref(null);
+const selectedReleaseDate = ref('');
+const isReleaseDateSelected = ref(false);
+
+// Store previous values for comparison
+const previousValues = ref({
+  prerelease: 0,
+  pre_order: 0,
+  cover: null,
+  release_date: null
+});
+
+// State for release date input
+const isHoveredReleaseDate = ref(false);
+const isInputFocusedReleaseDate = ref(false);
+const isCalendarVisibleReleaseDate = ref(false);
+
+// State for image upload
+const file = ref(null);
+const fileProgress = ref(0);
+const isUploading = ref(false);
+const isDragging = ref(false);
+const circleSize = ref(352);
+const borderWidth = ref(12);
+const allowedFileTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+const fileInput = ref(null);
+const errorMessage = ref('');
+
+const uploadedFileData = ref(null);
+
+// ========== 🔥 متغيرات البوب اب ==========
+const showPreReleasePopup = ref(false);
+const popupSelectedDate = ref('');
+const popupDaysDifference = ref(0);
+
+// ========== 🔥 حساب التاريخ الموصى به (الجمعة القادمة بعد 7 أيام من اليوم) ==========
+const computeRecommendedDate = () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   
-  const props = defineProps({
-    currentSong: {
-      type: Object,
-      default: () => ({})
-    },
-    formData: {
-      type: Object,
-      default: () => ({})
-    },
-    activeTab: {
-      type: String,
-      default: 'pre-release'
+  // إضافة 7 أيام
+  const targetDate = new Date(today);
+  targetDate.setDate(targetDate.getDate() + 7);
+  
+  // الانتقال إلى يوم الجمعة التالي (5 = Friday)
+  const currentDay = targetDate.getDay();
+  let daysToAdd = 0;
+  
+  if (currentDay <= 5) {
+    daysToAdd = 5 - currentDay;
+  } else {
+    daysToAdd = (5 - currentDay) + 7;
+  }
+  
+  targetDate.setDate(targetDate.getDate() + daysToAdd);
+  
+  return targetDate;
+};
+
+// ========== 🔥 Placeholder الديناميكي ==========
+const dynamicPlaceholder = computed(() => {
+  if (!isPreReleaseActive.value) return 'DD.MM.YYYY';
+  
+  const recommendedDate = computeRecommendedDate();
+  const day = String(recommendedDate.getDate()).padStart(2, '0');
+  const month = String(recommendedDate.getMonth() + 1).padStart(2, '0');
+  const year = recommendedDate.getFullYear();
+  
+  return `${day}.${month}.${year}`;
+});
+
+// ========== 🔥 Computed Properties ==========
+const artistName = computed(() => {
+  if (props.releaseArtists && props.releaseArtists.length > 0) {
+    const artistName = props.releaseArtists[0];
+    if (typeof artistName === 'string') {
+      return artistName;
     }
+    if (typeof artistName === 'object' && artistName.name) {
+      return artistName.name;
+    }
+    return String(artistName) || 'artist name';
+  }
+  
+  if (props.currentSong?.contributors?.artist && 
+      Array.isArray(props.currentSong.contributors.artist) && 
+      props.currentSong.contributors.artist.length > 0) {
+    const artist = props.currentSong.contributors.artist[0];
+    return artist?.name || 'artist name';
+  }
+  
+  if (props.currentSong?.artists && 
+      Array.isArray(props.currentSong.artists) && 
+      props.currentSong.artists.length > 0) {
+    const artist = props.currentSong.artists[0];
+    if (typeof artist === 'string') {
+      return artist;
+    }
+    if (typeof artist === 'object' && artist.name) {
+      return artist.name;
+    }
+    return String(artist) || 'artist name';
+  }
+  
+  return 'artist name';
+});
+
+const songTitle = computed(() => {
+  if (props.currentSong?.title) {
+    return props.currentSong.title;
+  }
+  
+  if (props.formData?.title) {
+    return props.formData.title;
+  }
+  
+  return 'song title';
+});
+
+// ========== 🔥 دالة التحقق من التاريخ وإظهار البوب اب ==========
+const checkAndShowPopup = (dateString) => {
+  if (!dateString) return false;
+  
+  // تحويل التاريخ المختار إلى كائن Date
+  let selectedDate;
+  if (dateString.includes('.')) {
+    const parts = dateString.split('.');
+    selectedDate = new Date(parts[2], parts[1] - 1, parts[0]);
+  } else if (dateString.includes('/')) {
+    const parts = dateString.split('/');
+    selectedDate = new Date(parts[2], parts[1] - 1, parts[0]);
+  } else {
+    selectedDate = new Date(dateString);
+  }
+  
+  if (isNaN(selectedDate.getTime())) return false;
+  
+  // حساب الفرق بين اليوم والتاريخ المختار
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  selectedDate.setHours(0, 0, 0, 0);
+  
+  const diffTime = selectedDate.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  console.log('📅 [PreReleaseContent] الفرق بين اليوم والتاريخ المختار:', diffDays, 'يوم');
+  
+  // ✅ إذا كان الفرق أقل من 7 أيام، نظهر البوب اب
+  if (diffDays < 7 && diffDays >= 0) {
+    popupSelectedDate.value = dateString;
+    popupDaysDifference.value = diffDays;
+    showPreReleasePopup.value = true;
+    console.log('🔥 [PreReleaseContent] إظهار البوب اب - التاريخ قريب جداً!');
+    return true;
+  }
+  
+  return false;
+};
+
+// ========== 🔥 تحديث التاريخ من البوب اب ==========
+const handlePopupUpdateDate = (newDate) => {
+  console.log('📅 [PreReleaseContent] تحديث التاريخ من البوب اب إلى:', newDate);
+  selectedReleaseDate.value = newDate;
+  isReleaseDateSelected.value = true;
+  showPreReleasePopup.value = false;
+  
+  // حفظ التغيير
+  sendUpdate();
+  
+  setTimeout(() => {
+    emitTabCompletion();
+  }, 300);
+};
+
+// ========== 🔥 إغلاق البوب اب ==========
+const handlePopupClose = () => {
+  console.log('🔄 [PreReleaseContent] إغلاق البوب اب');
+  showPreReleasePopup.value = false;
+};
+
+// ========== 🔥 دالة إغلاق الكالندر عند النقر خارجها ==========
+const handleClickOutside = (event) => {
+  if (!isCalendarVisibleReleaseDate.value) return;
+  
+  const calendarElement = document.querySelector('.calendar-picker');
+  const inputElement = document.querySelector('.section-input .input-field');
+  const spacerElement = document.querySelector('.section-input .spacer');
+  const playDarkElement = document.querySelector('.section-input .play-dark');
+  
+  const isClickOnCalendar = calendarElement && calendarElement.contains(event.target);
+  const isClickOnInput = inputElement && inputElement.contains(event.target);
+  const isClickOnSpacer = spacerElement && spacerElement.contains(event.target);
+  const isClickOnPlayDark = playDarkElement && playDarkElement.contains(event.target);
+  
+  if (!isClickOnCalendar && !isClickOnInput && !isClickOnSpacer && !isClickOnPlayDark) {
+    closeCalendar();
+  }
+};
+
+// ========== 🔥 دوال فتح وإغلاق الكالندر ==========
+const openCalendar = () => {
+  if (!isPreReleaseActive.value) return;
+  isInputFocusedReleaseDate.value = true;
+  isCalendarVisibleReleaseDate.value = true;
+};
+
+const closeCalendar = () => {
+  isCalendarVisibleReleaseDate.value = false;
+  isInputFocusedReleaseDate.value = false;
+};
+
+// ========== مراقبة التغييرات ==========
+watch(() => props.currentSong, (newSong, oldSong) => {
+  console.log('🔄 PreReleaseContent: currentSong changed', {
+    oldTitle: oldSong?.title,
+    newTitle: newSong?.title,
+    uuid: newSong?.uuid
   });
   
-  const emit = defineEmits([
-    'update:form-data',
-    'save-song',
-    'openVideoPopup',
-    'next',
-    'enter-sub-layout',
-    'exit-sub-layout',
-    'back-to-tracklist'  // حدث جديد للعودة إلى قائمة الأغاني
-  ]);
-  
-  // ──── Data initialization ────
-  const isPreReleaseActive = ref(false);  // First switch - prerelease
-  const isPreOrderActive = ref(false);    // Second switch - pre_order
-  const uploadedImage = ref(null);
-  const uploadedImageBase64 = ref(null);
-  const selectedReleaseDate = ref('');
-  const isReleaseDateSelected = ref(false);
-  
-  // Store previous values for comparison
-  const previousValues = ref({
-    prerelease: 0,
-    pre_order: 0,
-    cover: null,
-    release_date: null
-  });
-  
-  // State for release date input
-  const isHoveredReleaseDate = ref(false);
-  const isInputFocusedReleaseDate = ref(false);
-  const isCalendarVisibleReleaseDate = ref(false);
-  
-  // State for image upload
-  const file = ref(null);
-  const fileProgress = ref(0);
-  const isUploading = ref(false);
-  const isDragging = ref(false);
-  const circleSize = ref(352);
-  const borderWidth = ref(12);
-  const allowedFileTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-  const fileInput = ref(null);
-  const errorMessage = ref('');
-  
-  // ──── Update data from props ────
-  const updateFromProps = () => {
-    if (!props.currentSong?.uuid) return;
-    
-    console.log('🔄 PreReleaseContent: Updating from currentSong', {
-      uuid: props.currentSong.uuid,
-      prerelease: props.currentSong.prerelease,
-      pre_order: props.currentSong.pre_order,
-      hasCover: !!props.currentSong.cover,
-      release_date: props.currentSong.release_date
+  if (!isMounted.value) return;
+  if (newSong?.uuid) {
+    nextTick(() => {
+      updateFromProps();
     });
+  }
+}, { deep: true, immediate: true });
+
+watch(() => props.releaseArtists, (newArtists) => {
+  console.log('🔄 PreReleaseContent: releaseArtists changed', newArtists);
+}, { deep: true });
+
+watch(() => props.formData, (newFormData) => {
+  console.log('🔄 PreReleaseContent: formData changed', newFormData?.title);
+}, { deep: true });
+
+// ──── دالة معالجة قائمة الانتظار ────
+const processSaveQueue = () => {
+  if (!isMounted.value) {
+    console.warn('⚠️ PreReleaseContent: المكون تم تدميره، تخطي معالجة قائمة الانتظار');
+    return;
+  }
+  
+  if (saveQueue.value.length === 0) {
+    isSaving.value = false;
+    console.log('✅ PreReleaseContent: جميع التغييرات تم حفظها');
+    return;
+  }
+  
+  const latestSave = saveQueue.value.pop();
+  console.log(`📦 PreReleaseContent: معالجة أحدث عنصر من قائمة الانتظار (${saveQueue.value.length} متبقي)`);
+  saveQueue.value = [];
+  
+  const payload = {};
+  let hasChanges = false;
+  
+  if (latestSave.prerelease !== undefined && latestSave.prerelease !== previousValues.value.prerelease) {
+    payload['prerelease'] = latestSave.prerelease;
+    hasChanges = true;
+  }
+  
+  if (latestSave.pre_order !== undefined && latestSave.pre_order !== previousValues.value.pre_order) {
+    payload['pre_order'] = latestSave.pre_order;
+    hasChanges = true;
+  }
+  
+  if (latestSave.cover !== undefined && latestSave.cover !== previousValues.value.cover) {
+    payload['cover'] = latestSave.cover;
+    hasChanges = true;
+  }
+  
+  if (latestSave.release_date !== undefined && latestSave.release_date !== previousValues.value.release_date) {
+    payload['release_date'] = latestSave.release_date;
+    hasChanges = true;
+  }
+  
+  if (!hasChanges) {
+    console.log('ℹ️ PreReleaseContent: لا توجد تغييرات في قائمة الانتظار');
+    isSaving.value = false;
+    return;
+  }
+  
+  console.log('📤 PreReleaseContent: إرسال التغييرات من قائمة الانتظار:', payload);
+  
+  previousValues.value = {
+    prerelease: latestSave.prerelease !== undefined ? latestSave.prerelease : previousValues.value.prerelease,
+    pre_order: latestSave.pre_order !== undefined ? latestSave.pre_order : previousValues.value.pre_order,
+    cover: latestSave.cover !== undefined ? latestSave.cover : previousValues.value.cover,
+    release_date: latestSave.release_date !== undefined ? latestSave.release_date : previousValues.value.release_date
+  };
+  
+  isSaving.value = true;
+  emit('save-song', payload);
+};
+
+const handleSaveComplete = (event) => {
+  if (!isMounted.value) {
+    console.warn('⚠️ PreReleaseContent: المكون تم تدميره، تخطي معالجة نجاح الحفظ');
+    return;
+  }
+  
+  const { success, songUuid, error, data } = event.detail || {};
+  
+  if (success) {
+    console.log('✅ PreReleaseContent: تم استلام إشارة نجاح الحفظ للأغنية:', songUuid);
     
-    // Update values from currentSong
-    // First switch: prerelease (0 or 1)
-    if (props.currentSong.prerelease !== undefined) {
-      const newPreReleaseActive = props.currentSong.prerelease === 1 || props.currentSong.prerelease === true;
-      if (newPreReleaseActive !== isPreReleaseActive.value) {
-        console.log('📥 PreReleaseContent: Updating isPreReleaseActive to', newPreReleaseActive);
-        isPreReleaseActive.value = newPreReleaseActive;
-      }
+    if (data?.cover) {
+      console.log('🖼️ PreReleaseContent: تحديث الصورة من استجابة الخادم:', data.cover);
+      const fullCoverUrl = `${storage_url}/${data.cover}`;
+      uploadedImage.value = fullCoverUrl;
+      uploadedImageBase64.value = fullCoverUrl;
+      previousValues.value.cover = data.cover;
+      uploadedFileData.value = null;
+      
+      setTimeout(() => {
+        emitTabCompletion();
+      }, 300);
     }
     
-    // Second switch: pre_order (0 or 1)
-    if (props.currentSong.pre_order !== undefined) {
-      const newPreOrderActive = props.currentSong.pre_order === 1 || props.currentSong.pre_order === true;
-      if (newPreOrderActive !== isPreOrderActive.value) {
-        console.log('📥 PreReleaseContent: Updating isPreOrderActive to', newPreOrderActive);
-        isPreOrderActive.value = newPreOrderActive;
-      }
-    }
-    
-    // Convert release date from YYYY-MM-DD to DD/MM/YY for display
-    if (props.currentSong.release_date) {
-      const newDate = formatDateForDisplay(props.currentSong.release_date);
+    if (data?.release_date) {
+      console.log('📅 PreReleaseContent: تحديث release_date من استجابة الخادم:', data.release_date);
+      const newDate = formatDateForDisplay(data.release_date);
       if (newDate !== selectedReleaseDate.value) {
         selectedReleaseDate.value = newDate;
         isReleaseDateSelected.value = true;
+        previousValues.value.release_date = data.release_date;
+        
+        setTimeout(() => {
+          emitTabCompletion();
+        }, 300);
       }
-    } else {
-      selectedReleaseDate.value = '';
-      isReleaseDateSelected.value = false;
     }
     
-    // Pre-release image
-    if (props.currentSong.cover) {
-      if (props.currentSong.cover !== uploadedImage.value) {
-        uploadedImage.value = props.currentSong.cover;
-        uploadedImageBase64.value = props.currentSong.cover;
-      }
-    } else {
-      uploadedImage.value = null;
-      uploadedImageBase64.value = null;
-    }
+    setTimeout(() => {
+      emitTabCompletion();
+    }, 300);
     
-    // Store previous values for comparison
-    previousValues.value = {
-      prerelease: isPreReleaseActive.value ? 1 : 0,
-      pre_order: isPreOrderActive.value ? 1 : 0,
-      cover: uploadedImageBase64.value,
-      release_date: props.currentSong.release_date || null
-    };
-  };
+  } else {
+    console.warn('⚠️ PreReleaseContent: فشل الحفظ:', error);
+  }
   
-  // ──── Format date from YYYY-MM-DD to DD/MM/YY for display ────
+  isSaving.value = false;
+  
+  setTimeout(() => {
+    if (!isMounted.value) {
+      console.warn('⚠️ PreReleaseContent: المكون تم تدميره أثناء معالجة قائمة الانتظار');
+      return;
+    }
+    
+    if (saveQueue.value.length > 0) {
+      console.log(`📦 PreReleaseContent: معالجة ${saveQueue.value.length} عناصر في قائمة الانتظار`);
+      processSaveQueue();
+    } else {
+      console.log('✅ PreReleaseContent: قائمة الانتظار فارغة');
+    }
+  }, 200);
+};
+
+const updateFromProps = () => {
+  if (!isMounted.value) {
+    console.warn('⚠️ PreReleaseContent: المكون تم تدميره، تخطي تحديث البيانات');
+    return;
+  }
+  
+  if (!props.currentSong?.uuid) return;
+  
+  console.log('🔄 PreReleaseContent: Updating from currentSong', {
+    uuid: props.currentSong.uuid,
+    prerelease: props.currentSong.prerelease,
+    pre_order: props.currentSong.pre_order,
+    hasCover: !!props.currentSong.cover,
+    cover: props.currentSong.cover,
+    release_date: props.currentSong.release_date
+  });
+  
+  if (props.currentSong.prerelease !== undefined) {
+    const newPreReleaseActive = props.currentSong.prerelease === 1 || props.currentSong.prerelease === true;
+    if (newPreReleaseActive !== isPreReleaseActive.value) {
+      console.log('📥 PreReleaseContent: Updating isPreReleaseActive to', newPreReleaseActive);
+      isPreReleaseActive.value = newPreReleaseActive;
+      previousValues.value.prerelease = newPreReleaseActive ? 1 : 0;
+    }
+  }
+  
+  if (props.currentSong.pre_order !== undefined) {
+    const newPreOrderActive = props.currentSong.pre_order === 1 || props.currentSong.pre_order === true;
+    if (newPreOrderActive !== isPreOrderActive.value) {
+      console.log('📥 PreReleaseContent: Updating isPreOrderActive to', newPreOrderActive);
+      isPreOrderActive.value = newPreOrderActive;
+      previousValues.value.pre_order = newPreOrderActive ? 1 : 0;
+    }
+  }
+  
+  if (props.currentSong.release_date) {
+    const newDate = formatDateForDisplay(props.currentSong.release_date);
+    if (newDate !== selectedReleaseDate.value) {
+      selectedReleaseDate.value = newDate;
+      isReleaseDateSelected.value = true;
+      previousValues.value.release_date = props.currentSong.release_date;
+    }
+  } else {
+    selectedReleaseDate.value = '';
+    isReleaseDateSelected.value = false;
+    previousValues.value.release_date = null;
+  }
+  
+  if (props.currentSong.cover) {
+    let fullCoverUrl = props.currentSong.cover;
+    if (!fullCoverUrl.startsWith('http://') && !fullCoverUrl.startsWith('https://')) {
+      fullCoverUrl = `${storage_url}/${fullCoverUrl}`;
+    }
+    if (fullCoverUrl !== uploadedImage.value) {
+      console.log('🖼️ PreReleaseContent: تحديث الصورة من currentSong:', fullCoverUrl);
+      uploadedImage.value = fullCoverUrl;
+      uploadedImageBase64.value = fullCoverUrl;
+      previousValues.value.cover = props.currentSong.cover;
+    }
+  }
+  
+  setTimeout(() => {
+    emitTabCompletion();
+  }, 300);
+};
+
+// ──── Format date from YYYY-MM-DD to DD.MM.YYYY for display ────
 const formatDateForDisplay = (dateString) => {
   if (!dateString) return '';
   
   try {
-    // If date is in ISO format with time (YYYY-MM-DDT00:00:00.000000Z)
     if (dateString.includes('T')) {
-      // Extract only the date part
       dateString = dateString.split('T')[0];
     }
     
-    // If date is in YYYY-MM-DD format
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
       const [year, month, day] = dateString.split('-');
-      const shortYear = year.slice(-2);
-      return `${day}/${month}/${shortYear}`; // DD/MM/YY
+      return `${day}.${month}.${year}`;
     }
     
     return dateString;
@@ -296,454 +654,621 @@ const formatDateForDisplay = (dateString) => {
   }
 };
 
-// ──── Format date from DD/MM/YY to YYYY-MM-DD for API ────
-  const formatDateForAPI = (dateString) => {
-    if (!dateString) return null;
-    
-    try {
-      // If date is in DD/MM/YY format
-      if (dateString.includes('/')) {
-        const parts = dateString.split('/');
-        if (parts.length === 3) {
-          const day = parts[0].padStart(2, '0');
-          const month = parts[1].padStart(2, '0');
-          let year = parts[2];
-          
-          // Convert 2-digit year to 4 digits
-          if (year.length === 2) {
-            const currentYear = new Date().getFullYear();
-            const currentCentury = Math.floor(currentYear / 100) * 100;
-            const yearNum = parseInt(year, 10);
-            year = (currentCentury + yearNum).toString();
-          }
-          
-          return `${year}-${month}-${day}`; // YYYY-MM-DD
+// ──── Format date from DD.MM.YYYY to YYYY-MM-DD for API ────
+const formatDateForAPI = (dateString) => {
+  if (!dateString) return null;
+  
+  try {
+    if (dateString.includes('.')) {
+      const parts = dateString.split('.');
+      if (parts.length === 3) {
+        const day = parts[0].padStart(2, '0');
+        const month = parts[1].padStart(2, '0');
+        let year = parts[2];
+        
+        if (year.length === 2) {
+          const currentYear = new Date().getFullYear();
+          const currentCentury = Math.floor(currentYear / 100) * 100;
+          const yearNum = parseInt(year, 10);
+          year = (currentCentury + yearNum).toString();
         }
+        
+        return `${year}-${month}-${day}`;
       }
-      
-      // If date is already in YYYY-MM-DD format
-      if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-        return dateString;
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('❌ Error formatting date for API:', error);
-      return null;
     }
-  };
+    
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+      return dateString;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('❌ Error formatting date for API:', error);
+    return null;
+  }
+};
+
+// ──── Read image as Base64 ────
+const readImageAsBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const base64String = reader.result.split(',')[1];
+      resolve(base64String);
+    };
+    reader.onerror = (error) => reject(error);
+  });
+};
+
+// ──── Send updates - sends only changed values ────
+const sendUpdate = () => {
+  if (!isMounted.value) {
+    console.warn('⚠️ PreReleaseContent: المكون تم تدميره، تخطي إرسال التحديث');
+    return;
+  }
   
-  // ──── Read image as Base64 ────
-  const readImageAsBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => {
-        // Remove prefix (data:image/jpeg;base64,)
-        const base64String = reader.result.split(',')[1];
-        resolve(base64String);
-      };
-      reader.onerror = (error) => reject(error);
-    });
-  };
+  if (!props.currentSong?.uuid) {
+    console.warn('⚠️ PreReleaseContent: No song UUID');
+    return;
+  }
   
-  // ──── Send updates - sends only changed values ───
-  const sendUpdate = () => {
-    if (!props.currentSong?.uuid) {
-      console.warn('⚠️ PreReleaseContent: No song UUID');
-      return;
-    }
+  if (isSaving.value) {
+    console.log('⏳ PreReleaseContent: حفظ قيد التنفيذ، إضافة إلى قائمة الانتظار');
     
-    const apiFormattedDate = formatDateForAPI(selectedReleaseDate.value);
-    const payload = {};
-    let hasChanges = false;
-    
-    // Compare prerelease (0 or 1)
-    const prereleaseValue = isPreReleaseActive.value ? 1 : 0;
-    if (prereleaseValue !== previousValues.value.prerelease) {
-      payload['prerelease'] = prereleaseValue;
-      console.log('🔄 Change in prerelease:', { 
-        old: previousValues.value.prerelease, 
-        new: prereleaseValue 
-      });
-      hasChanges = true;
-      
-      // If PreRelease is deactivated (prerelease: 0), send null for other fields
-      if (prereleaseValue === 0) {
-        // Send null for other fields to deactivate them
-        payload['pre_order'] = null;
-        payload['cover'] = null;
-        payload['release_date'] = null;
-        
-        console.log('🔄 PreRelease deactivated, sending null for other fields');
-        
-        // Update previous values
-        previousValues.value.pre_order = null;
-        previousValues.value.cover = null;
-        previousValues.value.release_date = null;
-        
-        // Update local values as well
-        isPreOrderActive.value = false;
-        uploadedImageBase64.value = null;
-        uploadedImage.value = null;
-        selectedReleaseDate.value = '';
-        isReleaseDateSelected.value = false;
-        
-        hasChanges = true;
-      }
-    }
-    
-    // If PreRelease is active, check other changes
-    if (isPreReleaseActive.value) {
-      // Compare pre_order (0 or 1)
-      const preOrderValue = isPreOrderActive.value ? 1 : 0;
-      if (preOrderValue !== previousValues.value.pre_order) {
-        payload['pre_order'] = preOrderValue;
-        console.log('🔄 Change in pre_order:', { 
-          old: previousValues.value.pre_order, 
-          new: preOrderValue 
-        });
-        hasChanges = true;
-      }
-      
-      // Compare cover - only if image changed
-      if (uploadedImageBase64.value !== previousValues.value.cover) {
-        payload['cover'] = uploadedImageBase64.value;
-        console.log('🔄 Change in cover:', { 
-          old: previousValues.value.cover ? 'Image exists' : 'No image', 
-          new: uploadedImageBase64.value ? 'New image' : 'No image'
-        });
-        hasChanges = true;
-      }
-      
-      // Compare release_date - only if date changed
-      if (apiFormattedDate !== previousValues.value.release_date) {
-        payload['release_date'] = apiFormattedDate;
-        console.log('🔄 Change in release_date:', { 
-          old: previousValues.value.release_date, 
-          new: apiFormattedDate 
-        });
-        hasChanges = true;
-      }
-    }
-    
-    if (!hasChanges) {
-      console.log('ℹ️ PreReleaseContent: No changes');
-      return;
-    }
-    
-    console.log('📤 PreReleaseContent: Sending changes only:', payload);
-    
-    // Update previous values immediately to prevent repeated sending
-    previousValues.value = {
-      prerelease: prereleaseValue,
+    const dataToSave = {
+      prerelease: isPreReleaseActive.value ? 1 : 0,
       pre_order: isPreReleaseActive.value ? (isPreOrderActive.value ? 1 : 0) : null,
-      cover: isPreReleaseActive.value ? uploadedImageBase64.value : null,
-      release_date: isPreReleaseActive.value ? apiFormattedDate : null
+      cover: isPreReleaseActive.value ? uploadedFileData.value : null,
+      release_date: isPreReleaseActive.value ? formatDateForAPI(selectedReleaseDate.value) : null
     };
     
-    // Send only the changes
-    emit('save-song', payload);
-  };
-  
-  // ──── Toggle functions ────
-  const togglePreRelease = () => {
-    const newValue = !isPreReleaseActive.value;
-    console.log('🔄 PreReleaseContent: Toggling PreRelease to', newValue);
-    isPreReleaseActive.value = newValue;
+    const isDuplicate = saveQueue.value.some(item => 
+      JSON.stringify(item) === JSON.stringify(dataToSave)
+    );
     
-    // If deactivated, reset local values
-    if (!newValue) {
-      // Reset local values
+    if (!isDuplicate) {
+      saveQueue.value.push(dataToSave);
+      console.log(`📦 PreReleaseContent: تم إضافة عنصر إلى قائمة الانتظار (${saveQueue.value.length} عناصر)`);
+    }
+    return;
+  }
+  
+  const apiFormattedDate = formatDateForAPI(selectedReleaseDate.value);
+  const payload = {};
+  let hasChanges = false;
+  
+  const prereleaseValue = isPreReleaseActive.value ? 1 : 0;
+  if (prereleaseValue !== previousValues.value.prerelease) {
+    payload['prerelease'] = prereleaseValue;
+    console.log('🔄 Change in prerelease:', { 
+      old: previousValues.value.prerelease, 
+      new: prereleaseValue 
+    });
+    hasChanges = true;
+    
+    if (prereleaseValue === 0) {
+      payload['pre_order'] = null;
+      payload['cover'] = null;
+      payload['release_date'] = null;
+      
+      previousValues.value.pre_order = null;
+      previousValues.value.cover = null;
+      previousValues.value.release_date = null;
+      
       isPreOrderActive.value = false;
       uploadedImageBase64.value = null;
       uploadedImage.value = null;
+      uploadedFileData.value = null;
       selectedReleaseDate.value = '';
       isReleaseDateSelected.value = false;
       
-      console.log('🔄 PreReleaseContent: Reset values due to deactivation');
+      hasChanges = true;
+    }
+  }
+  
+  if (isPreReleaseActive.value) {
+    const preOrderValue = isPreOrderActive.value ? 1 : 0;
+    if (preOrderValue !== previousValues.value.pre_order) {
+      payload['pre_order'] = preOrderValue;
+      console.log('🔄 Change in pre_order:', { 
+        old: previousValues.value.pre_order, 
+        new: preOrderValue 
+      });
+      hasChanges = true;
     }
     
-    // Send update immediately
-    sendUpdate();
+    const hasNewFile = uploadedFileData.value && 
+                       (!previousValues.value.cover || 
+                        (previousValues.value.cover && uploadedFileData.value !== previousValues.value.cover));
+    
+    if (hasNewFile) {
+      payload['cover'] = uploadedFileData.value;
+      console.log('🔄 Change in cover: new file uploaded', {
+        fileName: uploadedFileData.value.name,
+        fileType: uploadedFileData.value.type,
+        fileSize: uploadedFileData.value.size
+      });
+      hasChanges = true;
+    }
+    
+    if (apiFormattedDate !== previousValues.value.release_date) {
+      payload['release_date'] = apiFormattedDate;
+      console.log('🔄 Change in release_date:', { 
+        old: previousValues.value.release_date, 
+        new: apiFormattedDate 
+      });
+      hasChanges = true;
+    }
+  }
+  
+  if (!hasChanges) {
+    console.log('ℹ️ PreReleaseContent: No changes');
+    isSaving.value = false;
+    return;
+  }
+  
+  console.log('📤 PreReleaseContent: Sending changes only:', payload);
+  
+  previousValues.value = {
+    prerelease: prereleaseValue,
+    pre_order: isPreReleaseActive.value ? (isPreOrderActive.value ? 1 : 0) : null,
+    cover: isPreReleaseActive.value ? uploadedFileData.value : null,
+    release_date: isPreReleaseActive.value ? apiFormattedDate : null
   };
   
-  const togglePreOrder = () => {
-    const newValue = !isPreOrderActive.value;
-    console.log('🔄 PreReleaseContent: Toggling PreOrder to', newValue);
-    isPreOrderActive.value = newValue;
-    
-    // Send update immediately
-    sendUpdate();
+  isSaving.value = true;
+  emit('save-song', payload);
+};
+
+// ──── معالجة خطأ تحميل الصورة ────
+const handleImageError = (event) => {
+  console.error('❌ PreReleaseContent: فشل تحميل الصورة:', event.target.src);
+  const img = event.target;
+  const currentSrc = img.src;
+  
+  if (currentSrc.includes('storage/storage/')) {
+    const fixedSrc = currentSrc.replace('storage/storage/', 'storage/');
+    console.log('🔄 محاولة إصلاح المسار:', fixedSrc);
+    img.src = fixedSrc;
+    return;
+  }
+  
+  if (currentSrc.includes('//storage/')) {
+    const fixedSrc = currentSrc.replace('//storage/', '/storage/');
+    console.log('🔄 محاولة إصلاح المسار:', fixedSrc);
+    img.src = fixedSrc;
+    return;
+  }
+  
+  img.src = '/img/bgCardSongs/card1.png';
+};
+
+// ──── Toggle functions ────
+const togglePreRelease = () => {
+  if (!isMounted.value) return;
+  
+  const newValue = !isPreReleaseActive.value;
+  console.log('🔄 PreReleaseContent: Toggling PreRelease to', newValue);
+  isPreReleaseActive.value = newValue;
+  
+  if (!newValue) {
+    isPreOrderActive.value = false;
+    uploadedImageBase64.value = null;
+    uploadedImage.value = null;
+    uploadedFileData.value = null;
+    selectedReleaseDate.value = '';
+    isReleaseDateSelected.value = false;
+    console.log('🔄 PreReleaseContent: Reset values due to deactivation');
+    closeCalendar();
+  }
+  
+  sendUpdate();
+  
+  setTimeout(() => {
+    emitTabCompletion();
+  }, 300);
+};
+
+const togglePreOrder = () => {
+  if (!isMounted.value) return;
+  
+  const newValue = !isPreOrderActive.value;
+  console.log('🔄 PreReleaseContent: Toggling PreOrder to', newValue);
+  isPreOrderActive.value = newValue;
+  sendUpdate();
+  
+  setTimeout(() => {
+    emitTabCompletion();
+  }, 300);
+};
+
+// ──── Update release date ────
+const updateReleaseDate = (displayDate) => {
+  if (!isMounted.value) return;
+  if (!isPreReleaseActive.value) return;
+  
+  // ✅ التحقق من التاريخ وإظهار البوب اب إذا لزم الأمر
+  const showPopup = checkAndShowPopup(displayDate);
+  
+  if (showPopup) {
+    // ✅ نعرض البوب اب ونحتفظ بالتاريخ المختار
+    console.log('📅 [PreReleaseContent] تاريخ مختار قريب جداً، إظهار البوب اب');
+    // لا نغلق الكالندر حتى يتمكن المستخدم من الرؤية
+    return;
+  }
+  
+  // ✅ إذا لم يكن التاريخ قريباً، نستمر كالمعتاد
+  selectedReleaseDate.value = displayDate;
+  isReleaseDateSelected.value = true;
+  closeCalendar();
+  
+  console.log('📅 PreReleaseContent: Release date selected:', {
+    display: displayDate,
+    apiFormat: formatDateForAPI(displayDate)
+  });
+  
+  sendUpdate();
+  
+  setTimeout(() => {
+    emitTabCompletion();
+  }, 300);
+};
+
+// ──── Handle image upload ────
+const triggerFileInput = () => {
+  if (!isMounted.value) return;
+  if (!isPreReleaseActive.value) return;
+  if (fileInput.value) {
+    fileInput.value.click();
+  }
+};
+
+const handleFileUpload = async (event) => {
+  if (!isMounted.value) return;
+  if (!isPreReleaseActive.value) return;
+  
+  const uploadedFile = event.target.files[0] || event.dataTransfer.files[0];
+  if (!uploadedFile) {
+    errorMessage.value = 'No file selected.';
+    return;
+  }
+
+  if (!allowedFileTypes.includes(uploadedFile.type)) {
+    errorMessage.value = 'Please upload a JPEG or PNG file.';
+    return;
+  }
+
+  if (uploadedFile.size > 10 * 1024 * 1024) {
+    errorMessage.value = 'File exceeds maximum size of 10 MB.';
+    return;
+  }
+
+  errorMessage.value = '';
+  file.value = {
+    id: Date.now(),
+    name: uploadedFile.name,
+    file: uploadedFile,
+    status: 'uploading',
+    progress: 0,
   };
+  fileProgress.value = 0;
+  isUploading.value = true;
   
-  // ──── Update release date ────
-  const updateReleaseDate = (displayDate) => {
-    if (!isPreReleaseActive.value) return;
+  await uploadFile(file.value);
+};
+
+// ──── Upload file with progress simulation ────
+const uploadFile = async (fileObj) => {
+  try {
+    const fileSize = fileObj.file.size;
+    const fileSizeMB = (fileSize / 1024 / 1024).toFixed(2);
     
-    selectedReleaseDate.value = displayDate;
-    isReleaseDateSelected.value = true;
-    isCalendarVisibleReleaseDate.value = false;
+    const estimatedTimeMs = Math.min(6000, Math.max(1500, fileSize / 800));
+    const updateInterval = 100;
+    const totalSteps = estimatedTimeMs / updateInterval;
+    const baseProgressPerStep = 100 / totalSteps;
     
-    console.log('📅 PreReleaseContent: Release date selected:', {
-      display: displayDate,
-      apiFormat: formatDateForAPI(displayDate)
-    });
+    console.log(`📊 بدء رفع الملف: ${fileSizeMB} MB, الوقت المقدر: ${(estimatedTimeMs / 1000).toFixed(1)} ثانية`);
     
-    sendUpdate(); // Send immediately
-  };
-  
-  // ──── Handle image upload ────
-  const triggerFileInput = () => {
-    if (!isPreReleaseActive.value) return;
-    if (fileInput.value) {
-      fileInput.value.click();
-    }
-  };
-  
-  const handleFileUpload = async (event) => {
-    if (!isPreReleaseActive.value) return;
-    
-    const uploadedFile = event.target.files[0] || event.dataTransfer.files[0];
-    if (!uploadedFile) {
-      errorMessage.value = 'No file selected.';
-      return;
-    }
-  
-    if (!allowedFileTypes.includes(uploadedFile.type)) {
-      errorMessage.value = 'Please upload a JPEG or PNG file.';
-      return;
-    }
-  
-    if (uploadedFile.size > 10 * 1024 * 1024) {
-      errorMessage.value = 'File exceeds maximum size of 10 MB.';
-      return;
-    }
-  
-    errorMessage.value = '';
-    file.value = {
-      id: Date.now(),
-      name: uploadedFile.name,
-      file: uploadedFile,
-      status: 'uploading',
-      progress: 0,
-    };
+    let progress = 0;
+    fileObj.progress = 0;
     fileProgress.value = 0;
-    isUploading.value = true;
     
-    await uploadFile(file.value);
-  };
-  
-  // ========== محاكاة حقيقية لنسبة التحميل ==========
-  const uploadFile = async (fileObj) => {
-    try {
-      // حساب وقت التحميل بناءً على حجم الملف (محاكاة)
-      const fileSize = fileObj.file.size; // حجم الملف بالبايت
-      const fileSizeMB = (fileSize / 1024 / 1024).toFixed(2);
+    const interval = setInterval(() => {
+      const varianceFactor = Math.min(1.5, Math.max(0.5, 1 / (fileSize / 500000)));
+      const randomIncrement = (baseProgressPerStep * (0.5 + Math.random())) * varianceFactor;
       
-      // تقدير وقت التحميل: 1 ميجابايت ≈ 1.5 ثانية (للمحاكاة)
-      // الملفات الصغيرة تتحمل بسرعة، الكبيرة تأخذ وقت أطول
-      const estimatedTimeMs = Math.min(6000, Math.max(1500, fileSize / 800)); // بين 1.5-6 ثواني
-      const updateInterval = 100; // تحديث كل 100ms
-      const totalSteps = estimatedTimeMs / updateInterval;
-      const baseProgressPerStep = 100 / totalSteps;
+      progress += randomIncrement;
       
-      console.log(`📊 بدء رفع الملف: ${fileSizeMB} MB, الوقت المقدر: ${(estimatedTimeMs / 1000).toFixed(1)} ثانية`);
-      
-      // بدء التقدم من 0%
-      let progress = 0;
-      fileObj.progress = 0;
-      fileProgress.value = 0;
-      
-      // محاكاة التقدم الحقيقي مع تباين في السرعة
-      const interval = setInterval(() => {
-        // إضافة تقدم عشوائي بين 1-5% لكل خطوة لمحاكاة تباين سرعة التحميل
-        // كلما كان الملف أكبر، كان التقدم أبطأ قليلاً
-        const varianceFactor = Math.min(1.5, Math.max(0.5, 1 / (fileSize / 500000)));
-        const randomIncrement = (baseProgressPerStep * (0.5 + Math.random())) * varianceFactor;
-        
-        progress += randomIncrement;
-        
-        // التأكد من عدم تجاوز 95% قبل الاكتمال (نترك مساحة للمراحل النهائية)
-        if (progress >= 95) {
-          progress = 95;
-        }
-        
-        fileObj.progress = Math.min(95, Math.round(progress));
-        fileProgress.value = fileObj.progress;
-        
-        // سجل التقدم كل 10% للتتبع
-        if (fileProgress.value % 10 === 0 || fileProgress.value === 5 || fileProgress.value === 15) {
-          console.log(`📤 تقدم الرفع: ${fileProgress.value}%`);
-        }
-        
-        // إذا وصلنا إلى 95% ولا يزال التحميل جارياً
-        if (progress >= 95) {
-          // لا نوقف المؤقت هنا، سنتركه حتى اكتمال التحويل إلى Base64
-        }
-      }, updateInterval);
-  
-      // تحويل الصورة إلى Base64 (هذه العملية تأخذ وقتاً أيضاً)
-      console.log('🔄 جاري تحويل الصورة إلى Base64...');
-      const base64Image = await readImageAsBase64(fileObj.file);
-      
-      // إكمال التقدم إلى 100%
-      clearInterval(interval);
-      
-      // محاكاة الخطوات الأخيرة من 95% إلى 100%
-      for (let i = 95; i <= 100; i++) {
-        fileObj.progress = i;
-        fileProgress.value = i;
-        
-        // سجل فقط عند الوصول إلى 100%
-        if (i === 100) {
-          console.log(`📤 تقدم الرفع: ${fileProgress.value}%`);
-        }
-        
-        // تأخير بسيط لإظهار التقدم (أسرع للمراحل النهائية)
-        await new Promise(resolve => setTimeout(resolve, 30));
+      if (progress >= 95) {
+        progress = 95;
       }
       
-      // إنشاء URL للعرض
-      const imageUrl = URL.createObjectURL(fileObj.file);
+      fileObj.progress = Math.min(95, Math.round(progress));
+      fileProgress.value = fileObj.progress;
       
-      fileObj.id = Date.now();
-      fileObj.status = 'completed';
+      if (fileProgress.value % 10 === 0 || fileProgress.value === 5 || fileProgress.value === 15) {
+        console.log(`📤 تقدم الرفع: ${fileProgress.value}%`);
+      }
+    }, updateInterval);
+
+    console.log('🔄 جاري تحويل الصورة إلى Base64...');
+    const base64Image = await readImageAsBase64(fileObj.file);
+    
+    clearInterval(interval);
+    
+    for (let i = 95; i <= 100; i++) {
+      fileObj.progress = i;
+      fileProgress.value = i;
       
-      uploadedImage.value = imageUrl;
-      uploadedImageBase64.value = base64Image;
+      if (i === 100) {
+        console.log(`📤 تقدم الرفع: ${fileProgress.value}%`);
+      }
       
-      // تأخير بسيط قبل إخفاء شريط التقدم
-      setTimeout(() => {
-        isUploading.value = false;
-        console.log('✅ PreReleaseContent: Image uploaded successfully');
-        console.log(`📊 حجم الملف: ${fileSizeMB} MB`);
-        console.log(`⏱️ وقت التحميل الفعلي: ${(estimatedTimeMs / 1000).toFixed(1)} ثانية`);
-        sendUpdate(); // Send immediately after upload
-      }, 300);
-      
-    } catch (error) {
-      console.error('❌ PreReleaseContent: Failed to upload image:', error);
-      errorMessage.value = 'Error uploading file.';
-      fileObj.status = 'failed';
-      fileProgress.value = 0;
+      await new Promise(resolve => setTimeout(resolve, 30));
+    }
+    
+    const imageUrl = URL.createObjectURL(fileObj.file);
+    
+    fileObj.id = Date.now();
+    fileObj.status = 'completed';
+    
+    uploadedImage.value = imageUrl;
+    uploadedImageBase64.value = base64Image;
+    uploadedFileData.value = fileObj.file;
+    
+    console.log('🖼️ PreReleaseContent: تم تحميل الصورة محلياً:', imageUrl);
+    
+    setTimeout(() => {
+      if (!isMounted.value) {
+        console.warn('⚠️ PreReleaseContent: المكون تم تدميره أثناء رفع الصورة، تخطي التحديث');
+        return;
+      }
       isUploading.value = false;
-      file.value = null;
-      uploadedImage.value = null;
-      uploadedImageBase64.value = null;
-    }
-  };
-  // ==================================================
-  
-  // ──── Drag and drop handlers ────
-  const handleDragOver = (event) => {
-    if (!isPreReleaseActive.value) return;
-    event.preventDefault();
-  };
-  
-  const handleDragEnter = (event) => {
-    if (!isPreReleaseActive.value) return;
-    event.preventDefault();
-    isDragging.value = true;
-  };
-  
-  const handleDragLeave = (event) => {
-    if (!isPreReleaseActive.value) return;
-    event.preventDefault();
-    isDragging.value = false;
-  };
-  
-  const handleDrop = (event) => {
-    if (!isPreReleaseActive.value) return;
-    event.preventDefault();
-    isDragging.value = false;
+      console.log('✅ PreReleaseContent: Image uploaded successfully');
+      
+      sendUpdate();
+      
+      setTimeout(() => {
+        emitTabCompletion();
+      }, 300);
+    }, 300);
     
-    const files = event.dataTransfer.files;
-    if (files.length > 1) {
-      errorMessage.value = 'Only one file can be uploaded.';
-      return;
+  } catch (error) {
+    console.error('❌ PreReleaseContent: Failed to upload image:', error);
+    if (!isMounted.value) return;
+    
+    errorMessage.value = 'Error uploading file.';
+    fileObj.status = 'failed';
+    fileProgress.value = 0;
+    isUploading.value = false;
+    file.value = null;
+    uploadedImage.value = null;
+    uploadedImageBase64.value = null;
+    uploadedFileData.value = null;
+  }
+};
+
+// ──── Drag and drop handlers ────
+const handleDragOver = (event) => {
+  if (!isMounted.value) return;
+  if (!isPreReleaseActive.value) return;
+  event.preventDefault();
+};
+
+const handleDragEnter = (event) => {
+  if (!isMounted.value) return;
+  if (!isPreReleaseActive.value) return;
+  event.preventDefault();
+  isDragging.value = true;
+};
+
+const handleDragLeave = (event) => {
+  if (!isMounted.value) return;
+  if (!isPreReleaseActive.value) return;
+  event.preventDefault();
+  isDragging.value = false;
+};
+
+const handleDrop = (event) => {
+  if (!isMounted.value) return;
+  if (!isPreReleaseActive.value) return;
+  event.preventDefault();
+  isDragging.value = false;
+  
+  const files = event.dataTransfer.files;
+  if (files.length > 1) {
+    errorMessage.value = 'Only one file can be uploaded.';
+    return;
+  }
+  
+  if (files.length === 1) {
+    const simulatedEvent = { target: { files } };
+    handleFileUpload(simulatedEvent);
+  }
+};
+
+// ========== ✅ التحقق من اكتمال التاب ==========
+const isTabComplete = (tabId) => {
+  if (tabId === 'pre-release') {
+    // ✅ إذا كان Pre-Release غير نشط، فهو مكتمل تلقائياً
+    if (!isPreReleaseActive.value) {
+      console.log('📌 [PreReleaseContent] Pre-Release is inactive, tab is complete');
+      return true;
     }
     
-    if (files.length === 1) {
-      const simulatedEvent = { target: { files } };
-      handleFileUpload(simulatedEvent);
-    }
+    // ✅ إذا كان Pre-Release نشط، يجب أن تكون الصورة والتاريخ موجودين
+    const hasImage = uploadedImage.value && uploadedImage.value !== '';
+    const hasDate = isReleaseDateSelected.value && selectedReleaseDate.value && selectedReleaseDate.value !== '';
+    const result = hasImage && hasDate;
+    
+    console.log('📌 [PreReleaseContent] isTabComplete:', result, { 
+      hasImage, 
+      hasDate, 
+      isActive: isPreReleaseActive.value 
+    });
+    return result;
+  }
+  return false;
+};
+
+// ========== ✅ دالة إرسال تحديث الاكتمال ==========
+const emitTabCompletion = () => {
+  const isComplete = isTabComplete('pre-release');
+  console.log('📌 [PreReleaseContent] Emitting tab completion:', isComplete);
+  
+  // ✅ إرسال كلا الحدثين لضمان التحديث
+  emit('update:form-data', {
+    tab: 'pre-release',
+    data: { isComplete }
+  });
+  
+  // ✅ إرسال التحديث مباشرة إلى الـ Store عبر المكون الأب
+  emit('update-tab-completion', {
+    'pre-release': isComplete
+  });
+};
+
+// ========== ✅ Computed tabCompletion ==========
+const tabCompletion = computed(() => {
+  const isComplete = isTabComplete('pre-release');
+  return {
+    'pre-release': isComplete
   };
+});
+
+
+// ========== ✅ التحقق من إمكانية الانتقال ==========
+const canGoToTracklist = computed(() => {
+  // إذا كان Pre-Release غير نشط، يمكن الانتقال دائماً
+  if (!isPreReleaseActive.value) return true;
   
-  // ──── دالة العودة إلى Tracklist ────
-  const GotoFirstSection = () => {
-    // First check if we can proceed based on PreRelease state
-    if (isPreReleaseActive.value && (!uploadedImage.value || !isReleaseDateSelected.value)) {
-      console.warn('⚠️ PreReleaseContent: Cannot proceed, incomplete data');
-      return;
-    }
+  // إذا كان Pre-Release نشط، يجب أن تكون الصورة والتاريخ موجودين
+  const hasImage = uploadedImage.value && uploadedImage.value !== '';
+  const hasDate = isReleaseDateSelected.value && selectedReleaseDate.value && selectedReleaseDate.value !== '';
   
-    console.log('➡️ PreReleaseContent: Returning to FirstSection');
+  return hasImage && hasDate;
+});
+
+// ──── دالة العودة إلى Tracklist ────
+const GotoFirstSection = () => {
+  if (!isMounted.value) return;
+  
+  if (!canGoToTracklist.value) {
+    console.warn('⚠️ PreReleaseContent: Cannot proceed, incomplete data');
     
-    // First: Send exit-sub-layout event to exit sub-layout mode
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: { 
+        message: isPreReleaseActive.value 
+          ? 'Bitte lade ein Cover hoch und wähle ein Veröffentlichungsdatum aus.'
+          : 'Bitte fülle alle erforderlichen Felder aus.',
+        type: 'warning'
+      }
+    }));
+    return;
+  }
+
+  console.log('➡️ PreReleaseContent: Returning to FirstSection');
+  
+  emitTabCompletion();
+  
+  setTimeout(() => {
     emit('exit-sub-layout');
-    
-    // Second: Send back-to-tracklist event to return to FirstSection
     emit('back-to-tracklist');
-  };
+  }, 300);
+};
+
+// ──── Update circle size based on screen width ────
+const updateCircleSize = () => {
+  if (!isMounted.value) return;
   
-  // ──── Update circle size based on screen width ────
-  const updateCircleSize = () => {
-    const screenWidth = window.innerWidth;
-    if (screenWidth < 1599) {
-      circleSize.value = 250;
-      borderWidth.value = 8;
-    } else if (screenWidth >= 1600 && screenWidth < 2075) {
-      circleSize.value = 300;
-      borderWidth.value = 10;
-    } else {
-      circleSize.value = 352;
-      borderWidth.value = 12;
+  const screenWidth = window.innerWidth;
+  if (screenWidth < 1599) {
+    circleSize.value = 250;
+    borderWidth.value = 8;
+  } else if (screenWidth >= 1600 && screenWidth < 2075) {
+    circleSize.value = 300;
+    borderWidth.value = 10;
+  } else {
+    circleSize.value = 352;
+    borderWidth.value = 12;
+  }
+};
+
+// ──── Lifecycle ────
+onMounted(() => {
+  isMounted.value = true;
+  updateCircleSize();
+  window.addEventListener('resize', updateCircleSize);
+  document.addEventListener('click', handleClickOutside);
+  console.log('🚀 PreReleaseContent: Mounted');
+  updateFromProps();
+  
+  window.addEventListener('save-song-complete', handleSaveComplete);
+  
+  setTimeout(() => {
+    emitTabCompletion();
+  }, 500);
+});
+
+onBeforeUnmount(() => {
+  isMounted.value = false;
+  console.log('🔄 PreReleaseContent: Unmounted');
+  
+  window.removeEventListener('resize', updateCircleSize);
+  window.removeEventListener('save-song-complete', handleSaveComplete);
+  document.removeEventListener('click', handleClickOutside);
+  
+  if (uploadedImage.value && uploadedImage.value.startsWith('blob:')) {
+    URL.revokeObjectURL(uploadedImage.value);
+  }
+  
+  if (saveQueue.value.length > 0) {
+    console.log(`📦 PreReleaseContent: معالجة ${saveQueue.value.length} تغييرات معلقة قبل الإزالة`);
+    if (!isSaving.value) {
+      processSaveQueue();
     }
-  };
+  }
+});
+// ========== مراقبة تغييرات isPreReleaseActive ==========
+watch(() => isPreReleaseActive.value, (newVal) => {
+  console.log('🔄 PreReleaseContent: isPreReleaseActive changed to', newVal);
   
-  // ──── Watch for currentSong changes ───
-  watch(() => props.currentSong, (newSong) => {
-    if (newSong?.uuid) {
-      // Use nextTick to ensure values are updated after API response
-      nextTick(() => {
-        updateFromProps();
-      });
-    }
-  }, { deep: true, immediate: true });
-  
-  // ──── Lifecycle ───
-  onMounted(() => {
-    updateCircleSize();
-    window.addEventListener('resize', updateCircleSize);
-    console.log('🚀 PreReleaseContent: Mounted');
-    updateFromProps();
-  });
-  
-  onBeforeUnmount(() => {
-    window.removeEventListener('resize', updateCircleSize);
-    if (uploadedImage.value && uploadedImage.value.startsWith('blob:')) {
-      URL.revokeObjectURL(uploadedImage.value);
-    }
-  });
+  // ✅ إذا تم إلغاء التفعيل، نرسل اكتمال
+  if (!newVal) {
+    setTimeout(() => {
+      emitTabCompletion();
+    }, 300);
+  } else {
+    // ✅ إذا تم التفعيل، نتحقق من اكتمال الحقول
+    setTimeout(() => {
+      emitTabCompletion();
+    }, 300);
+  }
+});
+defineExpose({
+  isTabComplete,
+  canGoToTracklist,
+  emitTabCompletion 
+});
+
 </script>
 
-
 <style lang="scss" scoped>
-/* الأنماط كما هي من الكود الأصلي */
 .tab-content {
   display: flex;
-  padding-right: 40px;
   justify-content: center;
   align-items: flex-start;
   gap: 20px;
   align-self: stretch;
   width: 100%;
+  height: 100%;
   position: relative;
 }
 
 .btn-right {
-  position: absolute;
+  position: fixed;
   right: 20px;
   bottom: 20px;
   border-radius: 5px;
@@ -764,7 +1289,6 @@ const formatDateForDisplay = (dateString) => {
   cursor: pointer;
 }
 
-/* زر التالي عندما يكون PreRelease غير نشط - أخضر */
 .btn-right:not(.inactive) {
   background: var(--Main-Colors-Strawberry, #D15);
   color: #fff;
@@ -774,25 +1298,20 @@ const formatDateForDisplay = (dateString) => {
   background: var(--dark-red, #b30f45);
 }
 
-/* زر التالي عندما يكون PreRelease نشطاً والبيانات ناقصة - رمادي معطل */
 .btn-right.inactive {
   background: var(--Main-Colors-Slate-Light, #3A3E42);
   color: #6A6C6D;
   cursor: not-allowed;
 }
 
-/* زر التالي عندما يكون PreRelease نشطاً والبيانات كاملة - أخضر فاتح */
 .btn-right.active {
-  // background: var(--Main-Colors-Slate-Light, #3A3E42);
   background: var(--Main-Colors-Strawberry, #D15);
-
   color: #FFF;
   cursor: pointer;
 }
 
 .btn-right.active:hover {
   background: var(--dark-red);
-
   color: #fff;
 }
 
@@ -831,7 +1350,6 @@ const formatDateForDisplay = (dateString) => {
   background: rgba(209, 17, 85, 0.1);
 }
 
-/* Upload area covering the entire card */
 .upload-full-area {
   position: absolute;
   top: 0;
@@ -857,7 +1375,6 @@ const formatDateForDisplay = (dateString) => {
   cursor: not-allowed;
 }
 
-/* Uploaded image covering entire card */
 .uploaded-image-container {
   position: absolute;
   top: 0;
@@ -875,7 +1392,6 @@ const formatDateForDisplay = (dateString) => {
   border-radius: 20px;
 }
 
-/* Default upload content */
 .default-upload-content {
   display: flex;
   flex-direction: column;
@@ -891,7 +1407,6 @@ const formatDateForDisplay = (dateString) => {
   text-transform: uppercase;
 }
 
-/* Progress overlay */
 .progress-overlay {
   position: absolute;
   top: 0;
@@ -946,7 +1461,6 @@ const formatDateForDisplay = (dateString) => {
   z-index: 3;
 }
 
-/* Text content overlay */
 .text-content-overlay {
   position: relative;
   z-index: 2;
@@ -1248,6 +1762,10 @@ const formatDateForDisplay = (dateString) => {
   opacity: 0.5;
 }
 
+.section-input .input-field::placeholder {
+  font-size: 20px;
+}
+
 .section-input.has-checkmark .input-field {
   padding-right: 94px;
 }
@@ -1272,11 +1790,11 @@ const formatDateForDisplay = (dateString) => {
   padding: 9px 10px;
   align-items: center;
   border-radius: 5px;
-  // background: var(--secondary, #26282D);
   position: relative;
   cursor: pointer;
 }
 
+/* ✅ spacer يظهر فقط عند التمرير أو التركيز */
 .section-input .spacer .play {
   display: flex;
   padding: 13px 13px;
@@ -1287,11 +1805,13 @@ const formatDateForDisplay = (dateString) => {
   border-radius: 0 5px 5px 0;
   background: var(--primary, #1B1C20);
   transition: right 0.3s ease, opacity 0.3s ease;
+  pointer-events: none;
 }
 
 .section-input .spacer .play.visible {
   right: -10px;
   opacity: 1;
+  pointer-events: auto;
 }
 
 .section-input .spacer .play .icon {
@@ -1326,13 +1846,42 @@ const formatDateForDisplay = (dateString) => {
   z-index: 11;
 }
 
+
+@media (max-width:1800px) {
+  .section-input{
+    max-width: 135px;
+  }
+
+  .section-input .spacer .play.visible{
+    right: -25px;
+  }
+
+  .calendar-picker{
+    left: calc(100% + 60px);
+  }
+
+  .play-dark{
+    right: -64px;
+  }
+
+  .section-input.has-checkmark .input-field{
+    padding-right: 20px;
+  }
+
+   .section-input .checkmark{
+    right: 0;
+  }
+  .progress-text {
+    font-size: 3rem;
+  }
+
+  .infos .Form .top-line span{
+    line-height: 1.2;
+  }
+}
 @media (min-width: 1440px) and (max-width: 1599px) {
   .file-icon {
     font-size: 60px;
-  }
-
-  .progress-text {
-    font-size: 3rem;
   }
 
   .card-upload-single-cover{
@@ -1385,9 +1934,8 @@ const formatDateForDisplay = (dateString) => {
     font-size: 3.5rem;
   }
 
-
-    .card-upload-single-cover{
-  width: clamp(366px, -346px + 41.05vw, 520px);
+  .card-upload-single-cover{
+    width: clamp(366px, -346px + 41.05vw, 520px);
     height: clamp(366px, -346px + 41.05vw, 520px);
     min-width: clamp(366px, -346px + 41.05vw, 520px);
     min-height: clamp(366px, -346px + 41.05vw, 520px);
@@ -1395,21 +1943,20 @@ const formatDateForDisplay = (dateString) => {
 }
 
 @media (min-width: 2075px) and (max-width: 2560px){
-    .card-upload-single-cover{
-   width: clamp(378px, -625px + 48.3vw, 503px);
+  .card-upload-single-cover{
+    width: clamp(378px, -625px + 48.3vw, 503px);
     height: clamp(378px, -625px + 48.3vw, 503px);
     min-width: clamp(378px, -625px + 48.3vw, 503px);
     min-height: clamp(378px, -625px + 48.3vw, 503px);
   }
 }
 
-
 @media (min-width: 2561px) {
-     .card-upload-single-cover{
-      width: 503px;
+  .card-upload-single-cover{
+    width: 503px;
     height: 503px;
     min-width: 503px;
     min-height: 503px;
-     }
+  }
 }
 </style>

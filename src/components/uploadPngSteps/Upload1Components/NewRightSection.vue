@@ -1,10 +1,16 @@
 <template>
-    <div class="new-right" :class="{ 'slide-in': true }">
+    <div class="new-right" :class="{ 
+        'slide-in': shouldShowAnimation,
+        'slide-out': isLeaving 
+    }">
+        <!-- 🔥 عرض الـ loading مع ارتفاع ثابت -->
         <div v-if="isLoading" class="loading-spinner">
             <div class="spinner"></div>
+            <span class="loading-text">Lade Daten...</span>
         </div>
         
-        <template v-else>
+        <!-- 🔥 عرض المحتوى مع v-show بدلاً من v-if -->
+        <div v-show="!isLoading" class="content-wrapper">
             <div class="info">
                 <div class="title">{{ artistInputs[0]?.searchQuery || 'Diggie' }}</div>
                 <div class="subtitle">{{ searchQuery2 || 'Summer Feeling' }}</div>
@@ -14,21 +20,30 @@
             </div>
             <div class="metas">
                 <div class="row1">
+                    <!-- Preis deines Releases -->
                     <div class="form">
                         <div class="form5">
                             <div class="title">Preis deines Releases?</div>
                             <div class="section-input"
-                                :class="{ 'is-hovered': isHoveredReleasePrice, 'has-checkmark': isReleasePriceSelected }"
-                                @mouseenter="$emit('update:isHoveredReleasePrice', true)"
-                                @mouseleave="$emit('update:isHoveredReleasePrice', false)">
+                                :class="{ 
+                                    'is-hovered': isHoveredReleasePrice || isReleasePriceDropdownOpen, 
+                                    'has-checkmark': isReleasePriceSelected 
+                                }"
+                                @mouseenter="setHoverState('releasePrice', true)"
+                                @mouseleave="setHoverState('releasePrice', false)">
                                 <div class="custom-select" @click="toggleDropdown('releasePrice')">
                                     <div class="select-trigger" :class="{ 'selected': isReleasePriceSelected }">
-                                        {{ localReleasePrice || 'Preis auswählen' }}
+                                        {{ displayReleasePrice || 'Preis auswählen' }}
                                     </div>
-                                    <div class="dropdown" v-show="isReleasePriceDropdownOpen">
+                                    <div class="dropdown" 
+                                        v-show="isReleasePriceDropdownOpen"
+                                        @mouseenter="setHoverState('releasePrice', true)"
+                                        @mouseleave="setHoverState('releasePrice', false)">
                                         <div class="option" @click.stop="selectOption('releasePrice', '9,99 EUR')">9,99 EUR</div>
                                         <div class="option" @click.stop="selectOption('releasePrice', '12,99 EUR')">12,99 EUR</div>
                                         <div class="option" @click.stop="selectOption('releasePrice', '15,99 EUR')">15,99 EUR</div>
+                                        <div class="option" @click.stop="selectOption('releasePrice', '17,99 EUR')">17,99 EUR</div>
+                                        <div class="option" @click.stop="selectOption('releasePrice', '21,99 EUR')">21,99 EUR</div>
                                     </div>
                                 </div>
                                 <div v-if="isReleasePriceSelected" class="checkmark">
@@ -38,25 +53,33 @@
                                     <img src="/icon/icon-select.svg" class="icon-select" alt="select icon" />
                                 </div>
                                 <div class="spacer" @click="$emit('openVideoPopup', 'form5')">
-                                    <div class="play" :class="{ visible: isHoveredReleasePrice }">
+                                    <div class="play" :class="{ visible: isHoveredReleasePrice || isReleasePriceDropdownOpen }">
                                         <img :src="iconPlay" class="icon" alt="play icon" />
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
+                    
+                    <!-- Preis pro Song -->
                     <div class="form">
                         <div class="form5">
                             <div class="title">Preis pro Song?</div>
                             <div class="section-input"
-                                :class="{ 'is-hovered': isHoveredSongPrice, 'has-checkmark': isSongPriceSelected }"
-                                @mouseenter="$emit('update:isHoveredSongPrice', true)"
-                                @mouseleave="$emit('update:isHoveredSongPrice', false)">
+                                :class="{ 
+                                    'is-hovered': isHoveredSongPrice || isSongPriceDropdownOpen, 
+                                    'has-checkmark': isSongPriceSelected 
+                                }"
+                                @mouseenter="setHoverState('songPrice', true)"
+                                @mouseleave="setHoverState('songPrice', false)">
                                 <div class="custom-select" @click="toggleDropdown('songPrice')">
                                     <div class="select-trigger" :class="{ 'selected': isSongPriceSelected }">
-                                        {{ localSongPrice || 'Preis auswählen' }}
+                                        {{ displaySongPrice || 'Preis auswählen' }}
                                     </div>
-                                    <div class="dropdown" v-show="isSongPriceDropdownOpen">
+                                    <div class="dropdown" 
+                                        v-show="isSongPriceDropdownOpen"
+                                        @mouseenter="setHoverState('songPrice', true)"
+                                        @mouseleave="setHoverState('songPrice', false)">
                                         <div class="option" @click.stop="selectOption('songPrice', '1,99 EUR')">1,99 EUR</div>
                                         <div class="option" @click.stop="selectOption('songPrice', '2,99 EUR')">2,99 EUR</div>
                                         <div class="option" @click.stop="selectOption('songPrice', '3,99 EUR')">3,99 EUR</div>
@@ -69,7 +92,7 @@
                                     <img src="/icon/icon-select.svg" class="icon-select" alt="select icon" />
                                 </div>
                                 <div class="spacer" @click="$emit('openVideoPopup', 'form6')">
-                                    <div class="play" :class="{ visible: isHoveredSongPrice }">
+                                    <div class="play" :class="{ visible: isHoveredSongPrice || isSongPriceDropdownOpen }">
                                         <img :src="iconPlay" class="icon" alt="play icon" />
                                     </div>
                                 </div>
@@ -77,25 +100,44 @@
                         </div>
                     </div>
                 </div>
+                
                 <div class="row1">
-                    <!-- Hauptgenre - مثل الـ Price تماماً -->
+                    <!-- Hauptgenre -->
                     <div class="form">
                         <div class="form5">
                             <div class="title">Hauptgenre?</div>
                             <div class="section-input"
-                                :class="{ 'is-hovered': isHoveredMainGenre, 'has-checkmark': isMainGenreSelected }"
-                                @mouseenter="isHoveredMainGenre = true"
-                                @mouseleave="isHoveredMainGenre = false">
+                                :class="{ 
+                                    'is-hovered': isHoveredMainGenre || isMainGenreDropdownOpen, 
+                                    'has-checkmark': isMainGenreSelected 
+                                }"
+                                @mouseenter="setHoverState('mainGenre', true)"
+                                @mouseleave="setHoverState('mainGenre', false)">
                                 <div class="custom-select" @click="toggleDropdown('mainGenre')">
                                     <div class="select-trigger" :class="{ 'selected': isMainGenreSelected }">
-                                        {{ localMainGenreDisplay || 'Genre auswählen' }}
+                                        <input 
+                                            type="text" 
+                                            class="search-input-trigger" 
+                                            v-model="mainGenreSearch" 
+                                            :placeholder="localMainGenreDisplay || 'Hauptgenre'"
+                                            @click.stop
+                                            @input="filterMainGenres"
+                                            @focus="handleMainGenreFocus"
+                                            @blur="handleMainGenreBlur"
+                                        />
                                     </div>
-                                    <div class="dropdown" v-show="isMainGenreDropdownOpen">
+                                    <div class="dropdown" 
+                                        v-show="isMainGenreDropdownOpen"
+                                        @mouseenter="setHoverState('mainGenre', true)"
+                                        @mouseleave="setHoverState('mainGenre', false)">
                                         <div class="option" 
-                                            v-for="genre in mainGenres" 
+                                            v-for="genre in filteredMainGenres" 
                                             :key="genre.id"
                                             @click.stop="selectMainGenre(genre)">
-                                            {{ genre.genre_name }}
+                                            {{ genre.name }}
+                                        </div>
+                                        <div v-if="filteredMainGenres.length === 0" class="option no-results">
+                                            Keine Ergebnisse gefunden
                                         </div>
                                     </div>
                                 </div>
@@ -106,7 +148,7 @@
                                     <img src="/icon/icon-select.svg" class="icon-select" alt="select icon" />
                                 </div>
                                 <div class="spacer" @click="$emit('openVideoPopup', 'form7')">
-                                    <div class="play" :class="{ visible: isHoveredMainGenre }">
+                                    <div class="play" :class="{ visible: isHoveredMainGenre || isMainGenreDropdownOpen }">
                                         <img :src="iconPlay" class="icon" alt="play icon" />
                                     </div>
                                 </div>
@@ -114,35 +156,65 @@
                         </div>
                     </div>
 
-                    <!-- Subgenre - مثل الـ Price تماماً (يظهر فقط بعد اختيار Hauptgenre) -->
-                    <div class="form" v-if="isSubGenreEnabled">
+                    <!-- Subgenre -->
+                    <div class="form subgenre-wrapper" :class="{ 'disabled': !isSubGenreEnabled }">
                         <div class="form5">
-                            <div class="title">Subgenre?</div>
+                            <div class="title">
+                                Subgenre?
+                            </div>
                             <div class="section-input"
-                                :class="{ 'is-hovered': isHoveredSubGenre, 'has-checkmark': isSubGenreSelected }"
-                                @mouseenter="isHoveredSubGenre = true"
-                                @mouseleave="isHoveredSubGenre = false">
-                                <div class="custom-select" @click="toggleDropdown('subGenre')">
-                                    <div class="select-trigger" :class="{ 'selected': isSubGenreSelected }">
-                                        {{ localSubGenreDisplay || 'Subgenre auswählen' }}
+                                :class="{ 
+                                    'is-hovered': isHoveredSubGenre || isSubGenreDropdownOpen, 
+                                    'has-checkmark': isSubGenreSelected,
+                                    'no-subgenres': !hasSubGenres && isSubGenreEnabled
+                                }"
+                                @mouseenter="setHoverState('subGenre', true)"
+                                @mouseleave="setHoverState('subGenre', false)">
+                                
+                                <div v-if="!hasSubGenres && isSubGenreEnabled" class="no-subgenres-message">
+                                    <span class="message-text">Nicht verfügbar</span>
+                                </div>
+                                
+                                <div v-else class="custom-select" @click="toggleDropdown('subGenre', isSubGenreEnabled)">
+                                    <div class="select-trigger" 
+                                        :class="{ 'selected': isSubGenreSelected, 'disabled': !isSubGenreEnabled }">
+                                        <input 
+                                            type="text" 
+                                            class="search-input-trigger" 
+                                            v-model="subGenreSearch" 
+                                            :placeholder="localSubGenreDisplay || 'Subgenre suchen...'"
+                                            :disabled="!isSubGenreEnabled"
+                                            @click.stop
+                                            @input="filterSubGenres"
+                                            @focus="handleSubGenreFocus"
+                                            @blur="handleSubGenreBlur"
+                                        />
                                     </div>
-                                    <div class="dropdown" v-show="isSubGenreDropdownOpen">
+                                    <div class="dropdown" 
+                                        v-show="isSubGenreDropdownOpen && isSubGenreEnabled && hasSubGenres"
+                                        @mouseenter="setHoverState('subGenre', true)"
+                                        @mouseleave="setHoverState('subGenre', false)">
                                         <div class="option" 
-                                            v-for="subGenre in subGenresForCurrentMain" 
+                                            v-for="subGenre in filteredSubGenres" 
                                             :key="subGenre.id"
                                             @click.stop="selectSubGenre(subGenre)">
                                             {{ subGenre.genre_name }}
                                         </div>
+                                        <div v-if="filteredSubGenres.length === 0" class="option no-results">
+                                            Keine Ergebnisse gefunden
+                                        </div>
                                     </div>
                                 </div>
+                                
                                 <div v-if="isSubGenreSelected" class="checkmark">
                                     <img src="../../../assets/icons/y.png" class="icon-y" alt="checkmark icon" />
                                 </div>
-                                <div v-else class="checkmark">
+                                <div v-else-if="hasSubGenres && isSubGenreEnabled" class="checkmark">
                                     <img src="/icon/icon-select.svg" class="icon-select" alt="select icon" />
                                 </div>
+                                
                                 <div class="spacer" @click="$emit('openVideoPopup', 'form8')">
-                                    <div class="play" :class="{ visible: isHoveredSubGenre }">
+                                    <div class="play" :class="{ visible: (isHoveredSubGenre || isSubGenreDropdownOpen) && isSubGenreEnabled }">
                                         <img :src="iconPlay" class="icon" alt="play icon" />
                                     </div>
                                 </div>
@@ -151,18 +223,19 @@
                     </div>
                 </div>
             </div>
-        </template>
+        </div>
     </div>
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted } from 'vue';
+import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import iconPlay from '@/assets/icons/play.png';
-import generalDataService from '@/services/generalData';
+import apiRequest from '@/lib/apiRequest';
 
+// ========== Props ==========
 const props = defineProps({
-    releasePrice: { type: String, default: '' },
-    songPrice: { type: String, default: '' },
+    releasePrice: { type: Number, default: null },
+    songPrice: { type: Number, default: null },
     mainGenre: { type: String, default: '' },
     subGenre: { type: String, default: '' },
     isReleasePriceSelected: { type: Boolean, default: false },
@@ -176,21 +249,56 @@ const props = defineProps({
     artistInputs: { type: Array, required: true },
     searchQuery2: { type: String, default: '' },
     selectedDate: { type: String, default: null },
-    iconPlay: { type: String, required: true }
+    iconPlay: { type: String, required: true },
+    isSlidingIn: { type: Boolean, default: true },
+    isLeaving: { type: Boolean, default: false }
 });
 
 const emit = defineEmits([
     'update:releasePrice', 'update:songPrice', 'update:mainGenre', 'update:subGenre',
     'update:isReleasePriceSelected', 'update:isSongPriceSelected', 'update:isMainGenreSelected',
     'update:isSubGenreSelected', 'update:isHoveredReleasePrice', 'update:isHoveredSongPrice',
-    'update:isHoveredMainGenre', 'update:isHoveredSubGenre', 'update:isSubGenreEnabled',
+    'update:isHoveredMainGenre', 'update:isHoveredSubGenre',
+    'update:hasSubGenres',
     'openVideoPopup'
 ]);
 
 // ========== بيانات الـ API ==========
-const genres = ref([]);           // جميع الأنواع
-const isLoading = ref(false);
+const genresMap = ref({});
+const genresList = ref([]);
+const subGenresList = ref([]);
+const isLoading = ref(true);
 const loadError = ref(null);
+const isDataLoaded = ref(false);
+
+// ========== 🔥 التحكم في الأنيميشن ==========
+const shouldShowAnimation = ref(false);
+
+// ========== بحث الأنواع ==========
+const mainGenreSearch = ref('');
+const subGenreSearch = ref('');
+
+// ========== الأنواع المفلترة ==========
+const filteredMainGenres = computed(() => {
+    if (!mainGenreSearch.value) return genresList.value;
+    const query = mainGenreSearch.value.toLowerCase();
+    return genresList.value.filter(genre => 
+        genre.name.toLowerCase().includes(query) || 
+        genre.id.toLowerCase().includes(query)
+    );
+});
+
+const filteredSubGenres = computed(() => {
+    if (!subGenreSearch.value) return subGenresList.value;
+    const query = subGenreSearch.value.toLowerCase();
+    return subGenresList.value.filter(subGenre => 
+        subGenre.genre_name.toLowerCase().includes(query)
+    );
+});
+
+// ========== دوال التصفية ==========
+const filterMainGenres = () => {};
+const filterSubGenres = () => {};
 
 // حالات القوائم المنسدلة
 const isReleasePriceDropdownOpen = ref(false);
@@ -198,72 +306,100 @@ const isSongPriceDropdownOpen = ref(false);
 const isMainGenreDropdownOpen = ref(false);
 const isSubGenreDropdownOpen = ref(false);
 
-// حالات الـ hover
-const isHoveredMainGenre = ref(false);
-const isHoveredSubGenre = ref(false);
-
-// ========== معالجة الأنواع ==========
-
-// جميع الأنواع الرئيسية (كل الأنواع)
-const mainGenres = computed(() => {
-    return genres.value;
+// ========== حالات الـ hover الموحدة ==========
+const hoverStates = ref({
+    releasePrice: false,
+    songPrice: false,
+    mainGenre: false,
+    subGenre: false
 });
 
-// تخزين الأنواع الفرعية المولدة
-const generatedSubGenresMap = ref(new Map());
-
-// توليد أنواع فرعية من النوع الرئيسي المختار
-const generateSubGenresForMain = (mainGenreName) => {
-    // إذا كانت الأنواع الفرعية موجودة مسبقاً، استخدمها
-    if (generatedSubGenresMap.value.has(mainGenreName)) {
-        return generatedSubGenresMap.value.get(mainGenreName);
+// ========== دالة تعيين حالة الـ hover ==========
+const setHoverState = (field, value) => {
+    hoverStates.value[field] = value;
+    
+    const emitMap = {
+        releasePrice: 'update:isHoveredReleasePrice',
+        songPrice: 'update:isHoveredSongPrice',
+        mainGenre: 'update:isHoveredMainGenre',
+        subGenre: 'update:isHoveredSubGenre'
+    };
+    
+    if (emitMap[field]) {
+        emit(emitMap[field], value);
     }
-    
-    // قائمة بالأنواع الفرعية الشائعة
-    const subGenreList = [
-        { id: `sub-${mainGenreName}-1`, genre_name: `${mainGenreName} Rock` },
-        { id: `sub-${mainGenreName}-2`, genre_name: `${mainGenreName} Pop` },
-        { id: `sub-${mainGenreName}-3`, genre_name: `${mainGenreName} Metal` },
-        { id: `sub-${mainGenreName}-4`, genre_name: `${mainGenreName} Jazz` },
-        { id: `sub-${mainGenreName}-5`, genre_name: `${mainGenreName} Blues` },
-        { id: `sub-${mainGenreName}-6`, genre_name: `${mainGenreName} Electronic` },
-        { id: `sub-${mainGenreName}-7`, genre_name: `${mainGenreName} Hip Hop` },
-        { id: `sub-${mainGenreName}-8`, genre_name: `${mainGenreName} Classical` },
-        { id: `sub-${mainGenreName}-9`, genre_name: `${mainGenreName} Country` },
-        { id: `sub-${mainGenreName}-10`, genre_name: `${mainGenreName} Reggae` }
-    ];
-    
-    generatedSubGenresMap.value.set(mainGenreName, subGenreList);
-    return subGenreList;
 };
 
-// الأنواع الفرعية للنوع الرئيسي المختار
-const subGenresForCurrentMain = computed(() => {
-    if (!props.mainGenre) return [];
-    return generateSubGenresForMain(props.mainGenre);
+// ========== 🔥 دوال معالجة الـ Focus و Blur (المعدلة) ==========
+const handleMainGenreFocus = () => {
+    isMainGenreDropdownOpen.value = true;
+};
+
+const handleMainGenreBlur = () => {
+    // 🔥 استخدام window.setTimeout بدلاً من setTimeout مباشرة
+    window.setTimeout(() => {
+        isMainGenreDropdownOpen.value = false;
+    }, 300);
+};
+
+const handleSubGenreFocus = () => {
+    if (isSubGenreEnabled.value && hasSubGenres.value) {
+        isSubGenreDropdownOpen.value = true;
+    }
+};
+
+const handleSubGenreBlur = () => {
+    // 🔥 استخدام window.setTimeout بدلاً من setTimeout مباشرة
+    window.setTimeout(() => {
+        isSubGenreDropdownOpen.value = false;
+    }, 300);
+};
+
+// ========== Computed ==========
+
+const hasSubGenres = computed(() => {
+    return subGenresList.value && subGenresList.value.length > 0;
 });
 
-// تحديد ما إذا كان يجب تفعيل حقل Subgenre
 const isSubGenreEnabled = computed(() => {
-    return props.mainGenre && props.mainGenre.trim() !== '';
+    if (props.mainGenre && props.mainGenre.trim() !== '') {
+        return true;
+    }
+    return false;
 });
 
-// عرض القيم
+// عرض القيم مع EUR
+const displayReleasePrice = computed(() => {
+    if (props.releasePrice === null || props.releasePrice === undefined) return '';
+    return new Intl.NumberFormat('de-DE', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(props.releasePrice) + ' EUR';
+});
+
+const displaySongPrice = computed(() => {
+    if (props.songPrice === null || props.songPrice === undefined) return '';
+    return new Intl.NumberFormat('de-DE', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(props.songPrice) + ' EUR';
+});
+
 const localMainGenreDisplay = computed(() => {
     if (!props.mainGenre) return '';
-    const found = mainGenres.value.find(g => g.genre_name === props.mainGenre);
-    return found ? found.genre_name : props.mainGenre;
+    return props.mainGenre;
 });
 
 const localSubGenreDisplay = computed(() => {
     if (!props.subGenre) return '';
-    const found = subGenresForCurrentMain.value.find(sg => sg.genre_name === props.subGenre);
-    return found ? found.genre_name : props.subGenre;
+    return props.subGenre;
 });
 
 // ========== دوال اختيار القيم ==========
 
-const toggleDropdown = (field) => {
+const toggleDropdown = (field, isEnabled = true) => {
+    if (field === 'subGenre' && (!isEnabled || !hasSubGenres.value)) return;
+
     // إغلاق جميع القوائم المنسدلة الأخرى
     isReleasePriceDropdownOpen.value = false;
     isSongPriceDropdownOpen.value = false;
@@ -277,39 +413,152 @@ const toggleDropdown = (field) => {
         isSongPriceDropdownOpen.value = true;
     } else if (field === 'mainGenre') {
         isMainGenreDropdownOpen.value = true;
+        mainGenreSearch.value = '';
     } else if (field === 'subGenre') {
         isSubGenreDropdownOpen.value = true;
+        subGenreSearch.value = '';
     }
 };
 
 const selectOption = (field, value) => {
     if (field === 'releasePrice') {
-        emit('update:releasePrice', value);
+        const numericValue = parseFloat(value.replace(' EUR', '').replace(',', '.'));
+        emit('update:releasePrice', numericValue);
         emit('update:isReleasePriceSelected', true);
         isReleasePriceDropdownOpen.value = false;
+        console.log('💰 Release Price selected:', numericValue);
     } else if (field === 'songPrice') {
-        emit('update:songPrice', value);
+        const numericValue = parseFloat(value.replace(' EUR', '').replace(',', '.'));
+        emit('update:songPrice', numericValue);
         emit('update:isSongPriceSelected', true);
         isSongPriceDropdownOpen.value = false;
+        console.log('💰 Song Price selected:', numericValue);
     }
 };
 
 const selectMainGenre = (genre) => {
-    emit('update:mainGenre', genre.genre_name);
+    console.log('🔄 Main genre selected:', genre.name, 'ID:', genre.id);
+    
+    mainGenreSearch.value = genre.name;
+    emit('update:mainGenre', genre.name);
     emit('update:isMainGenreSelected', true);
-    // إعادة تعيين Subgenre عند تغيير Hauptgenre
     emit('update:subGenre', '');
     emit('update:isSubGenreSelected', false);
     isMainGenreDropdownOpen.value = false;
-    console.log('🔄 Main genre selected:', genre.genre_name);
+    
+    fetchSubGenres(genre.id);
 };
 
 const selectSubGenre = (subGenre) => {
+    console.log('🔄 Sub genre selected:', subGenre.genre_name);
+    
+    subGenreSearch.value = subGenre.genre_name;
     emit('update:subGenre', subGenre.genre_name);
     emit('update:isSubGenreSelected', true);
     isSubGenreDropdownOpen.value = false;
-    console.log('🔄 Sub genre selected:', subGenre.genre_name);
 };
+
+// ========== جلب البيانات من الـ API ==========
+
+const fetchGenres = async () => {
+    isLoading.value = true;
+    try {
+        const response = await apiRequest.get('/genres');
+        console.log('📦 Genres API Response:', response.data);
+        
+        const data = response.data;
+        
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+            genresMap.value = data;
+            genresList.value = Object.entries(data).map(([id, name]) => ({
+                id: id,
+                name: name
+            }));
+            genresList.value.sort((a, b) => a.name.localeCompare(b.name));
+            console.log(`✅ Loaded ${genresList.value.length} genres`);
+        } else {
+            console.warn('⚠️ Unexpected data format from /genres:', data);
+            genresMap.value = {};
+            genresList.value = [];
+        }
+        
+    } catch (error) {
+        console.error('❌ Error fetching genres:', error);
+        loadError.value = error.message;
+        genresMap.value = {};
+        genresList.value = [];
+    } finally {
+        isLoading.value = false;
+        isDataLoaded.value = true;
+        console.log('✅ Data loaded');
+        
+        // 🔥 بدء الأنيميشن بعد تحميل البيانات
+        nextTick(() => {
+            shouldShowAnimation.value = true;
+            console.log('🎬 Animation started');
+        });
+    }
+};
+
+const fetchSubGenres = async (genreId) => {
+    console.log('🔍 fetchSubGenres called with genreId:', genreId);
+    
+    if (!genreId) {
+        subGenresList.value = [];
+        emit('update:hasSubGenres', false);
+        console.log('📤 Emitting hasSubGenres: false (no genreId)');
+        return;
+    }
+    
+    try {
+        const response = await apiRequest.get(`/subgenres?genre_id=${genreId}`);
+        console.log(`📦 Subgenres for ${genreId}:`, response.data);
+        
+        if (Array.isArray(response.data)) {
+            subGenresList.value = response.data;
+            const hasSubGenres = response.data.length > 0;
+            emit('update:hasSubGenres', hasSubGenres);
+            console.log(`📤 Emitting hasSubGenres: ${hasSubGenres} (${subGenresList.value.length} subgenres)`);
+            
+            if (!hasSubGenres) {
+                console.log('📤 No subgenres found, auto-selecting...');
+                emit('update:isSubGenreSelected', true);
+                emit('update:subGenre', '');
+                subGenreSearch.value = '';
+            } else {
+                emit('update:isSubGenreSelected', false);
+                emit('update:subGenre', '');
+                subGenreSearch.value = '';
+            }
+        } else {
+            console.warn(`⚠️ Unexpected subgenres data format:`, response.data);
+            subGenresList.value = [];
+            emit('update:hasSubGenres', false);
+        }
+        
+    } catch (error) {
+        console.error(`❌ Error fetching subgenres for ${genreId}:`, error);
+        subGenresList.value = [];
+        emit('update:hasSubGenres', false);
+    }
+};
+
+// ========== مراقبة التغييرات من المكون الأب ==========
+watch(() => props.mainGenre, (newVal) => {
+    if (newVal && newVal.trim() !== '') {
+        mainGenreSearch.value = newVal;
+    } else {
+        mainGenreSearch.value = '';
+    }
+}, { immediate: true });
+
+watch(() => props.subGenre, (newVal) => {
+    if (newVal && newVal.trim() !== '') {
+        subGenreSearch.value = newVal;
+    } else {
+        subGenreSearch.value = '';
+    }
+}, { immediate: true });
 
 // ========== إغلاق القوائم عند النقر خارجها ==========
 const handleClickOutside = (event) => {
@@ -319,94 +568,127 @@ const handleClickOutside = (event) => {
         isSongPriceDropdownOpen.value = false;
         isMainGenreDropdownOpen.value = false;
         isSubGenreDropdownOpen.value = false;
+        
+        // إعادة تعيين حالات الـ hover عند الإغلاق
+        hoverStates.value.releasePrice = false;
+        hoverStates.value.songPrice = false;
+        hoverStates.value.mainGenre = false;
+        hoverStates.value.subGenre = false;
     }
 };
 
-// ========== جلب البيانات من الـ API ==========
-const fetchGenres = async () => {
-    isLoading.value = true;
-    try {
-        const genresData = await generalDataService.getGenres();
-        
-        console.log('✅ تم جلب الأنواع:', genresData);
-        
-        if (genresData.data && Array.isArray(genresData.data)) {
-            genres.value = genresData.data;
-        } else if (Array.isArray(genresData)) {
-            genres.value = genresData;
-        }
-        
-        console.log(`📊 تم تحميل ${genres.value.length} نوع`);
-        console.log('📋 عينة من الأنواع:', genres.value.slice(0, 5).map(g => g.genre_name));
-        
-    } catch (error) {
-        console.error('❌ فشل جلب الأنواع:', error);
-        loadError.value = error.message;
-    } finally {
-        isLoading.value = false;
+// ========== مراقبة تغييرات mainGenreSearch (حذف القيم) ==========
+watch(mainGenreSearch, (newVal, oldVal) => {
+    if (!newVal || newVal.trim() === '') {
+        emit('update:mainGenre', '');
+        emit('update:isMainGenreSelected', false);
+        emit('update:subGenre', '');
+        emit('update:isSubGenreSelected', false);
+        subGenresList.value = [];
+        emit('update:hasSubGenres', false);
+        console.log('🗑️ Main genre cleared');
     }
-};
+}, { immediate: true });
 
-// ========== Computed properties للقيم ==========
-const sanitize = (value) => {
-    if (typeof value === 'string') {
-        return value.replace(/<!--[\s\S]*?-->/g, '').trim();
+// ========== مراقبة تغييرات subGenreSearch (حذف القيم) ==========
+watch(subGenreSearch, (newVal) => {
+    if (!newVal || newVal.trim() === '') {
+        emit('update:subGenre', '');
+        emit('update:isSubGenreSelected', false);
+        console.log('🗑️ Subgenre cleared');
     }
-    return value || '';
-};
+}, { immediate: true });
 
-const localReleasePrice = computed({
-    get: () => sanitize(props.releasePrice),
-    set: (value) => emit('update:releasePrice', sanitize(value))
-});
-
-const localSongPrice = computed({
-    get: () => sanitize(props.songPrice),
-    set: (value) => emit('update:songPrice', sanitize(value))
-});
-
-// ========== Watchers ==========
-watch(() => props.mainGenre, (newValue) => {
-    console.log('📌 Main genre changed to:', newValue);
-});
-
-watch(() => props.subGenre, (newValue) => {
-    console.log('📌 Sub genre changed to:', newValue);
-});
-
-// ========== Initialization ==========
+// ========== Lifecycle ==========
 onMounted(() => {
+    console.log('🚀 NewRightSection mounted, starting data fetch...');
+    
+    // 🔥 تحميل البيانات
     fetchGenres();
     document.addEventListener('click', handleClickOutside);
 });
 
-// تنظيف المستمع عند إلغاء تحميل المكون
-import { onUnmounted } from 'vue';
 onUnmounted(() => {
     document.removeEventListener('click', handleClickOutside);
 });
+
+// ========== مراقبة تغييرات isSlidingIn و isLeaving ==========
+watch(() => props.isSlidingIn, (newVal) => {
+    console.log('🔄 NewRightSection isSlidingIn changed:', newVal);
+}, { immediate: true });
+
+watch(() => props.isLeaving, (newVal) => {
+    console.log('🔄 NewRightSection isLeaving changed:', newVal);
+}, { immediate: true });
 </script>
 
 <style lang="scss" scoped>
 .new-right {
     display: flex;
-    width: 889px;
     padding-top: 28px;
     flex-direction: column;
     align-items: flex-start;
     gap: 32px;
-    transform: translateY(100%);
-    opacity: 0;
-    transition: transform 0.5s ease, opacity 0.5s ease;
     flex-grow: 1;
-    height: 100%;
+    min-height: 500px;
+    
+    /* 🔥 الأنيميشن مخفي في البداية */
+    transform: translateY(30px);
+    opacity: 0;
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* 🔥 عند تفعيل الأنيميشن */
 .new-right.slide-in {
     transform: translateY(0);
     opacity: 1;
 }
 
+.new-right.slide-out {
+    transform: translateY(-30px);
+    opacity: 0;
+}
+
+/* ===== مؤشر التحميل ===== */
+.loading-spinner {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    width: 100%;
+    min-height: 400px;
+    gap: 20px;
+}
+
+.loading-spinner .spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--Strawberry, #D15);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.loading-spinner .loading-text {
+    color: var(--Main-Colors-Dove, #6A6C6D);
+    font-family: Heebo;
+    font-size: 18px;
+    font-weight: 300;
+    letter-spacing: 0.5px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ===== حاوية المحتوى ===== */
+.content-wrapper {
+    width: 100%;
+    height: 100%;
+}
+
+/* ===== باقي الأنماط ===== */
 .new-right .info {
     display: flex;
     flex-direction: column;
@@ -490,6 +772,73 @@ onUnmounted(() => {
     text-transform: uppercase;
 }
 
+.optional-badge {
+    color: var(--Main-Colors-Dove, #6A6C6D);
+    font-size: 12px;
+    font-weight: 300;
+    margin-left: 4px;
+}
+
+.subgenre-wrapper.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.select-trigger.disabled {
+    cursor: not-allowed;
+    color: #6A6C6D;
+}
+
+.select-trigger {
+    display: flex;
+    padding: 12px;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 5px;
+    background: var(--primary);
+    color: #6A6C6D;
+    font-family: Heebo;
+    font-size: 20px;
+    height: 46px;
+    max-width: 100%;
+    box-sizing: border-box;
+    cursor: pointer;
+    position: relative;
+}
+
+.search-input-trigger {
+    width: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #FFF;
+    font-family: Heebo;
+    font-size: 20px;
+    padding: 0;
+    margin: 0;
+    
+    &::placeholder {
+        color: #6A6C6D;
+    }
+    
+    &:focus {
+        outline: none;
+    }
+    
+    &:disabled {
+        color: #6A6C6D;
+        cursor: not-allowed;
+    }
+}
+
+.select-trigger.selected {
+    color: #FFF;
+}
+
+.select-trigger.selected .search-input-trigger {
+    color: #FFF;
+}
+
 .form5 {
     display: flex;
     flex-direction: column;
@@ -509,29 +858,34 @@ onUnmounted(() => {
     position: relative;
 }
 
-.custom-select {
-    position: relative;
-    flex: 1 0 0;
+.section-input.no-subgenres {
+    opacity: 0.7;
 }
 
-.select-trigger {
+.no-subgenres-message {
     display: flex;
     padding: 12px;
-    justify-content: space-between;
     align-items: center;
     border-radius: 5px;
     background: var(--primary);
-    color: #6A6C6D;
+    color: var(--Main-Colors-Dove, #6A6C6D);
     font-family: Heebo;
-    font-size: 20px;
+    font-size: 16px;
+    font-weight: 300;
     height: 46px;
     max-width: 100%;
     box-sizing: border-box;
-    cursor: pointer;
+    flex: 1;
 }
 
-.select-trigger.selected {
-    color: #FFF;
+.no-subgenres-message .message-text {
+    color: var(--Main-Colors-Dove, #6A6C6D);
+    font-size: 18px;
+}
+
+.custom-select {
+    position: relative;
+    flex: 1 0 0;
 }
 
 .section-input.has-checkmark .select-trigger {
@@ -545,17 +899,21 @@ onUnmounted(() => {
     right: 0;
     background: var(--primary);
     border-radius: 5px;
-    z-index: 10;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-    max-height: 200px;
+    z-index: 100;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    max-height: 260px;
     overflow-y: auto;
-    width: 100%;
+    width: calc(100% + 46px);
     scrollbar-width: none;
+}
+
+.dropdown::-webkit-scrollbar {
+    display: none;
 }
 
 .dropdown .option {
     padding: 10px 12px;
-    color: #FFF;
+    color: var(--Main-Colors-Dove);
     font-family: Heebo;
     font-size: 20px;
     cursor: pointer;
@@ -563,8 +921,18 @@ onUnmounted(() => {
 }
 
 .dropdown .option:hover {
-    // background: var(--secondary);
-    padding-left: 20px;
+    color: var(--Main-Colors-White, #FFF);
+}
+
+.dropdown .option.no-results {
+    color: var(--Main-Colors-Dove, #6A6C6D);
+    cursor: default;
+    text-align: center;
+    font-style: italic;
+}
+
+.dropdown .option.no-results:hover {
+    background: transparent;
 }
 
 .section-input .checkmark {
@@ -577,12 +945,12 @@ onUnmounted(() => {
 .section-input .checkmark .icon-y {
     width: 18px;
     position: relative;
-    right: 12px;
+    right: 22px;
 }
 
 .section-input .checkmark .icon-select {
     position: relative;
-    right: 12px;
+    right: 22px;
 }
 
 .section-input:hover .icon-select {
@@ -591,18 +959,19 @@ onUnmounted(() => {
 
 .section-input .spacer {
     display: flex;
-    width: 34px;
+    width: 42px;
     height: 46px;
     padding: 9px 10px;
     align-items: center;
     border-radius: 5px;
     position: relative;
     cursor: pointer;
+    flex-shrink: 0;
 }
 
 .section-input .spacer .play {
     display: flex;
-    padding: 13px 9px;
+    padding: 13px 13px;
     align-items: center;
     position: absolute;
     right: 20px;
@@ -619,34 +988,12 @@ onUnmounted(() => {
 
 .section-input .spacer .play .icon {
     width: 18px;
-    height: 20px;
     flex-shrink: 0;
     aspect-ratio: 9/10;
 }
 
 .section-input .spacer:hover .icon {
     filter: brightness(0) invert(1);
-}
-
-.loading-spinner {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 200px;
-    width: 100%;
-}
-
-.spinner {
-    width: 40px;
-    height: 40px;
-    border: 3px solid var(--secondary);
-    border-top-color: var(--Strawberry, #D15);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
 }
 
 @media (max-width:1599px) {

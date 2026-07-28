@@ -1,7 +1,6 @@
 <template>
     <div v-if="isOpen" class="backdrop" @click="closeDropdown"></div>
     <div class="zeitraum-combo-box-container">
-        <!-- طبقة الخلفية الشفافة -->
         <div class="zeitraum-combo-box" :style="{
             borderRadius: isOpen ? '20px 20px 0 0' : '20px',
             '--show-after': isOpen ? 'block' : 'none',
@@ -14,7 +13,7 @@
                 <img src="/icon/click-down.svg" class="icon" :style="{ transform: isOpen ? 'rotate(180deg)' : '' }"
                     alt="dropdown icon">
             </div>
-            <div v-if="isOpen" class="dropdown">
+            <div v-if="isOpen" class="dropdown" @click.stop>
                 <div class="column1">
                     <div v-for="item in zeitraumItems" :key="item.value" class="nav-sub-menu" @click="selectItem(item)">
                         <div :class="['indictor', { active: tempSelectedItem === item.value }]">
@@ -30,7 +29,7 @@
                     <div class="top-row">
                         <div class="von">Von:</div>
                         <div class="month">
-                            <div class="arrow-left" @click="prevMonth('von')">
+                            <div class="arrow-left" @click.stop="prevMonth('von')">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="7" height="12" viewBox="0 0 7 12"
                                     fill="none">
                                     <path d="M6 11L1 6L6 1" stroke="white" stroke-linecap="round"
@@ -38,7 +37,7 @@
                                 </svg>
                             </div>
                             <div class="name-month">{{ currentMonthNameVon }} {{ currentYearVon }}</div>
-                            <div class="arrow-right" @click="nextMonth('von')">
+                            <div class="arrow-right" @click.stop="nextMonth('von')">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="7" height="12" viewBox="0 0 7 12"
                                     fill="none">
                                     <path d="M0.999999 1L6 6L1 11" stroke="white" stroke-linecap="round"
@@ -53,10 +52,9 @@
                     <div class="calender-1">
                         <div v-for="(day, index) in calendarDaysVon" :key="index" :class="['cal-day', {
                             'this-month': day.isCurrentMonth,
-                            'active': isDayActive(day),
-                            'selected': isDaySelected(day),
+                            'active': isDayActive(day, 'von'),
                             'Current_day': isCurrentDay(day)
-                        }]" @click="selectDay(day, 'von')">
+                        }]" @click.stop="selectDay(day, 'von')">
                             {{ day.date.getDate() }}
                         </div>
                     </div>
@@ -66,7 +64,7 @@
                     <div class="top-row">
                         <div class="von">Bis:</div>
                         <div class="month">
-                            <div class="arrow-left" @click="prevMonth('bis')">
+                            <div class="arrow-left" @click.stop="prevMonth('bis')">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="7" height="12" viewBox="0 0 7 12"
                                     fill="none">
                                     <path d="M6 11L1 6L6 1" stroke="white" stroke-linecap="round"
@@ -74,7 +72,7 @@
                                 </svg>
                             </div>
                             <div class="name-month">{{ currentMonthNameBis }} {{ currentYearBis }}</div>
-                            <div class="arrow-right" @click="nextMonth('bis')">
+                            <div class="arrow-right" @click.stop="nextMonth('bis')">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="7" height="12" viewBox="0 0 7 12"
                                     fill="none">
                                     <path d="M0.999999 1L6 6L1 11" stroke="white" stroke-linecap="round"
@@ -89,17 +87,16 @@
                     <div class="calender-1">
                         <div v-for="(day, index) in calendarDaysBis" :key="index" :class="['cal-day', {
                             'this-month': day.isCurrentMonth,
-                            'active': isDayActive(day),
-                            'selected': isDaySelected(day),
+                            'active': isDayActive(day, 'bis'),
                             'Current_day': isCurrentDay(day)
-                        }]" @click="selectDay(day, 'bis')">
+                        }]" @click.stop="selectDay(day, 'bis')">
                             {{ day.date.getDate() }}
                         </div>
                     </div>
                 </div>
                 <div class="CTAs">
-                    <div class="Button-primary" @click="clearSelection">Löschen</div>
-                    <div class="Button-primary" style="background: var(--move);" @click="applySelection">Anwenden</div>
+                    <div class="Button-primary" @click.stop="clearSelection">Löschen</div>
+                    <div class="Button-primary" style="background: var(--move);" @click.stop="applySelection">Anwenden</div>
                 </div>
             </div>
         </div>
@@ -107,6 +104,7 @@
 </template>
 
 <script setup>
+
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 
 const props = defineProps({
@@ -115,18 +113,31 @@ const props = defineProps({
 
 const emit = defineEmits(['select']);
 
+// ========== المتغيرات الأساسية ==========
 const isOpen = ref(false);
-const currentTitle = ref(props.title || 'Zeitraum ');
-const activeItem = ref('28days');
-const tempSelectedItem = ref('28days');
+const currentTitle = ref(props.title || 'Zeitraum');
+const activeItem = ref('last_year');
+const tempSelectedItem = ref('last_3_months');
 const currentDateVon = ref(new Date());
 const currentDateBis = ref(new Date());
 const tempSelectedDaysVon = ref([]);
 const tempSelectedDaysBis = ref([]);
-const selectedDays = ref([]);
+const activeRange = ref({ startDate: null, endDate: null });
 
 const weekDays = ['m', 'd', 'm', 'd', 'f', 's', 's'];
 
+// ========== العناصر ==========
+const zeitraumItems = [
+    { label: 'die letzten 3 Monate', value: 'last_3_months' },
+    { label: 'die letzten 6 Monate', value: 'last_6_months' },
+    { label: 'die letzten 9 Monate', value: 'last_9_months' },
+    { label: 'Letzter Monat', value: 'last_month' },
+    { label: 'Dieses Jahr', value: 'this_year' },
+    { label: 'Letztes Jahr', value: 'last_year' },
+    { label: 'Individuell', value: 'custom' },
+];
+
+// ========== دوال التقويم ==========
 const currentMonthVon = computed(() => currentDateVon.value.getMonth());
 const currentYearVon = computed(() => currentDateVon.value.getFullYear());
 const currentMonthNameVon = computed(() => {
@@ -138,17 +149,6 @@ const currentYearBis = computed(() => currentDateBis.value.getFullYear());
 const currentMonthNameBis = computed(() => {
     return currentDateBis.value.toLocaleString('default', { month: 'long' });
 });
-
-const zeitraumItems = [
-    { label: 'die letzten 7 Tage', value: '7days' },
-    { label: 'die letzten 14 Tage', value: '14days' },
-    { label: 'die letzten 28 Tage', value: '28days' },
-    { label: 'die letzten 90 Tage', value: '90days' },
-    { label: 'Dieser Monat', value: '1' },
-    { label: 'Letzter Monat', value: '2' },
-    { label: 'Das letzte jahr', value: '3' },
-    { label: 'Individuell', value: '4' },
-];
 
 const calendarDaysVon = computed(() => computeCalendarDays(currentMonthVon.value, currentYearVon.value));
 const calendarDaysBis = computed(() => computeCalendarDays(currentMonthBis.value, currentYearBis.value));
@@ -193,49 +193,31 @@ const isCurrentDay = (day) => {
     );
 };
 
-const toggleDropdown = () => {
-    isOpen.value = !isOpen.value;
-    if (isOpen.value) {
-        currentTitle.value = 'Zeitraum';
-    } else {
-        const selectedItem = zeitraumItems.find(item => item.value === activeItem.value);
-        currentTitle.value = selectedItem ? `Zeitraum | ${selectedItem.label}` : 'Zeitraum';
+const isDayActive = (day, calendarType) => {
+    if (!day.isCurrentMonth) return false;
+    const dateStr = day.date.toISOString().split('T')[0];
+    if (calendarType === 'von') {
+        return tempSelectedDaysVon.value.includes(dateStr);
     }
-};
-
-const closeDropdown = () => {
-    isOpen.value = false;
-    const selectedItem = zeitraumItems.find(item => item.value === activeItem.value);
-    currentTitle.value = selectedItem ? `Zeitraum | ${selectedItem.label}` : 'Zeitraum';
-    tempSelectedItem.value = activeItem.value;
-    tempSelectedDaysVon.value = [];
-    tempSelectedDaysBis.value = [];
-};
-
-const selectItem = (item) => {
-    tempSelectedItem.value = item.value;
+    return tempSelectedDaysBis.value.includes(dateStr);
 };
 
 const selectDay = (day, calendarType) => {
     if (!day.isCurrentMonth) return;
+
     const dateStr = day.date.toISOString().split('T')[0];
-    const targetArray = calendarType === 'von' ? tempSelectedDaysVon.value : tempSelectedDaysBis.value;
-    const index = targetArray.indexOf(dateStr);
-    if (index === -1) {
-        targetArray.push(dateStr);
+
+    if (calendarType === 'von') {
+        tempSelectedDaysVon.value = [dateStr];
+        if (tempSelectedDaysBis.value[0] && tempSelectedDaysBis.value[0] < dateStr) {
+            tempSelectedDaysBis.value = [dateStr];
+        }
     } else {
-        targetArray.splice(index, 1);
+        tempSelectedDaysBis.value = [dateStr];
+        if (tempSelectedDaysVon.value[0] && tempSelectedDaysVon.value[0] > dateStr) {
+            tempSelectedDaysVon.value = [dateStr];
+        }
     }
-};
-
-const isDayActive = (day) => {
-    if (!day.isCurrentMonth) return false;
-    const dateStr = day.date.toISOString().split('T')[0];
-    return tempSelectedDaysVon.value.includes(dateStr) || tempSelectedDaysBis.value.includes(dateStr);
-};
-
-const isDaySelected = (day) => {
-    return false;
 };
 
 const prevMonth = (calendarType) => {
@@ -254,31 +236,114 @@ const nextMonth = (calendarType) => {
     }
 };
 
-const applySelection = () => {
-    const selectedItem = zeitraumItems.find(item => item.value === tempSelectedItem.value);
-    if (selectedItem) {
-        currentTitle.value = `Zeitraum | ${selectedItem.label}`;
-        activeItem.value = selectedItem.value;
-        emit('select', selectedItem.value);
-    }
-    selectedDays.value = [...tempSelectedDaysVon.value, ...tempSelectedDaysBis.value];
-    isOpen.value = false;
+// ========== تحديث العنوان ==========
+const updateTitle = () => {
+    const selectedItem = zeitraumItems.find(item => item.value === activeItem.value);
+    currentTitle.value = selectedItem ? `${selectedItem.label}` : 'Zeitraum';
 };
 
-const clearSelection = () => {
+// ========== دوال القائمة المنسدلة ==========
+const toggleDropdown = () => {
+    isOpen.value = !isOpen.value;
+    if (isOpen.value) {
+        currentTitle.value = 'Zeitraum';
+        tempSelectedItem.value = activeItem.value;
+        tempSelectedDaysVon.value = activeRange.value.startDate ? [activeRange.value.startDate] : [];
+        tempSelectedDaysBis.value = activeRange.value.endDate ? [activeRange.value.endDate] : [];
+    } else {
+        updateTitle();
+    }
+};
+
+const closeDropdown = () => {
+    isOpen.value = false;
+    updateTitle();
     tempSelectedItem.value = activeItem.value;
+    tempSelectedDaysVon.value = activeRange.value.startDate ? [activeRange.value.startDate] : [];
+    tempSelectedDaysBis.value = activeRange.value.endDate ? [activeRange.value.endDate] : [];
+};
+
+const selectItem = (item) => {
+    tempSelectedItem.value = item.value;
+};
+
+// ========== تطبيق الفلتر ==========
+const applySelection = () => {
+    const selectedItem = zeitraumItems.find(item => item.value === tempSelectedItem.value);
+    
+    if (selectedItem) {
+        activeItem.value = selectedItem.value;
+
+        if (selectedItem.value === 'custom') {
+            const startDate = tempSelectedDaysVon.value[0] || null;
+            const endDate = tempSelectedDaysBis.value[0] || null;
+            const today = new Date().toISOString().slice(0, 10);
+
+            if (!startDate || !endDate) {
+                console.warn('⚠️ اختر تاريخ من وتاريخ إلى قبل تطبيق الفلتر المخصص');
+                return;
+            }
+
+            if (startDate > endDate) {
+                console.warn('⚠️ تاريخ البداية يجب أن يكون قبل تاريخ النهاية');
+                return;
+            }
+
+            if (startDate > today || endDate > today) {
+                console.warn('⚠️ لا يمكن اختيار تاريخ بعد اليوم');
+                return;
+            }
+
+            activeRange.value = { startDate, endDate };
+            console.log('📅 تطبيق الفلتر المخصص:', startDate, endDate);
+            emit('select', {
+                dateType: 'custom',
+                startDate,
+                endDate
+            });
+
+            updateTitle();
+            isOpen.value = false;
+            return;
+        }
+
+        activeRange.value = { startDate: null, endDate: null };
+        
+        console.log('📅 تطبيق الفلتر:', selectedItem.value);
+        
+        // إرسال الفلتر إلى المكون الأب
+        emit('select', {
+            dateType: selectedItem.value
+        });
+    }
+    
+    updateTitle();
+    isOpen.value = false;
     tempSelectedDaysVon.value = [];
     tempSelectedDaysBis.value = [];
 };
 
+const clearSelection = () => {
+    tempSelectedItem.value = activeItem.value;
+    tempSelectedDaysVon.value = activeRange.value.startDate ? [activeRange.value.startDate] : [];
+    tempSelectedDaysBis.value = activeRange.value.endDate ? [activeRange.value.endDate] : [];
+};
+
+// ========== إغلاق القائمة عند النقر خارجها ==========
 const handleClickOutside = (event) => {
-    if (!event.target.closest('.zeitraum-combo-box') && !event.target.closest('.backdrop')) {
+    const isClickInside = event.target.closest('.zeitraum-combo-box') || 
+                          event.target.closest('.backdrop') ||
+                          event.target.closest('.dropdown');
+    
+    if (!isClickInside && isOpen.value) {
         closeDropdown();
     }
 };
 
+// ========== دورة حياة المكون ==========
 onMounted(() => {
     document.addEventListener('click', handleClickOutside);
+    updateTitle();
 });
 
 onUnmounted(() => {
@@ -287,6 +352,7 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss" scoped>
+/* نفس الأنماط السابقة مع إضافة @click.stop على العناصر */
 .zeitraum-combo-box-container {
     position: relative;
     flex: 1;
@@ -300,7 +366,6 @@ onUnmounted(() => {
     width: 100vw;
     height: 100vh;
     background: rgba(27, 28, 32, 0.8);
-    /* #1B1C20 مع شفافية 80% */
     z-index: 999;
     cursor: pointer;
 }
@@ -398,16 +463,13 @@ onUnmounted(() => {
     align-self: stretch;
     animation: slideIn 0.3s ease forwards;
     box-shadow: 0 4px 5px rgba(0, 0, 0, 0.2);
-    /* إضافة ظل لتأثير pop-up */
 }
 
-/* تأثير الظهور */
 @keyframes slideIn {
     from {
         opacity: 0;
         transform: translateY(-20px);
     }
-
     to {
         opacity: 1;
         transform: translateY(0);
@@ -610,7 +672,6 @@ onUnmounted(() => {
     flex-shrink: 0;
     border-radius: 5px;
     background: var(--icon);
-    /* إصلاح: استبدال opaque بـ var(--icon) */
     color: var(--Main-Colors-Dove, #6A6C6D);
     font-family: Heebo;
     font-size: 18px;
@@ -640,11 +701,6 @@ onUnmounted(() => {
     position: relative;
 }
 
-.calendar1 .calender-1 .selected {
-    background: rgba(221, 17, 85, 0.8);
-    color: white;
-}
-
 .CTAs {
     display: flex;
     justify-content: flex-end;
@@ -667,10 +723,11 @@ onUnmounted(() => {
     font-weight: normal;
     line-height: .8;
     text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.3s ease;
 
     &:hover {
         background: var(--dark-red);
-        cursor: pointer;
         z-index: 5;
     }
 }

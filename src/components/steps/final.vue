@@ -1,7 +1,8 @@
 <script>
 import { useDataStore } from '@/stores/data';
+import { useReleaseStore } from '@/stores/release';
 import { mapState } from 'pinia';
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 
 export default {
   name: 'SchutzenThankYou',
@@ -11,18 +12,46 @@ export default {
   setup() {
     const currentStep = ref(1);
     let stepTimer = null;
+    const releaseStore = useReleaseStore();
+    const dataStore = useDataStore();
+
+    // 🔥 الحصول على صورة الغلاف من localStorage أو من الـ Store
+    const coverImage = ref(null);
+
+    // 🔥 دالة للحصول على الرابط الكامل للصورة
+    const getCoverImageUrl = computed(() => {
+      const cover = coverImage.value;
+      if (!cover) return null;
+      
+      // إذا كان الرابط يبدأ بـ http، استخدمه مباشرة
+      if (cover.startsWith('http://') || cover.startsWith('https://')) {
+        return cover;
+      }
+      
+      // إذا كان الرابط يبدأ بـ /، استخدمه مباشرة
+      if (cover.startsWith('/')) {
+        return cover;
+      }
+      
+      // إذا كان الرابط يبدأ بـ 'covers/'، أضف storage URL
+      const storageUrl = import.meta.env.VITE_STORAGE_URL || 'https://zoundr-flow-api.davinda.dev/storage';
+      
+      if (cover.startsWith('covers/') || cover.includes('/')) {
+        return `${storageUrl}/${cover}`;
+      }
+      
+      return `${storageUrl}/covers/${cover}`;
+    });
 
     const startStepTransition = () => {
-      // إعادة تعيين المؤقت إذا كان موجوداً
       if (stepTimer) {
         clearTimeout(stepTimer);
       }
 
-      // تبديل الخطوات كل ثانيتين
       stepTimer = setInterval(() => {
         currentStep.value++;
         if (currentStep.value > 3) {
-          currentStep.value = 3; // توقف عند الخطوة الثالثة
+          currentStep.value = 3;
           clearInterval(stepTimer);
         }
       }, 3000);
@@ -30,13 +59,28 @@ export default {
 
     onMounted(() => {
       startStepTransition();
+      localStorage.setItem('paymentStatus', '0');
+      
+      // 🔥 استرجاع صورة الغلاف من localStorage
+      const savedCover = localStorage.getItem('releaseCover');
+      if (savedCover) {
+        coverImage.value = savedCover;
+        console.log('🖼️ Cover image loaded from localStorage:', savedCover);
+      } else {
+        // محاولة الحصول من releaseStore كـ fallback
+        if (releaseStore.cover) {
+          coverImage.value = releaseStore.cover;
+          console.log('🖼️ Cover image loaded from releaseStore:', releaseStore.cover);
+        } else if (dataStore.releaseCover) {
+          coverImage.value = dataStore.releaseCover;
+          console.log('🖼️ Cover image loaded from dataStore:', dataStore.releaseCover);
+        } else {
+          console.log('⚠️ No cover image found');
+        }
+      }
+      
+      console.log('🖼️ Cover URL:', getCoverImageUrl.value);
     });
-
-    onMounted(() => {
-  // إعادة تعيين paymentStatus عند تحميل صفحة الشكر
-  localStorage.setItem('paymentStatus', '0');
-  
-});
 
     onUnmounted(() => {
       if (stepTimer) {
@@ -46,6 +90,8 @@ export default {
 
     return {
       currentStep,
+      coverImage,
+      getCoverImageUrl,
     };
   }
 };
@@ -89,7 +135,14 @@ export default {
           </div>
         </div>
 
-        <div class="img-cover"></div>
+        <!-- 🔥 صورة الغلاف -->
+        <div 
+          class="img-cover" 
+          :style="getCoverImageUrl ? { backgroundImage: `url(${getCoverImageUrl})` } : {}"
+        >
+          <!-- عرض نص placeholder إذا لم توجد صورة -->
+          <span v-if="!getCoverImageUrl" class="placeholder-text">Cover</span>
+        </div>
       </div>
       
       <div class="final-bg">
@@ -98,6 +151,8 @@ export default {
     </div>
   </main>
 </template>
+
+
 
 <style lang="scss" scoped>
 * {
@@ -199,12 +254,12 @@ p {
 
 .top-container {
   display: flex;
-width: 759px;
-height: 520px;
-flex-direction: column;
-justify-content: space-between;
-align-items: center;
-flex-shrink: 0;
+  width: 759px;
+  height: 520px;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
   z-index: 2;
   position: relative;
 }
@@ -213,17 +268,26 @@ flex-shrink: 0;
   display: flex;
   width: 210px;
   height: 210px;
-  padding: 140px 20px 80px 20px;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 112px;
   flex-shrink: 0;
   aspect-ratio: 1/1;
   border-radius: 20px;
-  background: url(<path-to-image>) lightgray 50% / cover no-repeat;
+  background: #26282D 50% / cover no-repeat;
   box-shadow: 0 0 40px 0 var(--Main-Colors-Slate-Black, #0E0E10);
   z-index: 1;
+  transition: background-image 0.5s ease;
+  background-size: cover;
+  background-position: center;
+}
+
+.placeholder-text {
+  color: #6A6C6D;
+  font-family: Heebo;
+  font-size: 18px;
+  font-weight: 300;
+  letter-spacing: 1px;
 }
 
 main {
@@ -250,7 +314,6 @@ main {
 .final-title {
   display: flex;
   width: 760px;
-  // height: 133px;
   flex-direction: column;
   justify-content: center;
   flex-shrink: 0;
