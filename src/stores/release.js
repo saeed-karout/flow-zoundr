@@ -1,5 +1,6 @@
-// src/stores/release.js
+// src/stores/release.js - Updated version
 import { defineStore } from "pinia";
+import { computeTabCompletion, isSongComplete, isInstrumentalSong } from "@/utils/songCompletion";
 
 export const useReleaseStore = defineStore('release', {
   state: () => ({
@@ -14,6 +15,7 @@ export const useReleaseStore = defineStore('release', {
     metasPage: 'right',
     isMetasComplete: false,
     isSongsComplete: false,
+    hasUploadedAudio: false,
     isShopsComplete: false,
     isPublishComplete: false,
     draftRelease: null,
@@ -23,7 +25,6 @@ export const useReleaseStore = defineStore('release', {
     _isReturningFromSongs: false,
     _preserveSongsComplete: false,
     
-    // ✅ tabCompletion - مخزن حالات اكتمال التبويبات
     tabCompletion: {
       infos: false,
       urheber: false,
@@ -31,7 +32,16 @@ export const useReleaseStore = defineStore('release', {
       deals: false,
       'pre-release': false
     },
-    
+
+    lastSongTabs: {},
+
+    // حقول التصحيح القادمة من الباكإند (status: correction).
+    // release: مصفوفة أسماء حقول — songs: { [songUuid]: [أسماء حقول] }
+    correctionFields: { release: [], songs: {} },
+    // أوّل موضع يحتاج تدخّل المستخدم {step, view, tab, songUuid, field}
+    // Korrektur: حقل مطلوب تصحيحه — Entwürfe: حقل ناقص.
+    editTarget: null,
+
     metasData: {
       title: '',
       subtitle: '',
@@ -98,17 +108,14 @@ export const useReleaseStore = defineStore('release', {
       return state.metasPage;
     },
     
-    // ✅ Getter للتحقق من اكتمال تبويب معين
     isTabComplete: (state) => (tabId) => {
       return state.tabCompletion[tabId] || false;
     },
     
-    // ✅ Getter للحصول على جميع التبويبات المكتملة
     getCompletedTabs: (state) => {
       return Object.keys(state.tabCompletion).filter(key => state.tabCompletion[key] === true);
     },
     
-    // ✅ Getter للتحقق من أن جميع التبويبات مكتملة
     areAllTabsComplete: (state) => {
       return Object.values(state.tabCompletion).every(value => value === true);
     }
@@ -225,7 +232,6 @@ export const useReleaseStore = defineStore('release', {
     setCurrentStep(step) {
       if (step >= 1 && step <= 5) {
         if (this.currentStep !== step) {
-          // 🔥 إذا كنا ننتقل من Songs إلى Metas
           if (this.currentStep === 3 && step === 2) {
             console.log('🔄 Store: الانتقال من Songs إلى Metas - الحفاظ على isMetasComplete:', this.isMetasComplete);
             console.log('🔄 Store: الانتقال من Songs إلى Metas - الحفاظ على isSongsComplete:', this.isSongsComplete);
@@ -245,89 +251,103 @@ export const useReleaseStore = defineStore('release', {
     
     setMetasComplete(value) {
       const booleanValue = value === true;
-      
-      if (this._isUpdating) {
-        console.log('⏳ Store: Update already in progress, skipping setMetasComplete');
-        return;
-      }
-      
-      // 🔥 إذا كنا عائدين من Songs، لا نغير isMetasComplete
+
       if (this._isReturningFromSongs) {
         console.log('🔄 Store: عودة من Songs، الحفاظ على isMetasComplete:', this.isMetasComplete);
         return;
       }
-      
+
+      // NOTE: no shared _isUpdating lock here — it used to block a concurrent
+      // setSongsComplete/setPublishComplete (they share the same flag), leaving
+      // completion states unset. The value-change guard below already prevents loops.
       if (this.isMetasComplete !== booleanValue) {
-        this._isUpdating = true;
         this.isMetasComplete = booleanValue;
         console.log('📌 Store: isMetasComplete set to', booleanValue);
-        
+
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('store-updated', {
-            detail: { 
+            detail: {
               type: 'metas-complete',
               value: booleanValue,
               timestamp: Date.now()
             }
           }));
         }
-        
-        setTimeout(() => {
-          this._isUpdating = false;
-          console.log('🔓 Store: Update lock released');
-        }, 100);
       } else {
         console.log('📌 Store: isMetasComplete unchanged (already', booleanValue, ')');
       }
     },
-    
+
     setSongsComplete(value) {
       const booleanValue = value === true;
-      
-      if (this._isUpdating) {
-        console.log('⏳ Store: Update already in progress, skipping setSongsComplete');
-        return;
-      }
-      
-      // 🔥 إذا كنا عائدين من Songs، نحافظ على isSongsComplete
+
       if (this._preserveSongsComplete) {
         console.log('🔄 Store: عودة من Songs، الحفاظ على isSongsComplete:', this.isSongsComplete);
         return;
       }
-      
+
       if (this.isSongsComplete !== booleanValue) {
-        this._isUpdating = true;
         this.isSongsComplete = booleanValue;
         console.log('📌 Store: isSongsComplete set to', booleanValue);
-        
+
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('store-updated', {
-            detail: { 
+            detail: {
               type: 'songs-complete',
               value: booleanValue,
               timestamp: Date.now()
             }
           }));
         }
-        
-        setTimeout(() => {
-          this._isUpdating = false;
-        }, 100);
       } else {
         console.log('📌 Store: isSongsComplete unchanged (already', booleanValue, ')');
       }
     },
     
+    // يستخرج corrections من الـ release وأغانيه ويحفظها لتحديد الحقول ببوردر أحمر.
+    setCorrections(release) {
+      const asList = (v) =>
+        Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.trim() !== '') : [];
+
+      const songs = {};
+      (Array.isArray(release?.songs) ? release.songs : []).forEach((song) => {
+        const fields = asList(song?.corrections);
+        if (song?.uuid && fields.length) songs[song.uuid] = fields;
+      });
+
+      this.correctionFields = { release: asList(release?.corrections), songs };
+      console.log('✏️ Store: correctionFields', this.correctionFields);
+    },
+
+    setEditTarget(target) {
+      this.editTarget = target || null;
+      console.log('✏️ Store: editTarget', this.editTarget);
+    },
+
+    clearCorrections() {
+      this.correctionFields = { release: [], songs: {} };
+      this.editTarget = null;
+    },
+
+    setLastSongTab(uuid, tab) {
+      const validTabs = ['infos', 'urheber', 'mitwirkende', 'deals', 'pre-release'];
+      if (!uuid || !validTabs.includes(tab)) return;
+      this.lastSongTabs = { ...this.lastSongTabs, [uuid]: tab };
+      console.log('📌 Store: lastSongTab set:', uuid, '->', tab);
+    },
+
+    setHasUploadedAudio(value) {
+      const booleanValue = value === true;
+      if (this.hasUploadedAudio !== booleanValue) {
+        this.hasUploadedAudio = booleanValue;
+        console.log('📌 Store: hasUploadedAudio set to', booleanValue);
+      }
+    },
+
     setShopsComplete(value) {
       const booleanValue = value === true;
       
-      if (this._isUpdating) {
-        console.log('⏳ Store: Update already in progress, skipping setShopsComplete');
-        return;
-      }
-      
       if (this.isShopsComplete !== booleanValue) {
-        this._isUpdating = true;
         this.isShopsComplete = booleanValue;
         console.log('📌 Store: isShopsComplete set to', booleanValue);
         
@@ -340,10 +360,6 @@ export const useReleaseStore = defineStore('release', {
             }
           }));
         }
-        
-        setTimeout(() => {
-          this._isUpdating = false;
-        }, 100);
       } else {
         console.log('📌 Store: isShopsComplete unchanged (already', booleanValue, ')');
       }
@@ -351,30 +367,20 @@ export const useReleaseStore = defineStore('release', {
     
     setPublishComplete(value) {
       const booleanValue = value === true;
-      
-      if (this._isUpdating) {
-        console.log('⏳ Store: Update already in progress, skipping setPublishComplete');
-        return;
-      }
-      
+
       if (this.isPublishComplete !== booleanValue) {
-        this._isUpdating = true;
         this.isPublishComplete = booleanValue;
         console.log('📌 Store: isPublishComplete set to', booleanValue);
-        
+
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('store-updated', {
-            detail: { 
+            detail: {
               type: 'publish-complete',
               value: booleanValue,
               timestamp: Date.now()
             }
           }));
         }
-        
-        setTimeout(() => {
-          this._isUpdating = false;
-        }, 100);
       } else {
         console.log('📌 Store: isPublishComplete unchanged (already', booleanValue, ')');
       }
@@ -387,20 +393,12 @@ export const useReleaseStore = defineStore('release', {
       }
     },
     
-    // ========== ✅ إدارة tabCompletion ==========
-    
-    /**
-     * تحديث حالة اكتمال التبويبات
-     * @param {Object} completion - كائن يحتوي على حالات الاكتمال
-     * @example updateTabCompletion({ infos: true, urheber: true })
-     */
     updateTabCompletion(completion) {
       if (!completion || typeof completion !== 'object') {
         console.warn('⚠️ Store: invalid completion data', completion);
         return;
       }
       
-      // ✅ تحديث فقط المفاتيح الموجودة في tabCompletion
       const validKeys = Object.keys(this.tabCompletion);
       let hasChanges = false;
       
@@ -416,7 +414,6 @@ export const useReleaseStore = defineStore('release', {
       if (hasChanges) {
         console.log('📌 Store: tabCompletion updated:', this.tabCompletion);
         
-        // ✅ إرسال حدث للتحديث
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('tab-completion-updated', {
             detail: { 
@@ -428,9 +425,6 @@ export const useReleaseStore = defineStore('release', {
       }
     },
     
-    /**
-     * إعادة تعيين tabCompletion إلى القيم الافتراضية
-     */
     resetTabCompletion() {
       this.tabCompletion = {
         infos: false,
@@ -442,34 +436,24 @@ export const useReleaseStore = defineStore('release', {
       console.log('📌 Store: tabCompletion reset');
     },
     
-    /**
-     * إعادة تعيين tabCompletion مع الحفاظ على deals = true
-     * (يستخدم عند تغيير الأغنية أو العودة من pre-release)
-     */
     resetTabCompletionForNewSong() {
+      // All tabs start incomplete for a new song. Deals/Pre-Release only become
+      // complete once the user opens them (see Infos1.compileAllData), matching the
+      // backend flags deals_step_completed / pre_release_step_completed.
       this.tabCompletion = {
         infos: false,
         urheber: false,
         mitwirkende: false,
-        deals: true,
-        'pre-release': true
+        deals: false,
+        'pre-release': false
       };
-      console.log('🧹 Store: tabCompletion reset for new song (deals=true, pre-release=true)');
+      console.log('🧹 Store: tabCompletion reset for new song (all incomplete)');
     },
     
-    /**
-     * التحقق من اكتمال تبويب معين (بديل للـ getter)
-     */
     checkTabComplete(tabId) {
       return this.tabCompletion[tabId] || false;
     },
     
-    /**
-     * الحصول على التبويب التالي غير المكتمل
-     * @param {string} currentTab - التبويب الحالي
-     * @param {Array} tabOrder - ترتيب التبويبات
-     * @returns {string|null} - التبويب التالي أو null
-     */
     getNextIncompleteTab(currentTab, tabOrder) {
       const order = tabOrder || ['infos', 'urheber', 'mitwirkende', 'deals', 'pre-release'];
       const currentIndex = order.indexOf(currentTab);
@@ -485,11 +469,6 @@ export const useReleaseStore = defineStore('release', {
       return null;
     },
     
-    /**
-     * الحصول على أول تبويب غير مكتمل
-     * @param {Array} tabOrder - ترتيب التبويبات
-     * @returns {string|null} - أول تبويب غير مكتمل أو null
-     */
     getFirstIncompleteTab(tabOrder) {
       const order = tabOrder || ['infos', 'urheber', 'mitwirkende', 'deals', 'pre-release'];
       
@@ -502,13 +481,9 @@ export const useReleaseStore = defineStore('release', {
       return null;
     },
     
-    // ========== نهاية إدارة tabCompletion ==========
-    
     updateMetasData(data) {
-      // 🔥 إذا كنا عائدين من Songs، لا نغير isMetasComplete
       if (this._isReturningFromSongs) {
         console.log('🔄 Store: عودة من Songs، تحديث metasData فقط دون تغيير isMetasComplete');
-        // ✅ فقط نحدث البيانات بدون تغيير isMetasComplete
         this.metasData = {
           ...this.metasData,
           ...data
@@ -517,7 +492,6 @@ export const useReleaseStore = defineStore('release', {
         return;
       }
       
-      // ✅ التحديث العادي
       this.metasData = {
         ...this.metasData,
         ...data
@@ -552,6 +526,8 @@ export const useReleaseStore = defineStore('release', {
       this.metasPage = 'right';
       this.isMetasComplete = false;
       this.isSongsComplete = false;
+      this.hasUploadedAudio = false;
+      this.lastSongTabs = {};
       this.isShopsComplete = false;
       this.isPublishComplete = false;
       this.draftRelease = null;
@@ -561,7 +537,6 @@ export const useReleaseStore = defineStore('release', {
       this._isReturningFromSongs = false;
       this._preserveSongsComplete = false;
       
-      // ✅ إعادة تعيين tabCompletion
       this.resetTabCompletion();
       
       this.metasData = {
@@ -622,6 +597,12 @@ export const useReleaseStore = defineStore('release', {
     
     determineMetasPage(release) {
       if (!release) return 'right';
+
+      // ✏️ صفحة التصحيح أولى من استنتاج "توجد بيانات متقدّمة".
+      if (this.editTarget && this.editTarget.step === 2 && this.editTarget.view) {
+        this.setMetasPage(this.editTarget.view);
+        return this.editTarget.view;
+      }
       
       const hasAdvancedData = release.label || 
                              release.production_year || 
@@ -657,7 +638,7 @@ export const useReleaseStore = defineStore('release', {
       return 'right';
     },
     
-    determineStepFromRelease(release, updateCurrentStep = true, preserveMetasComplete = false, preserveSongsComplete = false) {
+    determineStepFromRelease(release, updateCurrentStep = true, preserveMetasComplete = false, preserveSongsComplete = false, preventPublishAutoNav = false) {
       if (!release) {
         console.warn('⚠️ No release data provided, defaulting to step 2');
         return 2;
@@ -665,19 +646,17 @@ export const useReleaseStore = defineStore('release', {
 
       console.log('📌 Determining step from release data:', release.uuid);
 
-      // ✅ تحديث draftRelease
       this.setDraftRelease(release);
 
       // ========== 1. تحليل بيانات Metas ==========
       const hasTitle = Boolean(release.title && release.title.trim() !== '');
       const hasArtists = Boolean(release.artists && release.artists.length > 0);
       const hasReleaseDate = Boolean(release.release_date);
-      const isMetasComplete = hasTitle && hasArtists && hasReleaseDate;
+      const hasCover = Boolean(release.cover && release.cover.trim() !== '');
+      const isMetasComplete = hasTitle && hasArtists && hasReleaseDate && hasCover;
       
-      // 🔥 إذا كنا نحافظ على isMetasComplete، لا نغيرها
       if (preserveMetasComplete || this._isReturningFromSongs) {
         console.log(`📌 الحفاظ على isMetasComplete: ${this.isMetasComplete} (لا نغير)`);
-        // ✅ فقط نحدث البيانات بدون تغيير isMetasComplete
         this.metasData = {
           ...this.metasData,
           title: release.title || '',
@@ -699,13 +678,11 @@ export const useReleaseStore = defineStore('release', {
         };
         console.log('📌 Store: metasData updated (preserving isMetasComplete:', this.isMetasComplete, ')');
       } else {
-        // تحديث عادي
         if (this.isMetasComplete !== isMetasComplete) {
           this.setMetasComplete(isMetasComplete);
           console.log(`📌 Store: isMetasComplete set to ${isMetasComplete}`);
         }
         
-        // تحديث MetasData
         this.updateMetasData({
           title: release.title || '',
           subtitle: release.subtitle || '',
@@ -730,86 +707,116 @@ export const useReleaseStore = defineStore('release', {
       const songs = release.songs || [];
       const hasSongs = songs.length > 0;
 
-      // 🔥 إذا كنا نحافظ على isSongsComplete، لا نغيرها
+      let newSongsComplete = false;
+      if (hasSongs) {
+        console.log(`📌 تحليل ${songs.length} أغاني...`);
+        
+        // ✅ المصدر المشترك @/utils/songCompletion — مطابق تماماً لـ
+        //    FirstSection.isTrackComplete و tabs.vue و Infos1 و Upload2Component.
+        newSongsComplete = songs.every(song => {
+          const complete = isSongComplete(song);
+          console.log(`  🎵 أغنية "${song.title || 'untitled'}"`, {
+            ...computeTabCompletion(song),
+            isInstrumental: isInstrumentalSong(song),
+            hasSongFile: !!song.song_file,
+            isComplete: complete
+          });
+          return complete;
+        });
+      }
+
       if (preserveSongsComplete || this._preserveSongsComplete) {
         console.log(`📌 الحفاظ على isSongsComplete: ${this.isSongsComplete} (لا نغير)`);
       } else {
-        let newSongsComplete = false;
-        if (hasSongs) {
-          console.log(`📌 تحليل ${songs.length} أغاني...`);
-          newSongsComplete = songs.every(song => {
-            const hasSongTitle = song.title && song.title.trim() !== '';
-            const hasSongFile = song.song_file !== null && song.song_file !== undefined && song.song_file !== '';
-            const hasCover = song.cover !== null && song.cover !== undefined && song.cover !== '';
-            const hasAuthors = song.composers && song.composers.length > 0;
-            return hasSongTitle && hasSongFile && hasCover && hasAuthors;
-          });
-          
-          if (this.isSongsComplete !== newSongsComplete) {
-            this.setSongsComplete(newSongsComplete);
-          }
-          console.log(`📌 Songs ${newSongsComplete ? 'مكتملة ✅' : 'غير مكتملة ❌'}`);
-        } else {
-          if (this.isSongsComplete !== false) {
-            this.setSongsComplete(false);
-          }
-          console.log('📌 لا توجد Songs ❌');
+        if (this.isSongsComplete !== newSongsComplete) {
+          this.setSongsComplete(newSongsComplete);
         }
+        console.log(`📌 Songs ${newSongsComplete ? 'مكتملة ✅' : 'غير مكتملة ❌'}`);
       }
 
       // ========== 3. تحليل بيانات Shops ==========
       const hasStores = release.stores && release.stores.length > 0;
+      
+      // ✅ تحديث isShopsComplete مباشرة
       if (this.isShopsComplete !== hasStores) {
-        this.setShopsComplete(hasStores);
+        this.isShopsComplete = hasStores;
+        console.log('📌 Store: isShopsComplete set to', hasStores);
+        
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('store-updated', {
+            detail: { 
+              type: 'shops-complete',
+              value: hasStores,
+              timestamp: Date.now()
+            }
+          }));
+        }
       }
       console.log(`📌 Shops ${hasStores ? 'محددة ✅' : 'غير محددة ❌'}`);
+      console.log(`📌 isShopsComplete في الـ Store: ${this.isShopsComplete}`);
 
       // ========== 4. تحليل بيانات Publish ==========
-      const isPublishReady = release.status === 'draft' && 
-                             this.isMetasComplete && 
-                             hasSongs && 
-                             this.isSongsComplete && 
+      // isPublishReady = خطوة Publish أصبحت "قابلة للتعبئة" (كل ما قبلها مكتمل)، وليست
+      // "مكتملة". اكتمال Publish يُضبط حصرياً من Upload4Component بعد تعبئة الفورم والنقر
+      // على الموافقة (زر التشيك مارك) — لا من مجرّد اكتمال Shops. لذلك لا نضبطه true هنا؛
+      // نكتفي بإعادته إلى false عند فقدان المتطلبات كي لا يبقى مكتملاً زوراً.
+      const isPublishReady = release.status === 'draft' &&
+                             this.isMetasComplete &&
+                             hasSongs &&
+                             this.isSongsComplete &&
                              hasStores;
-      
-      if (this.isPublishComplete !== isPublishReady) {
-        this.setPublishComplete(isPublishReady);
+
+      if (!isPublishReady && this.isPublishComplete) {
+        this.setPublishComplete(false);
       }
 
-      // ========== 5. عرض تحليلات للتصحيح ==========
       console.log('📊 تحليل البيانات:');
-      console.log('  📌 Metas:', { hasTitle, hasArtists, hasReleaseDate, isMetasComplete: this.isMetasComplete });
+      console.log('  📌 Metas:', { hasTitle, hasArtists, hasReleaseDate, hasCover, isMetasComplete: this.isMetasComplete });
       console.log('  📌 Songs:', { hasSongs, isSongsComplete: this.isSongsComplete });
-      console.log('  📌 Shops:', { hasStores });
+      console.log('  📌 Shops:', { hasStores, isShopsComplete: this.isShopsComplete });
       console.log('  📌 Publish:', { isPublishReady });
       console.log('  📌 Current Step:', this.currentStep);
+      console.log('  📌 preventPublishAutoNav:', preventPublishAutoNav);
 
-      // ========== 6. تحديث metasPage ==========
       this.determineMetasPage(release);
 
       // ========== 7. تحديد الخطوة المناسبة ==========
       let targetStep = this.currentStep;
-
-      // 🔥🔥🔥 نستخدم isSongsComplete من الـ Store
-      const songsComplete = this.isSongsComplete;
+      const songsComplete = newSongsComplete;
 
       if (songsComplete) {
-        console.log('📌 Songs مكتملة ✅ → الانتقال إلى Songs (الخطوة 3)');
-        targetStep = 3;
-      } else if (isPublishReady) {
-        console.log('📌 Publish جاهز ✅ → الانتقال إلى Publish (الخطوة 5)');
-        targetStep = 5;
-      } else if (hasStores && hasSongs) {
-        console.log('📌 Shops محددة والأغاني موجودة → الانتقال إلى Shops (الخطوة 4)');
-        targetStep = 4;
+        if (this.isMetasComplete) {
+          if (hasStores) {
+            if (preventPublishAutoNav) {
+              console.log('⏸️ [Store] preventPublishAutoNav is true, going to Shops (step 4) instead of Publish');
+              targetStep = 4;
+              // ملاحظة: لا نضبط isPublishComplete هنا. اكتمال Publish حصراً من Upload4
+              // (فورم معبّأ + موافقة)، وليس لمجرّد اكتمال Shops.
+            } else {
+              console.log('📌 Metas + Songs + Shops مكتملة ✅ → الانتقال إلى Publish (الخطوة 5)');
+              targetStep = 5;
+            }
+          } else {
+            // ✅ لا انتقال تلقائي إلى Shops. اكتمال Songs لا يعني أن المستخدم أنهى
+            //    عمله فيها؛ Shops خطوة يدخلها بنقر «Weiter zu Shops» أو من القائمة
+            //    الجانبية. كان القفز هنا يسحبه من Songs أثناء العمل رغم أنه لم يختر
+            //    أي متجر بعد (hasStores = false).
+            console.log('📌 Metas + Songs مكتملة ✅ لكن لا متاجر → البقاء في Songs (الخطوة 3)');
+            targetStep = 3;
+          }
+        } else {
+          console.log('📌 Songs مكتملة لكن Metas غير مكتملة → الانتقال إلى Metas (الخطوة 2)');
+          targetStep = 2;
+        }
       } else if (hasSongs) {
-        console.log('📌 توجد Songs → الانتقال إلى Songs (الخطوة 3)');
+        console.log('📌 توجد Songs غير مكتملة → الانتقال إلى Songs (الخطوة 3)');
         targetStep = 3;
       } else if (this.isMetasComplete) {
-        console.log('📌 Metas مكتملة ✅ → الانتقال إلى Metas (الخطوة 2)');
+        console.log('📌 Metas مكتملة ✅ ولا توجد Songs → الانتقال إلى Metas (الخطوة 2)');
         targetStep = 2;
-      } else if (release.cover && !hasTitle && !hasArtists && !hasReleaseDate && !hasSongs) {
-        console.log('📌 يوجد cover فقط → البقاء في Start (الخطوة 1)');
-        targetStep = 1;
+      } else if (hasCover) {
+        console.log('📌 يوجد cover (اكتملت Start) → الانتقال إلى Metas (الخطوة 2)');
+        targetStep = 2;
       } else {
         console.log('📌 لا توجد بيانات كافية → البقاء في Start (الخطوة 1)');
         targetStep = 1;

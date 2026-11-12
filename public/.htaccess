@@ -1,5 +1,9 @@
 RewriteEngine On
 
+
+RewriteRule ^storage/(.*)$ https://zoundr-flow-api.davinda.dev/storage/$1 [R=307,L]
+
+# القاعدة الأصلية
 RewriteRule ^index\.html$ - [L]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

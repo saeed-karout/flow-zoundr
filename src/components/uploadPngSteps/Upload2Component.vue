@@ -15,7 +15,7 @@
       <div v-if="currentView === 'main' && !forceInfosView && !isInSubLayout" class="content">
         
         <div class="option">
-          <div class="card-songs" @click="handleCardClick(0)">
+          <div class="card-songs" >
             <div class="image-overlay">
               <div class="Form">
                 <div class="btn-primary1" @click.stop="handleNext(0)">
@@ -26,7 +26,8 @@
             <div class="logo"></div>
           </div>
           <div class="description">
-            Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.
+           WAV Audio in Stereo. Min. 44,1 kHz & 16 Bit | max. 192 kHz & 24 Bit. 50 % Deiner Tracks müssen länger als 45 Sek. sein. Keine abrupten Enden, kein Rauschen. Alle Tracks müssen im gleichen Format sein.
+
           </div>
         </div>
 
@@ -48,7 +49,7 @@
             <div class="logo" :class="{ shifted: formFields[1].visible || formFields[1].email }"></div>
           </div>
           <div class="description">
-            Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, ipsa quae ab illo inventore.
+            Höchste Qualität durch zertifizierte Mastering Engineers. Dein Engineer besitzt eine bei Apple verifizierte E-Mail-Adresse. Möchtest Du ADM erhalten? Wir sind ADM lizenziert, einfach bei uns melden. 
           </div>
         </div>
 
@@ -70,7 +71,7 @@
             <div class="logo" :class="{ shifted: formFields[2].visible || formFields[2].email }"></div>
           </div>
           <div class="description">
-            Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium, totam rem aperiam, eaque ipsa quae ab illo inventore.
+           Spatial Audio als Dolby Atmos oder Sony 360 RA Master. Es muss zusätzlich auch immer ein Lossless Master pro Track hochgeladen werden. Die E-Mail-Adresse des Mastering Engineers wird überprüft. 
           </div>
         </div>
 
@@ -86,12 +87,13 @@
         
         @delete-track="handleDeleteTrack"
         :release-uuid="props.releaseUuid" 
-        :song-type="selectedSongType || tracks[0]?.song_type || 'lossless'"
+        :audio-quality="selectedSongType || 'lossless'"
         :release-title="releaseStore.metasData?.title || draftRelease?.value?.title || ''"
         :release-artists="releaseStore.metasData?.artists || draftRelease?.value?.artists || []"
-       @next="handleNextFromFirstSection"  
+       @next="handleNextFromFirstSection"
         @add-track="addNewSong"
         @edit-track="editSong"
+        @reorder-tracks="handleReorderTracks"
         @back="handleBackClick"
         @update:topLineImage="updateTopLineImage"
       />
@@ -104,7 +106,7 @@
         :release-subtitle="releaseStore.metasData?.subtitle || draftRelease?.value?.subtitle || ''"
         :releaseCLine="releaseStore.metasData?.cLineName || ''"
         :releasePLine="releaseStore.metasData?.pLineName || ''"
-        :releaseProductionYear="releaseStore.metasData?.productionYear || ''"
+        :releaseProductionYear="String(releaseStore.metasData?.productionYear || '')"
         @save-song="handleSaveSong" 
         @back="handleBackFromInfos"
         @next="$emit('next')" 
@@ -137,6 +139,7 @@ import apiRequest from '@/lib/apiRequest';
 import FirstSection from './Upload2/FirstSection.vue';
 import Infos from './Upload2/Infos1.vue';
 import { useReleaseStore } from '@/stores/release';
+import { computeTabCompletion, isSongComplete as isSongCompleteShared, isInstrumentalSong } from '@/utils/songCompletion';
 
 import losslessIcon from '@/assets/icons/top-line/lossless.png';
 import digitalMasterIcon from '@/assets/icons/top-line/digital-masters.png';
@@ -165,7 +168,7 @@ const emit = defineEmits([
   'update:topLineImage',
   'enter-sub-layout', 
   'exit-sub-layout', 
-  'change-song-type',
+  'change-audio-quality',
   'update-tab', 
   'update:form-data', 
   'openVideoPopup',
@@ -176,6 +179,9 @@ const emit = defineEmits([
 const isPreventingStepUpdate = ref(false);
 const isSaving = ref(false); // ✅ متغير لمنع الحفظ المتزامن
 let lastSavedPayload = null; // ✅ لمنع الحفظ المتكرر لنفس البيانات
+// ✅ طابور الحفظ المتزامن: عند وصول حفظ (من تاب آخر) أثناء حفظ قيد التنفيذ، لا نتخطّاه بل
+//   نُجدوله ليُعالَج تسلسلياً بعد الانتهاء — فلا تُفقَد بيانات تاب عند التبديل السريع.
+const pendingSaves = [];
 
 // ========== tabCompletion المحلي ==========
 const tabCompletionData = ref({
@@ -186,18 +192,49 @@ const tabCompletionData = ref({
   'pre-release': false
 });
 
+// ✅ الكاتب الوحيد لـ tabCompletion: بيانات الأغنية عبر @/utils/songCompletion — نفس
+//    المصدر الذي تستخدمه FirstSection و release.js. كانت مكوّنات التبويبات تكتب رأيها
+//    المبني على حقولها الحيّة (وفيها قيم مُعبّأة تلقائياً مثل Verlag/C-Line، وقيم قديمة
+//    لم تُزامَن بعد مسحها على الخادم)، فتتعارض مع بيانات الأغنية وتتذبذب العلامة
+//    بين true و false على نفس الأغنية.
+const syncTabCompletionFromSong = () => {
+  const song = currentSong.value
+    || (tracks.value || []).find(s => s.uuid === releaseStore.songUuid)
+    || null;
+
+  const completion = computeTabCompletion(song);
+  if (!completion) return;
+
+  // ✅ لا نكتب فوق التبويب النشط: قيمته الحيّة يملكها مكوّنه، وبيانات الأغنية
+  //    تتأخّر حتى يُدمَج ردّ الحفظ (وقد لا يقع حفظ أصلاً — مثل رفع الملف الصوتي عبر
+  //    FormData حيث يعود مسار الـ JSON بـ «لا توجد تغييرات»).
+  //
+  //    بدون هذا الاستثناء تنشأ حلقة: التجاوز الحيّ يغيّر المخزّن ← يوقظ المراقب
+  //    ← updateSongsCompleteStatus ← هذه الدالة ← تدهس القيمة الحيّة وتعيدها false.
+  //    النتيجة: كاتبان لا يتداخلان — النشط من مكوّنه، والبقية من بيانات الأغنية.
+  const activeTab = props.activeTab;
+  if (activeTab && Object.prototype.hasOwnProperty.call(completion, activeTab)) {
+    delete completion[activeTab];
+  }
+
+  releaseStore.updateTabCompletion(completion);
+};
+
 const handleTabCompletionUpdate = (completion) => {
-  console.log('📌 [Upload2Component] Received update-tab-completion:', completion);
-  if (completion && typeof completion === 'object') {
-    // ✅ دمج القيم مع الحفاظ على القيم الحالية في الـ Store
-    const currentCompletion = releaseStore.tabCompletion || {};
-    const updatedCompletion = { 
-      ...currentCompletion, 
-      ...completion, 
-      deals: true 
-    };
-    releaseStore.updateTabCompletion(updatedCompletion);
-    console.log('📌 [Upload2Component] Updated Store tabCompletion:', releaseStore.tabCompletion);
+  // ✅ الأساس دائماً من بيانات الأغنية (المصدر الموحّد).
+  syncTabCompletionFromSong();
+
+  // ✅ ثم نسمح للتبويب النشط وحده بتحديث قيمته الحيّة فوراً. بيانات الأغنية
+  //    تتأخّر حتى ينتهي الحفظ ويُدمَج الردّ، وقد لا يحدث حفظ أصلاً («لا توجد تغييرات»
+  //    بعد رفع الملف الصوتي مثلاً)، فكانت علامة INFOS لا تظهر إلا عند الانتقال إلى
+  //    تبويب آخر (لأن التبديل يفرض حفظاً ثم دمجاً).
+  //
+  //    القيد على التبويب النشط مقصود: مكوّنات التبويبات تبقى حيّة داخل keep-alive
+  //    وتبثّ رأيها حتى وهي مُعطّلة؛ وقبول رأي الجميع هو ما كان يُحدث تذبذب العلامة
+  //    بين true و false على نفس الأغنية.
+  const tab = props.activeTab;
+  if (tab && completion && typeof completion === 'object' && typeof completion[tab] === 'boolean') {
+    releaseStore.updateTabCompletion({ [tab]: completion[tab] });
   }
 };
 
@@ -207,6 +244,12 @@ const handleNextFromFirstSection = () => {
   // ✅ إرسال الحدث إلى الأعلى (UploadPNG)
   emit('next');
   console.log('📌 [Upload2Component] emit("next") sent');
+};
+
+const scrollSongsToTop = () => {
+  nextTick(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+  });
 };
 
 const handleTabUpdate = (tabId) => {
@@ -238,11 +281,19 @@ const isNavigatingBack = ref(false);
 let isFirstMount = true;
 const draftRelease = inject('draftRelease', null);
 
-const songTypeImageMap = {
+const audioQualityImageMap = {
   'lossless': losslessIcon,
   'digital_master': digitalMasterIcon,
-  'dobly_atmos': admLosslessIcon
+  'dolby_atmos': admLosslessIcon
 };
+
+watch(() => draftRelease?.value?.audio_quality, (quality) => {
+  if (quality && !selectedSongType.value) {
+    selectedSongType.value = quality;
+    audioQuality.value = quality;
+    console.log('📌 [draftRelease] تعيين selectedSongType من audio_quality:', quality);
+  }
+}, { immediate: true });
 
 const handleOpenVideoPopup = (field) => {
   console.log('🎬 [Upload2Component] استقبال openVideoPopup من Infos للحقل:', field);
@@ -330,12 +381,6 @@ const audioQualityMap = {
   2: 'dolby_atmos'
 };
 
-const songTypeMap = {
-  0: 'lossless',
-  1: 'digital_master', 
-  2: 'dolby_atmos'
-};
-
 const logState = () => {
   console.group('📊 Upload2Component State');
   console.log('currentView:', currentView.value);
@@ -363,61 +408,120 @@ const releaseArtistsList = computed(() => {
   console.log('⚠️ Upload2: لا يوجد artists متاح');
   return [];
 });
+// ✅ وكيل للمصدر المشترك @/utils/songCompletion — نفس ما يستخدمه FirstSection.isTrackComplete
+//    و tabs.vue و Infos1 و stores/release.js، فلا تختلف نتيجة الاكتمال بين المكوّنات.
 const isSongComplete = (song) => {
   if (!song) return false;
-  
-  // ✅ البيانات الأساسية (بدون song_file و cover)
-  const hasTitle = song.title && song.title !== null && song.title.trim() !== '';
-  // ❌ لا نتحقق من song_file و cover
-  // const hasSongFile = song.song_file && song.song_file !== null && song.song_file !== undefined && song.song_file !== '';
-  // const hasCover = song.cover && song.cover !== null && song.cover !== undefined && song.cover !== '';
-  
-  const hasAuthors = 
-    (song.authors?.composer && song.authors.composer.length > 0 && song.authors.composer.some(v => v?.trim())) ||
-    (song.authors?.lyricist && song.authors.lyricist.length > 0 && song.authors.lyricist.some(v => v?.trim()));
-  
-  const hasContributors = 
-    (song.contributors?.artist && song.contributors.artist.length > 0 && song.contributors.artist.some(v => v?.name?.trim())) ||
-    (song.contributors?.producer && song.contributors.producer.length > 0 && song.contributors.producer.some(v => v?.name?.trim()));
-  
-  const storeCompletion = releaseStore.tabCompletion;
-  let allTabsComplete = false;
-  
-  if (storeCompletion) {
-    allTabsComplete = 
-      storeCompletion.infos === true &&
-      storeCompletion.urheber === true &&
-      storeCompletion.mitwirkende === true &&
-      storeCompletion.deals === true &&
-      storeCompletion['pre-release'] === true;
-  }
-  
-  // ✅ بدون song_file و cover
-  const isComplete = 
-    (hasTitle === true) && 
-    (hasAuthors === true) && 
-    (hasContributors === true) && 
-    (allTabsComplete === true);
-  
-  console.log(`  📌 hasTitle: ${hasTitle}`);
-  console.log(`  📌 hasAuthors: ${hasAuthors}`);
-  console.log(`  📌 hasContributors: ${hasContributors}`);
-  console.log(`  📌 allTabsComplete: ${allTabsComplete}`);
-  console.log(`  ✅ isComplete: ${isComplete}`);
-  
-  return isComplete === true;
+
+  const completion = computeTabCompletion(song);
+  const complete = isSongCompleteShared(song);
+
+  console.log(`  📌 tabs:`, completion);
+  console.log(`  📌 isInstrumental: ${isInstrumentalSong(song)}`);
+  console.log(`  ✅ isComplete: ${complete}`);
+
+  return complete;
 };
+
+// ========== 🔥 دالة لإعادة تحديد الخطوة بعد اكتمال الأغاني ==========
+// في Upload2Component.vue، دالة recheckStepAfterSongsComplete
+
+// في Upload2Component.vue، دالة recheckStepAfterSongsComplete
+
+const recheckStepAfterSongsComplete = () => {
+    const releaseStore = useReleaseStore();
+    const currentReleaseId = releaseStore.currentReleaseId || props.releaseUuid;
+    
+    if (!currentReleaseId || !releaseStore.draftRelease) {
+        console.log('⏭️ [Upload2Component] لا يوجد Release أو draftRelease، تخطي إعادة تحديد الخطوة');
+        return;
+    }
+    
+    if (releaseStore.isSongsComplete) {
+        console.log('🔄 [Upload2Component] الأغاني مكتملة، إعادة تحديد الخطوة...');
+
+        // updateCurrentStep = false: only READ the suggested step. We decide below
+        // whether to actually move, so this recheck can't mutate currentStep out
+        // from under a user who is inside the Songs step.
+        const targetStep = releaseStore.determineStepFromRelease(
+            releaseStore.draftRelease,
+            false,
+            true,
+            false
+        );
+
+        console.log(`📌 [Upload2Component] الخطوة المقترحة: ${targetStep}`);
+
+        // ✅ إذا كان المستخدم داخل خطوة Songs (قائمة الأغاني firstSection أو أثناء
+        //    تعديل أغنية infos/sub-layout)، نبقيه في Songs ولا ننقله إلى Publish.
+        //    بدون فحص infos/isInSubLayout كان النقر على Edit يقذف المستخدم إلى Publish.
+        if (currentView.value === 'firstSection' || currentView.value === 'infos' || isInSubLayout.value) {
+            console.log('⏸️ [Upload2Component] المستخدم داخل Songs، البقاء في الخطوة 3');
+            // ✅ نضمن أن currentStep تبقى 3
+            releaseStore.setCurrentStep(3);
+
+            // ملاحظة: لا نضبط isPublishComplete هنا. اكتمال Songs لا يعني اكتمال Publish —
+            //   الأخير يُضبط حصرياً من Upload4Component بعد تعبئة الفورم والنقر على الموافقة.
+
+            return;
+        }
+        
+        // ✅ لا نُقدّم المستخدم تلقائياً للأمام (إلى Shops/Publish). الانتقال إلى Shops
+        //    يجب أن يكون بنقر المستخدم على «Weiter zu Shops» فقط. لذا لا ننتقل إلا إذا
+        //    كانت الخطوة المقترحة *ليست متقدّمة* عن الخطوة الحالية (أي مجرّد تأكيد لا دفع).
+        //    كان اكتمال الأغاني عند الرجوع إلى FirstSection يقذف المستخدم إلى Shops.
+        const currentStepNow = releaseStore.currentStep;
+        if ((targetStep === 4 || targetStep === 5) && targetStep <= currentStepNow) {
+            console.log(`🔄 [Upload2Component] تأكيد الخطوة ${targetStep} (غير متقدّمة)`);
+            releaseStore.setCurrentStep(targetStep);
+            
+            window.dispatchEvent(new CustomEvent('store-updated', {
+                detail: { 
+                    type: 'step-changed',
+                    step: targetStep,
+                    timestamp: Date.now()
+                }
+            }));
+            
+            window.dispatchEvent(new CustomEvent('step-updated', {
+                detail: { 
+                    step: targetStep,
+                    timestamp: Date.now()
+                }
+            }));
+        }
+    }
+};
+
+// ========== تعديل دالة updateSongsCompleteStatus ==========
 const updateSongsCompleteStatus = () => {
     const songs = tracks.value || [];
-    
+
     console.log('🔍 [updateSongsCompleteStatus] بدء التحقق من', songs.length, 'أغنية');
-    
+
+    // ✅ تحديث حالة رفع الصوت
+    releaseStore.setHasUploadedAudio(
+        songs.some(s => s.song_file && s.song_file !== null && s.song_file !== '')
+    );
+
     if (songs.length === 0) {
+        // While songs are still being fetched, `tracks` is momentarily empty.
+        // Don't flip the step to "incomplete" here or the sidebar checkmark
+        // flickers to a dot and back. The finally-block re-check below settles
+        // the real state (genuinely-zero songs) once loading is done.
+        if (isFetchingSongs.value) {
+            console.log('⏳ [updateSongsCompleteStatus] جلب قيد التقدم، تخطي (تفادي الوميض)');
+            return;
+        }
         releaseStore.setSongsComplete(false);
         console.log('📌 حالة Songs: لا توجد أغاني ❌');
         return;
     }
     
+    // ✅ نُزامن علامات التبويبات من بيانات الأغنية في كل مرّة تُعاد فيها الحسبة
+    //    (بعد كل حفظ وعند كل تغيّر في tracks) كي تبقى مطابقة لقائمة FirstSection.
+    syncTabCompletionFromSong();
+
     const allSongsComplete = songs.every(song => {
         const result = isSongComplete(song);
         console.log(`  ${result ? '✅' : '❌'} أغنية: ${song.title || 'Untitled'}`);
@@ -427,6 +531,16 @@ const updateSongsCompleteStatus = () => {
     if (releaseStore.isSongsComplete !== allSongsComplete) {
         releaseStore.setSongsComplete(allSongsComplete);
         console.log(`📌 حالة Songs النهائية: ${allSongsComplete ? 'مكتملة ✅' : 'غير مكتملة ❌'}`);
+        
+        // ✅ 🔥 إذا أصبحت الأغاني مكتملة، نعيد تحديد الخطوة
+        if (allSongsComplete) {
+            console.log('🔄 [Upload2Component] أصبحت الأغاني مكتملة، إعادة تحديد الخطوة...');
+            
+            // ✅ ننتظر قليلاً حتى يتم تحديث الـ Store
+            setTimeout(() => {
+                recheckStepAfterSongsComplete();
+            }, 300);
+        }
     } else {
         console.log(`📌 حالة Songs unchanged: ${allSongsComplete ? 'مكتملة ✅' : 'غير مكتملة ❌'}`);
     }
@@ -454,22 +568,24 @@ const updateSongsCompleteStatus = () => {
 const updateTopLineImage = (imagePath) => {
   if (imagePath) {
     emit('update:topLineImage', imagePath);
-  } else if (selectedSongType.value && songTypeImageMap[selectedSongType.value]) {
-    emit('update:topLineImage', songTypeImageMap[selectedSongType.value]);
+  } else if (selectedSongType.value && audioQualityImageMap[selectedSongType.value]) {
+    emit('update:topLineImage', audioQualityImageMap[selectedSongType.value]);
   }
 };
 
-const handleChangeSongTypeFromParent = () => {
-  console.log('📢 [Upload2Component] استقبال change-song-type من المكون الأب');
-  
+const handleChangeAudioQualityFromParent = () => {
+  console.log('📢 [Upload2Component] استقبال change-audio-quality من المكون الأب');
+
   currentView.value = 'main';
   forceInfosView.value = false;
   isInSubLayout.value = false;
   currentSong.value = null;
   selectedCardIndex.value = null;
   selectedSongType.value = '';
+  audioQuality.value = null;
   isUserSelectedType.value = false;
-  
+  updateAudioQuality(null);
+
   emit('update:topLineImage', null);
   emit('exit-sub-layout');
   emit('update:currentView', 'main');
@@ -494,21 +610,24 @@ const setTracksFromParent = (songs) => {
   updateSongsCompleteStatus();
   
   if (tracks.value.length > 0 && !selectedSongType.value) {
-    const sortedTracks = [...tracks.value].sort((a, b) => 
-      new Date(b.created_at) - new Date(a.created_at)
-    );
-    const latestTrack = sortedTracks[0];
-    if (latestTrack && latestTrack.song_type) {
-      selectedSongType.value = latestTrack.song_type;
-      console.log('📌 تعيين selectedSongType:', selectedSongType.value);
+    const releaseAudioQuality = draftRelease?.value?.audio_quality || audioQuality.value;
+    if (releaseAudioQuality) {
+      selectedSongType.value = releaseAudioQuality;
+      console.log('📌 تعيين selectedSongType من audio_quality:', selectedSongType.value);
       updateTopLineImage();
     }
   }
 };
 
-const changeSongType = () => {
+const changeAudioQuality = () => {
   console.log('🔄 [Upload2Component] بدء تغيير نوع الأغنية');
-  
+
+  // ✅ منع تغيير نوع الصوت بعد رفع ملف صوتي لأي أغنية
+  if (releaseStore.hasUploadedAudio) {
+    console.warn('⚠️ [Upload2Component] لا يمكن تغيير نوع الصوت بعد رفع ملف صوتي');
+    return;
+  }
+
   try {
     const currentQuery = { ...route.query };
     delete currentQuery.song;
@@ -527,14 +646,16 @@ const changeSongType = () => {
   currentSong.value = null;
   selectedCardIndex.value = null;
   selectedSongType.value = '';
+  audioQuality.value = null;
   isUserSelectedType.value = false;
-  
+  updateAudioQuality(null);
+
   emit('update:topLineImage', null);
   emit('exit-sub-layout');
-  emit('change-song-type');
-  
-  window.dispatchEvent(new CustomEvent('change-song-type'));
-  
+  emit('change-audio-quality');
+
+  window.dispatchEvent(new CustomEvent('change-audio-quality'));
+
   console.log('✅ [Upload2Component] تم العودة إلى شاشة اختيار نوع الأغنية (main)');
   logState();
 };
@@ -545,7 +666,7 @@ const handleTopLineImageClick = () => {
   
   if (currentView.value === 'firstSection' || currentView.value === 'infos') {
     if (confirm('Möchten Sie den Songtyp ändern? Alle nicht gespeicherten Änderungen gehen verloren.')) {
-      changeSongType();
+      changeAudioQuality();
     }
   }
 };
@@ -575,6 +696,15 @@ const handleDeleteTrack = (songUuid) => {
     if (currentSong.value?.uuid === songUuid) {
         currentSong.value = null;
     }
+};
+
+const handleReorderTracks = (orderedUuids) => {
+  const orderMap = {};
+  orderedUuids.forEach((uuid, i) => { orderMap[uuid] = i; });
+  tracks.value = [...tracks.value].sort((a, b) =>
+    (orderMap[a.uuid] ?? 9999) - (orderMap[b.uuid] ?? 9999)
+  );
+  tracks.value.forEach((t, i) => { t.sort_order = i + 1; });
 };
 
 const showTemporaryError = () => {
@@ -630,18 +760,12 @@ const handleBackToFirstSection = () => {
     
     releaseStore.songUuid = null;
     
-    if (tracks.value.length > 0) {
-        const sortedTracks = [...tracks.value].sort((a, b) => 
-            new Date(b.created_at) - new Date(a.created_at)
-        );
-        const latestTrack = sortedTracks[0];
-        
-        if (latestTrack && latestTrack.song_type) {
-            selectedSongType.value = latestTrack.song_type;
-            console.log('📌 [handleBackToFirstSection] تعيين selectedSongType:', selectedSongType.value);
-        }
+    const releaseAudioQuality = draftRelease?.value?.audio_quality || audioQuality.value;
+    if (releaseAudioQuality && !selectedSongType.value) {
+        selectedSongType.value = releaseAudioQuality;
+        console.log('📌 [handleBackToFirstSection] تعيين selectedSongType من audio_quality:', selectedSongType.value);
     }
-    
+
     currentView.value = 'firstSection';
     isInSubLayout.value = false;
     forceInfosView.value = false;
@@ -650,6 +774,7 @@ const handleBackToFirstSection = () => {
     emit('update:currentView', currentView.value);
     updateTopLineImage();
     emit('exit-sub-layout');
+    scrollSongsToTop();
     logState();
     
     setTimeout(() => {
@@ -721,6 +846,47 @@ const fetchSongs = async () => {
     }
   } finally {
     isFetchingSongs.value = false;
+    // Now that loading is truly finished, evaluate completeness once more so a
+    // genuinely-empty release is correctly marked incomplete (the in-flight
+    // guard above skips that case to avoid the flicker).
+    updateSongsCompleteStatus();
+  }
+};
+
+// ✅ يحلّ قيمة audio_quality للـ Release بشكل موثوق لتقرير عرض كروت الجودة (main) أم
+//    قائمة الأغاني (firstSection). المصدر الموثوق هو releaseStore.draftRelease لأن الأب
+//    (Parent.vue) يُعيد جلب الـ Release من الـ API عند كل mount فيكون طازجاً — بما في
+//    ذلك عندما يتراجع المستخدم فتصبح القيمة null. لا نعتمد على selectedSongType /
+//    audioQuality لأنها حالة واجهة قد تبقى قديمة (lossless) فتقذف المستخدم خطأً إلى
+//    firstSection بعد التراجع. نعيد null صراحةً عند غياب الجودة.
+const resolveReleaseAudioQuality = async () => {
+  // 1) المصدر الموثوق الطازج: draftRelease في الـ store (يحمل مفتاح audio_quality دائماً).
+  if (releaseStore.draftRelease && 'audio_quality' in releaseStore.draftRelease) {
+    return releaseStore.draftRelease.audio_quality || null;
+  }
+
+  // 2) الـ draftRelease المحقون (injected) إن كان يحمل المفتاح صراحةً.
+  const injected = draftRelease?.value;
+  if (injected && 'audio_quality' in injected) {
+    return injected.audio_quality || null;
+  }
+
+  // 3) احتياطي أخير: اسأل الـ API مباشرةً وخزّن النتيجة في الـ store.
+  if (!props.releaseUuid) return null;
+  try {
+    const res = await apiRequest.get(`/releases/${props.releaseUuid}`);
+    const rel = res.data?.data || res.data;
+    const quality = rel?.audio_quality || null;
+    if (releaseStore.draftRelease) {
+      releaseStore.draftRelease.audio_quality = quality;
+    } else if (rel) {
+      releaseStore.setDraftRelease(rel);
+    }
+    console.log('📌 [resolveReleaseAudioQuality] audio_quality من الـ API:', quality);
+    return quality;
+  } catch (e) {
+    console.warn('⚠️ تعذّر جلب audio_quality من الـ Release:', e?.message || e);
+    return null;
   }
 };
 
@@ -789,12 +955,7 @@ const addNewSong = async (newSong) => {
         }
         
         updateSongsCompleteStatus();
-        
-        if (newSong.song_type) {
-            selectedSongType.value = newSong.song_type;
-            console.log('📌 تحديث selectedSongType إلى:', selectedSongType.value);
-        }
-        
+
         return;
     }
     
@@ -961,6 +1122,44 @@ const fetchSongDirectly = async (songUuid) => {
   }
 };
 
+// ✅ يُرسل عنصراً مُجدوَلاً من الطابور مباشرةً (PUT بحمولة JSON) باستخدام الـ uuid
+//    المضمَّن في العنصر نفسه — لا يعتمد على currentSong. يُستعمل عند تفريغ الطابور
+//    بعد التنقّل (حين تُمسح currentSong)، فلا تُفقَد أعلام الاكتمال
+//    (deals_step_completed / pre_release_step_completed) أو حفوظات تاب مُجدوَلة.
+const savePendingItemDirect = async (data) => {
+  const uuid = data?.uuid;
+  if (!props.releaseUuid || !uuid) return;
+
+  const payload = {};
+  let hasFile = false;
+  Object.keys(data).forEach((k) => {
+    if (['uuid', 'release_uuid', 'created_at'].includes(k)) return;
+    const v = data[k];
+    if (k === 'song_file' || k === 'cover' || v instanceof File || v instanceof Blob) {
+      hasFile = true;
+      return;
+    }
+    payload[k] = v;
+  });
+
+  // حمولات الملفات تحتاج FormData/سياق الأغنية — نتخطاها هنا (نادرة في هذا المسار).
+  if (hasFile || Object.keys(payload).length === 0) return;
+
+  try {
+    await apiRequest.put(`/releases/${props.releaseUuid}/songs/${uuid}`, payload);
+    console.log('✅ [Upload2Component] حفظ مُجدوَل أُرسِل مباشرةً بعد التنقّل:', uuid, payload);
+  } catch (e) {
+    console.warn('⚠️ [Upload2Component] فشل إرسال حفظ مُجدوَل مباشر:', e?.response?.data || e);
+  }
+};
+
+// ✅ يُفرّغ كل الطابور المتبقّي مباشرةً (لا يعتمد على currentSong ولا isMounted).
+const flushPendingSongSaves = () => {
+  while (pendingSaves.length > 0) {
+    savePendingItemDirect(pendingSaves.shift());
+  }
+};
+
 // ========== 🔥 دالة حفظ محسنة لمنع الحلقات اللانهائية ==========
 const handleSaveSong = async (updatedData) => {
   if (!isMounted.value) {
@@ -973,9 +1172,23 @@ const handleSaveSong = async (updatedData) => {
     return;
   }
 
-  // ✅ منع الحفظ المتزامن
+  // ✅ نلتقط مرجعاً ثابتاً للأغنية الجاري حفظها + الـ uuid.
+  //    أثناء الـ await قد ينقل التنقّل (مثل "Zur Tracklist") currentSong.value إلى null،
+  //    فيرمي Object.assign(null,…) استثناءً يُجهض دمج البيانات المحلية وتحديث حالة
+  //    الاكتمال، فتبقى الأغنية "غير مكتملة" رغم نجاح الحفظ على الخادم.
+  const savedSongRef = currentSong.value;
+  const savedSongUuid = currentSong.value.uuid;
+
+  // ✅ حفظ آخر قيد التنفيذ → نُجدول هذا الحفظ بدل تخطّيه (كان التخطّي يُفقِد بيانات تاب
+  //   عند تبديل سريع، مثل حفظ authors أثناء حفظ contributors). يُعالَج بعد انتهاء الحالي.
   if (isSaving.value) {
-    console.log('⏳ [Upload2Component] جاري الحفظ بالفعل، تخطي');
+    const dupIndex = pendingSaves.findIndex(p => JSON.stringify(p) === JSON.stringify(updatedData));
+    if (dupIndex === -1) {
+      pendingSaves.push(updatedData);
+      console.log('⏳ [Upload2Component] حفظ قيد التنفيذ، جدولة هذا الحفظ (طابور:', pendingSaves.length, ')');
+    } else {
+      console.log('⏭️ [Upload2Component] نفس البيانات موجودة في الطابور، تخطي التكرار');
+    }
     return;
   }
 
@@ -992,6 +1205,11 @@ const handleSaveSong = async (updatedData) => {
       console.log('📌 تم إزالة الرقم من العنوان قبل الحفظ:', updatedData.title);
     }
   }
+
+  // ✅ التبويب المصدر يصل صراحةً من Infos1.compileAllData (إن وُجد). نلتقطه ونحذفه من
+  //    البيانات قبل حساب بصمة التكرار وقبل بناء الـ payload.
+  const explicitTab = typeof updatedData.__tab === 'string' ? updatedData.__tab : null;
+  if (explicitTab !== null) delete updatedData.__tab;
 
   // ✅ منع الحفظ إذا كانت نفس البيانات
   const payloadString = JSON.stringify(updatedData);
@@ -1087,10 +1305,10 @@ const handleSaveSong = async (updatedData) => {
       );
       
       console.log('✅ تم رفع الملفات بنجاح!', response.data);
-      
+
       if (response.data.data) {
-        Object.assign(currentSong.value, response.data.data);
-        
+        if (savedSongRef) Object.assign(savedSongRef, response.data.data);
+
         if (response.data.data.song_file) {
           const filePath = response.data.data.song_file;
           console.log('✅ تم رفع الملف، المسار:', filePath);
@@ -1121,15 +1339,18 @@ const handleSaveSong = async (updatedData) => {
       console.log('📤 إرسال بيانات نصية كـ JSON');
       
       const tabFields = {
-        'infos': ['title', 'subtitle', 'song_type', 'song_typ', 'explicit_lyrics', 'isrc', 'title_language', 'lyrics_language', 'song_lyrics', 'preview_enabled'],
+        'infos': ['title', 'subtitle', 'song_type', 'explicit_lyrics', 'isrc', 'title_language', 'lyrics_language', 'song_lyrics', 'preview_enabled', 'preview_start'],
         'urheber': ['authors'],
         'mitwirkende': ['contributors', 'production_year'],
         'deals': ['is_splitting_active', 'shares'],
         'pre-release': ['prerelease', 'pre_order', 'pre_release_image', 'release_date']
       };
       
-      let currentTab = null;
-      if (updatedData.authors) currentTab = 'urheber';
+      // ✅ نُفضّل التبويب الصريح؛ والتخمين يبقى للمُرسِلين المباشرين (مثل UrheberContent
+      //    الذي يبعث {authors} وحدها) حيث يكون الاستنتاج صحيحاً بالفعل.
+      let currentTab = explicitTab;
+      if (currentTab) { /* explicit */ }
+      else if (updatedData.authors) currentTab = 'urheber';
       else if (updatedData.contributors) currentTab = 'mitwirkende';
       else if (updatedData.is_splitting_active !== undefined) currentTab = 'deals';
       else if (updatedData.prerelease !== undefined || 
@@ -1143,13 +1364,18 @@ const handleSaveSong = async (updatedData) => {
       const payload = {};
       let hasChanges = false;
       const allowedFields = tabFields[currentTab] || [];
-      
+
+      // Step-completion flags are not tab-specific — they must always pass the
+      // per-tab field filter, otherwise clicking Deals never persists
+      // deals_step_completed (and pre_release_step_completed is dropped too).
+      const alwaysAllowedFields = ['deals_step_completed', 'pre_release_step_completed'];
+
       Object.keys(updatedData).forEach(key => {
         if (key === 'uuid' || key === 'release_uuid' || key === 'created_at' || key === 'song_file' || key === 'cover') {
           return;
         }
-        
-        if (!allowedFields.includes(key) && key !== 'authors' && key !== 'contributors' && key !== 'song_typ') {
+
+        if (!allowedFields.includes(key) && !alwaysAllowedFields.includes(key) && key !== 'authors' && key !== 'contributors') {
           console.log(`⏭️ تخطي ${key} - ليس من حقول التبويب ${currentTab}`);
           return;
         }
@@ -1217,6 +1443,34 @@ const handleSaveSong = async (updatedData) => {
         }
       }
       
+      // ✅ نوع instrumental (لا نصوص) → لا كاتب نصوص: نُفرّغ authors.lyricist.
+      //    نفعلها هنا في نقطة الحفظ الموحّدة لأن تغيير song_type يقع في تبويب Infos،
+      //    بينما UrheberContent (صاحب مراقب isInstrumental) قد لا يكون مركّباً أصلاً
+      //    فلا يُنفَّذ مراقبه ولا تُرسَل lyricist فارغة — وهو سبب بقاء القيمة على الخادم.
+      //    ملاحظة: الخادم يستبدل كائن authors بالكامل، لذا نرسل نسخة كاملة مع تفريغ
+      //    lyricist فقط، حتى لا تُمسح composer / verlog / c_line.
+      const nextSongType = payload.song_type !== undefined
+        ? payload.song_type
+        : (currentSong.value?.song_type ?? currentSong.value?.song_typ);
+
+      if (String(nextSongType || '').includes('instrumental')) {
+        const baseAuthors = payload.authors || currentSong.value?.authors || {};
+        const currentLyricist = Array.isArray(baseAuthors.lyricist)
+          ? baseAuthors.lyricist.filter(v => v && String(v).trim() !== '')
+          : [];
+
+        if (currentLyricist.length > 0) {
+          payload.authors = {
+            composer: baseAuthors.composer || [],
+            lyricist: [],
+            verlog: baseAuthors.verlog || [],
+            c_line: baseAuthors.c_line || []
+          };
+          hasChanges = true;
+          console.log('🎼 instrumental → إرسال authors.lyricist فارغة:', payload.authors);
+        }
+      }
+
       if (!hasChanges || Object.keys(payload).length === 0) {
         console.log('ℹ️ لا توجد تغييرات');
         isSaving.value = false;
@@ -1234,10 +1488,10 @@ const handleSaveSong = async (updatedData) => {
       );
       
       console.log('✅ تم الحفظ بنجاح!', response.data);
-      
+
       if (response.data.data) {
-        Object.assign(currentSong.value, response.data.data);
-        
+        if (savedSongRef) Object.assign(savedSongRef, response.data.data);
+
         if (payload.title !== undefined || response.data.data.title) {
           const newTitle = payload.title !== undefined ? payload.title : response.data.data.title;
           
@@ -1264,27 +1518,50 @@ const handleSaveSong = async (updatedData) => {
       }
     }
     
+    // ✅ نبثّ إشارة نجاح الحفظ دائماً (حتى لو دُمّر هذا المكوّن أثناء التنقّل) كي يستطيع
+    //    أيّ مكوّن Upload2 حديث التركيب (بعد Zur Tracklist) أن يوفّق قائمة الأغاني مع
+    //    الخادم ويعرض علم الاكتمال الصحيح — وهذا حدث نافذة عام يلتقطه أيّ مستمع مركّب.
+    const mergedSong = savedSongRef || {};
+    window.dispatchEvent(new CustomEvent('save-song-complete', {
+      detail: {
+        success: true,
+        songUuid: savedSongUuid,
+        data: mergedSong
+      }
+    }));
+
     if (!isMounted.value) {
-      console.warn('⚠️ handleSaveSong: المكون تم تدميره أثناء الحفظ، تخطي تحديث الحالة');
+      console.warn('⚠️ handleSaveSong: المكون تم تدميره أثناء الحفظ، تخطي تحديث الحالة المحلية');
       isSaving.value = false;
       return;
     }
 
-    const index = tracks.value.findIndex(s => s.uuid === currentSong.value.uuid);
+    // ✅ نستخدم المرجع/الـ uuid الملتقطَين مسبقاً بدل currentSong.value الذي قد يكون
+    //    أصبح null بفعل التنقّل. البيانات القادمة من الخادم (المدموجة في savedSongRef)
+    //    تحمل أعلام deals_step_completed / pre_release_step_completed المحدّثة، فيتزامن
+    //    الاكتمال محلياً فوراً وتظهر الأغنية مكتملة في FirstSection دون إعادة تعديل.
+    const index = tracks.value.findIndex(s => s.uuid === savedSongUuid);
     if (index !== -1) {
-      tracks.value[index] = { ...tracks.value[index], ...currentSong.value };
+      tracks.value[index] = { ...tracks.value[index], ...mergedSong };
     }
-    
-    console.log('🔄 تم تحديث البيانات المحلية');
-    
-    window.dispatchEvent(new CustomEvent('save-song-complete', {
-      detail: { 
-        success: true, 
-        songUuid: currentSong.value.uuid,
-        data: currentSong.value 
+
+    // ✅ نُزامن أيضاً draftRelease.songs في المخزَّن كي يعتمد عليه tabs.vue
+    //    (dataCompletion) بحالة *حديثة* — وإلا تبقى شرائح اكتمال التبويبات قديمة بعد
+    //    تغيير مثل song_type (فيظهر urheber مكتملاً خطأً معتمداً على بيانات قديمة).
+    try {
+      const dr = releaseStore.draftRelease;
+      if (dr && Array.isArray(dr.songs)) {
+        const di = dr.songs.findIndex(s => s.uuid === savedSongUuid);
+        if (di !== -1) {
+          dr.songs.splice(di, 1, { ...dr.songs[di], ...mergedSong });
+        }
       }
-    }));
-    
+    } catch (e) {
+      console.warn('⚠️ تعذّر مزامنة draftRelease.songs:', e);
+    }
+
+    console.log('🔄 تم تحديث البيانات المحلية');
+
     updateSongsCompleteStatus();
     
   } catch (err) {
@@ -1308,9 +1585,22 @@ const handleSaveSong = async (updatedData) => {
       }
     }));
   } finally {
-    // ✅ إعادة تعيين علم الحفظ بعد فترة
+    // ✅ إعادة تعيين علم الحفظ بعد فترة، ثم معالجة أي حفظ مُجدوَل في الطابور تسلسلياً.
     setTimeout(() => {
       isSaving.value = false;
+      if (pendingSaves.length > 0) {
+        if (isMounted.value && currentSong.value?.uuid) {
+          // مسار عادي داخل المحرّر: عبر handleSaveSong (فلترة التاب + دمج الرد).
+          const next = pendingSaves.shift();
+          console.log('▶️ [Upload2Component] معالجة حفظ مُجدوَل من الطابور (متبقٍّ:', pendingSaves.length, ')');
+          handleSaveSong(next);
+        } else {
+          // ✅ لم تعد الأغنية محمّلة (تنقّل إلى FirstSection) — نُفرّغ الطابور مباشرةً
+          //    بدل إسقاطه، كي تُحفظ أعلام الاكتمال المُجدوَلة (deals/pre_release).
+          console.log('▶️ [Upload2Component] الأغنية غير محمّلة، تفريغ الطابور مباشرةً بعد التنقّل');
+          flushPendingSongSaves();
+        }
+      }
     }, 500);
   }
 };
@@ -1391,27 +1681,21 @@ const handleBackFromInfos = () => {
   clearSongUuidFromUrl();
   releaseStore.songUuid = null;
   
-  if (tracks.value.length > 0) {
-    const sortedTracks = [...tracks.value].sort((a, b) => 
-      new Date(b.created_at) - new Date(a.created_at)
-    );
-    const latestTrack = sortedTracks[0];
-    
-    if (latestTrack && latestTrack.song_type) {
-      selectedSongType.value = latestTrack.song_type;
-      console.log('📌 [handleBackFromInfos] تعيين selectedSongType:', selectedSongType.value);
-    }
+  const releaseAudioQuality = draftRelease?.value?.audio_quality || audioQuality.value;
+  if (releaseAudioQuality && !selectedSongType.value) {
+    selectedSongType.value = releaseAudioQuality;
+    console.log('📌 [handleBackFromInfos] تعيين selectedSongType من audio_quality:', selectedSongType.value);
   }
-  
+
   currentView.value = 'firstSection';
   forceInfosView.value = false;
   isInSubLayout.value = false;
   currentSong.value = null;
-  
+
   emit('exit-sub-layout');
   emit('update:currentView', currentView.value);
   updateTopLineImage();
-  
+
   console.log('✅ تم العودة إلى FirstSection');
   logState();
 };
@@ -1425,14 +1709,11 @@ const handleBackToTracklist = () => {
   const tracksToSave = tracks.value && Array.isArray(tracks.value) ? tracks.value : [];
   
   let selectedType = selectedSongType.value || '';
-  if (!selectedType && tracksToSave.length > 0) {
-    const sortedTracks = [...tracksToSave].sort((a, b) => 
-      new Date(b.created_at) - new Date(a.created_at)
-    );
-    const latestTrack = sortedTracks[0];
-    if (latestTrack && latestTrack.song_type) {
-      selectedType = latestTrack.song_type;
-      console.log('📌 [handleBackToTracklist] استخدام song_type من آخر أغنية:', selectedType);
+  if (!selectedType) {
+    const releaseAudioQuality = draftRelease?.value?.audio_quality || audioQuality.value;
+    if (releaseAudioQuality) {
+      selectedType = releaseAudioQuality;
+      console.log('📌 [handleBackToTracklist] استخدام audio_quality من Release:', selectedType);
     }
   }
   
@@ -1543,10 +1824,13 @@ const restoreStateFromLocalStorage = () => {
         tracks.value = parsed.tracks;
         
         let selectedType = parsed.selectedType || '';
-        
-        if (!selectedType && parsed.tracks.length > 0 && parsed.tracks[0].song_type) {
-          selectedType = parsed.tracks[0].song_type;
-          console.log('📌 استخدام song_type من الأغنية الأولى كقيمة افتراضية:', selectedType);
+
+        if (!selectedType) {
+          const releaseAudioQuality = draftRelease?.value?.audio_quality || audioQuality.value;
+          if (releaseAudioQuality) {
+            selectedType = releaseAudioQuality;
+            console.log('📌 استخدام audio_quality من Release كقيمة افتراضية:', selectedType);
+          }
         }
         
         if (selectedType) {
@@ -1563,6 +1847,14 @@ const restoreStateFromLocalStorage = () => {
         logState();
         console.log('✅ تم استعادة tracks:', tracks.value.length, 'أغنية');
         console.log('✅ تم استعادة selectedSongType:', selectedSongType.value);
+
+        // ✅ الحالة المستعادة من localStorage قد تكون قديمة: تُحفظ عند مغادرة تحرير أغنية
+        //    (Zur Tracklist) بينما لا يزال ردّ آخر حفظ (مثل pre_release_step_completed)
+        //    في الطريق، والمكوّن القديم يُدمَّر قبل تحديث tracks محلياً. لذلك نوفّق مع
+        //    الخادم في الخلفية فتظهر أعلام الاكتمال الصحيحة فوراً دون إعادة تعديل الأغنية.
+        if (props.releaseUuid) {
+          fetchSongs();
+        }
         return true;
       }
     }
@@ -1590,9 +1882,15 @@ const updateAudioQuality = async (quality) => {
 
     const response = await apiRequest.post(`/releases/${props.releaseUuid}`, payload);
     console.log('✅ تم تحديث جودة الصوت بنجاح:', response.data);
-    
+
     audioQuality.value = quality;
-    
+
+    // ✅ نُزامن قيمة الجودة في الـ store مباشرةً (بما في ذلك null عند التراجع) كي يبقى
+    //    مصدر القرار (resolveReleaseAudioQuality) وصورة الـ Layout متسقين حتى قبل أي رفرش.
+    if (releaseStore.draftRelease) {
+      releaseStore.draftRelease.audio_quality = quality;
+    }
+
   } catch (err) {
     console.error('❌ فشل تحديث جودة الصوت:', err.response?.data || err.message);
   }
@@ -1606,22 +1904,22 @@ const handleNext = async (cardIndex) => {
   }
 
   selectedCardIndex.value = cardIndex;
+  // ✅ الكروت تختار جودة الصوت (audio_quality) وليس نوع الأغنية.
   const quality = audioQualityMap[cardIndex];
-  const songType = songTypeMap[cardIndex];
-  
-  console.log('🎵 تم اختيار نوع الأغنية:', songType);
+
   console.log('🎵 تم اختيار جودة الصوت:', quality);
 
   isUserSelectedType.value = true;
-  selectedSongType.value = songType;
-  
+  selectedSongType.value = quality; // يحمل جودة الصوت المختارة
+
   updateAudioQuality(quality);
 
+  // بعد اختيار الجودة ننتقل مباشرةً إلى FirstSection (حتى لو لا توجد أغانٍ بعد).
   currentView.value = 'firstSection';
   emit('update:currentView', currentView.value);
-  
-  updateTopLineImage(songTypeImageMap[songType]);
-  
+
+  updateTopLineImage(audioQualityImageMap[quality]);
+
   logState();
 };
 
@@ -1637,7 +1935,9 @@ const handleBackClick = () => {
   currentView.value = 'main';
   selectedCardIndex.value = null;
   selectedSongType.value = '';
+  audioQuality.value = null;
   isUserSelectedType.value = false;
+  updateAudioQuality(null);
   emit('update:currentView', currentView.value);
   emit('update:topLineImage', null);
   emit('exit-sub-layout');
@@ -1664,6 +1964,20 @@ const validateEmail = (cardIndex) => {
   }
 };
 
+// ✅ عند نجاح حفظ أغنية بينما نحن في قائمة الأغاني (firstSection) — خاصة حفظ تمّ أثناء
+//    التنقّل عبر "Zur Tracklist" وأنهى من مكوّن قديم دُمّر — نوفّق القائمة مع الخادم كي
+//    تظهر أعلام الاكتمال المحدّثة (pre_release/deals) فوراً دون الحاجة لإعادة تعديل الأغنية.
+const handleSaveSongCompleteReconcile = (event) => {
+    if (
+        event?.detail?.success &&
+        currentView.value === 'firstSection' &&
+        props.releaseUuid
+    ) {
+        console.log('🔄 [Upload2Component] حفظ اكتمل وأنا في firstSection → توفيق القائمة مع الخادم');
+        fetchSongs();
+    }
+};
+
 const handleNavigateToFirstSection = (event) => {
     console.log('📢 [Upload2Component] استقبال حدث navigate-to-first-section');
     
@@ -1680,6 +1994,7 @@ const handleNavigateToFirstSection = (event) => {
                 currentView.value = 'firstSection';
                 emit('update:currentView', currentView.value);
                 updateTopLineImage();
+            scrollSongsToTop();
                 logState();
             } else {
                 console.log('⚠️ [Upload2Component] لا توجد أغانٍ، البقاء في main');
@@ -1813,7 +2128,7 @@ onMounted(async () => {
         return;
     }
     
-    window.addEventListener('change-song-type', handleChangeSongTypeFromParent);
+    window.addEventListener('change-audio-quality', handleChangeAudioQualityFromParent);
     window.addEventListener('prevent-step-update', (event) => {
         const duration = event.detail?.duration || 2000;
         isPreventingStepUpdate.value = true;
@@ -1825,12 +2140,16 @@ onMounted(async () => {
     });
     
     window.addEventListener('navigate-to-first-section', handleNavigateToFirstSection);
-    
+    window.addEventListener('save-song-complete', handleSaveSongCompleteReconcile);
+
     const restored = restoreStateFromLocalStorage();
     if (restored) {
-        if (!selectedSongType.value && tracks.value.length > 0 && tracks.value[0].song_type) {
-            selectedSongType.value = tracks.value[0].song_type;
-            console.log('📌 تعيين selectedSongType من الأغنية الأولى:', selectedSongType.value);
+        if (!selectedSongType.value) {
+            const releaseAudioQuality = draftRelease?.value?.audio_quality || audioQuality.value;
+            if (releaseAudioQuality) {
+                selectedSongType.value = releaseAudioQuality;
+                console.log('📌 تعيين selectedSongType من audio_quality:', selectedSongType.value);
+            }
         }
         updateSongsCompleteStatus();
         isInitialLoading.value = false;
@@ -1905,53 +2224,87 @@ onMounted(async () => {
             updateSongsCompleteStatus();
         }
         
-        if (tracks.value.length > 0 && !selectedSongType.value) {
-            const sortedTracks = [...tracks.value].sort((a, b) => 
-                new Date(b.created_at) - new Date(a.created_at)
-            );
-            const latestTrack = sortedTracks[0];
-            
-            if (latestTrack && latestTrack.song_type) {
-                selectedSongType.value = latestTrack.song_type;
-                console.log('📌 [onMounted] تعيين selectedSongType:', selectedSongType.value);
-                updateTopLineImage();
+        // ✅ نحلّ audio_quality بشكل موثوق مرّة واحدة (لا يُغيّر selectedSongType بذاته، آمن).
+        //    هو وحده ما يقرّر عرض كروت الجودة (main) أم قائمة الأغاني (firstSection).
+        const releaseQuality = await resolveReleaseAudioQuality();
+
+        // ⚠️ مهم: نُطبّق قيمة الجودة على selectedSongType (وصورة top-line) للاستخدام في
+        //    الطبقة الفرعية. مُعرّف كدالة لأن تعيين selectedSongType يُطلق مراقِبه الذي
+        //    ينتقل إلى firstSection عندما تكون currentView === 'main'. لذلك لا نُعيّنها إلا
+        //    بعد أن تستقرّ الوجهة (infos/subLayout أو firstSection) فيمنع حارس المراقِب
+        //    أيّ انتقال زائد يسبّب ارتداد main→firstSection→infos وإعادة تركيب المكوّن.
+        const applyReleaseQuality = () => {
+            if (releaseQuality) {
+                selectedSongType.value = releaseQuality;
+                audioQuality.value = releaseQuality;
+                updateTopLineImage(audioQualityImageMap[releaseQuality]);
+            } else {
+                selectedSongType.value = '';
+                audioQuality.value = null;
             }
-        }
-        
+        };
+
         const songUuidToLoad = releaseStore.songUuid || route.query.song;
-        
-        if (tracks.value.length > 0 && !songUuidToLoad && currentView.value !== 'infos') {
-            console.log('📌 [Upload2Component] توجد أغاني، البقاء في firstSection');
-            currentView.value = 'firstSection';
-            emit('update:currentView', currentView.value);
-            updateTopLineImage();
+
+        // 1) تحميل أغنية محددة من Store/URL — أولوية عليا، وقبل تعيين selectedSongType.
+        if (songUuidToLoad && props.releaseUuid && songUuidToLoad !== props.releaseUuid) {
+            console.log('🔄 تحميل أغنية من الـ Store أو URL:', songUuidToLoad);
+
+            const songExists = tracks.value.some(song => song.uuid === songUuidToLoad);
+
+            if (songExists) {
+                await editSong(songUuidToLoad);
+            } else {
+                console.warn('⚠️ الأغنية غير موجودة في القائمة:', songUuidToLoad);
+                await fetchSongDirectly(songUuidToLoad);
+            }
+            // بعد editSong تصبح isInSubLayout=true فيمنع حارس المراقِب الانتقال إلى firstSection.
+            applyReleaseQuality();
+            updateSongsCompleteStatus();
             isInitialLoading.value = false;
             logState();
             return;
         }
-        
-        if (songUuidToLoad && props.releaseUuid && songUuidToLoad !== props.releaseUuid) {
-            console.log('🔄 تحميل أغنية من الـ Store أو URL:', songUuidToLoad);
-            
-            const songExists = tracks.value.some(song => song.uuid === songUuidToLoad);
-            
-            if (songExists) {
-                await editSong(songUuidToLoad);
-                updateSongsCompleteStatus();
-            } else {
-                console.warn('⚠️ الأغنية غير موجودة في القائمة:', songUuidToLoad);
-                await fetchSongDirectly(songUuidToLoad);
-                updateSongsCompleteStatus();
-            }
-        } else if (props.forceInfosView && tracks.value.length > 0 && currentView.value !== 'infos') {
+
+        // 2) وضع تعديل الأغنية الأولى (forceInfosView) — أيضاً قبل تعيين selectedSongType.
+        if (props.forceInfosView && tracks.value.length > 0 && currentView.value !== 'infos') {
             await editSong(tracks.value[0].uuid);
+            applyReleaseQuality();
             updateSongsCompleteStatus();
-        } else if (selectedSongType.value && tracks.value.length > 0 && currentView.value === 'main') {
-            currentView.value = 'firstSection';
-            emit('update:currentView', currentView.value);
-            updateTopLineImage();
+            isInitialLoading.value = false;
+            logState();
+            return;
         }
-        
+
+        // 3) لا توجد أغنية محددة → القرار بين main و firstSection.
+        //    ✅ نُظهر كروت اختيار الجودة (main) فقط عند عدم وجود أغانٍ إطلاقاً. إن وُجدت
+        //    أغانٍ بالفعل (مثل العودة عبر زر الرجوع) نعرض قائمة الأغاني (firstSection)
+        //    حتى لو غابت audio_quality على مستوى الـ Release.
+        if (currentView.value !== 'infos') {
+            if (releaseQuality || tracks.value.length > 0) {
+                if (releaseQuality) {
+                    selectedSongType.value = releaseQuality;
+                    audioQuality.value = releaseQuality;
+                    updateTopLineImage(audioQualityImageMap[releaseQuality]);
+                }
+                currentView.value = 'firstSection';
+                emit('update:currentView', currentView.value);
+                if (tracks.value.length > 0) scrollSongsToTop();
+                console.log('📌 [onMounted] جودة محددة أو أغانٍ موجودة → FirstSection');
+            } else {
+                selectedSongType.value = '';
+                audioQuality.value = null;
+                currentView.value = 'main';
+                emit('update:currentView', currentView.value);
+                emit('update:topLineImage', null);
+                console.log('📌 [onMounted] لا جودة ولا أغاني → عرض كروت اختيار الجودة (main)');
+            }
+        }
+
+        isInitialLoading.value = false;
+        logState();
+        return;
+
     } catch (error) {
         console.error('❌ [onMounted] خطأ أثناء تحميل الأغاني:', error);
     } finally {
@@ -1962,9 +2315,11 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+    // ✅ نُفرّغ أي حفظ مُجدوَل متبقٍّ مباشرةً قبل التدمير كي لا تُفقَد أعلام الاكتمال.
+    flushPendingSongSaves();
     isMounted.value = false;
     console.log('🔄 Upload2Component unmounted');
-    
+
     if (window._tooltipObserver) {
         try {
             window._tooltipObserver.disconnect();
@@ -1974,11 +2329,12 @@ onUnmounted(() => {
         delete window._tooltipObserver;
     }
     
-    window.removeEventListener('change-song-type', handleChangeSongTypeFromParent);
+    window.removeEventListener('change-audio-quality', handleChangeAudioQualityFromParent);
     window.removeEventListener('force-edit-song', handleForceEditSong);
     window.removeEventListener('back-to-first-section-from-layout', () => {});
     window.removeEventListener('prevent-step-update', () => {});
     window.removeEventListener('navigate-to-first-section', handleNavigateToFirstSection);
+    window.removeEventListener('save-song-complete', handleSaveSongCompleteReconcile);
     if (errorTimeout) clearTimeout(errorTimeout);
 });
 
@@ -2002,17 +2358,26 @@ watch(
 
 watch(selectedSongType, (newVal, oldVal) => {
     console.log('📌 [Upload2Component] selectedSongType changed to:', newVal);
-    
+
     if (!newVal) return;
-    
+
+    // ✅ جودة الصوت محددة بالفعل → لا نعرض كروت اختيار الجودة (main)؛ ننتقل إلى
+    //    FirstSection مباشرةً (حتى لو لا توجد أغانٍ بعد).
+    if (currentView.value === 'main' && !forceInfosView.value && !isInSubLayout.value) {
+        currentView.value = 'firstSection';
+        emit('update:currentView', currentView.value);
+    }
+
     if (tracks.value.length === 0 && props.releaseUuid) {
         console.log('📌 [Upload2Component] tracks فارغة، جلب الأغاني');
         fetchSongs();
-        return;
     }
-    
-    if (newVal && songTypeImageMap[newVal] && !isFetchingSongs.value) {
-        updateTopLineImage(songTypeImageMap[newVal]);
+
+    // ✅ نُحدّث صورة الـ top-line دائماً عند تحديد جودة الصوت — بما في ذلك أثناء جلب
+    //    الأغاني. الحارس `!isFetchingSongs` القديم كان يُسقط الصورة في حالة الانتقال
+    //    التلقائي إلى FirstSection (حيث يبدأ الجلب فوراً) فلا تظهر الصورة في Layout.
+    if (audioQualityImageMap[newVal]) {
+        updateTopLineImage(audioQualityImageMap[newVal]);
     }
 }, { immediate: true });
 
@@ -2040,6 +2405,16 @@ watch(
 watch(() => props.forceInfosView, (newVal) => {
     console.log('🔄 props.forceInfosView تغير:', newVal);
     if (newVal && tracks.value.length > 0 && !isNavigatingBack.value) {
+        // Only fall back to the first track when NO specific song is selected.
+        // Clicking "Edit" on a track sets the selected song and switches to the
+        // infos view, which flips the parent's forceInfosView to true and fires
+        // this watcher — without this guard it would override the clicked song
+        // with tracks[0], sending the user to the wrong song's Infos.
+        const selectedUuid = releaseStore.songUuid || route.query.song || currentSong.value?.uuid;
+        if (selectedUuid) {
+            console.log('⏭️ [Upload2Component] أغنية محددة مسبقاً، لا نستبدلها بالأولى:', selectedUuid);
+            return;
+        }
         editSong(tracks.value[0].uuid);
     }
 }, { immediate: true });
@@ -2093,7 +2468,7 @@ watch(
 
 defineExpose({
     handleTopLineImageClick,
-    changeSongType,
+    changeAudioQuality,
     currentView,
     selectedSongType,
     handleBackToFirstSection,

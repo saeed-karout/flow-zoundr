@@ -1,5 +1,5 @@
 <template>
-  <div class="heroRelease">
+  <div class="heroRelease" :style="{ backgroundImage: heroBackgroundImage }">
     <div class="release-details">
       <div class="release-header">
         <span>{{ currentTopic }}</span>
@@ -12,19 +12,24 @@
         </div>
 
         <div class="search-box">
-          <input
-            type="text"
-            class="search-input"
-            :placeholder="searchPlaceholder"
-            v-model="localSearch"
-            @input="emitSearch"
-            @keyup.enter="emitSearch"
-          />
+          <!-- الأيقونة والـ placeholder يختفيان معاً بمجرّد وجود نصّ،
+               فيخلو السطر للكتابة من 16px دون أي تراكب. -->
           <img
             v-if="!localSearch"
             src="@/assets/icons/catalog/Search.svg"
             class="icon"
             alt="search"
+          />
+          <!-- placeholder مرسوم كعنصر مستقلّ لا كسمة native:
+               الـ placeholder الأصلي يتبع padding الحقل، فكان يزحف مع المؤشر
+               عند التركيز. فصله يجعل موضعه ثابتاً تماماً. -->
+          <span v-if="!localSearch" class="search-placeholder">{{ searchPlaceholder }}</span>
+          <input
+            type="text"
+            class="search-input"
+            v-model="localSearch"
+            @input="emitSearch"
+            @keyup.enter="emitSearch"
           />
         </div>
       </div>
@@ -33,6 +38,19 @@
 </template>
 
 <script>
+// نفس صور الأقسام المستعملة في CatalogHome.vue — مصدر واحد للصورتين.
+import Releases  from '@/assets/icons/catalog/bg-primary/hero-relese.jpg?url';
+import Takedowns from '@/assets/icons/catalog/bg-primary/Takedowns.jpg?url';
+import Entwürfe  from '@/assets/icons/catalog/bg-primary/Entwürfe.jpg?url';
+import Korrektur from '@/assets/icons/catalog/bg-primary/Korrektur.jpg?url';
+
+const BACKGROUNDS = {
+  releases:  Releases,
+  entwürfe:  Entwürfe,
+  korrektur: Korrektur,
+  takedowns: Takedowns,
+};
+
 export default {
   name: 'HeroCatalog',
 
@@ -75,6 +93,21 @@ export default {
     currentDescription() {
       if (this.description) return this.description
       return this.getConfig(this.status).description
+    },
+
+    // المكوّن يُستدعى بطريقتين: بـ :status من CatalogStatusView،
+    // وبـ topic من صفحات releases/entwürfe/korrektur/takedowns القديمة.
+    currentBackground() {
+      const key = String(this.status || this.topic || '').toLowerCase().trim()
+      return BACKGROUNDS[key] || BACKGROUNDS.releases
+    },
+
+    // طبقتان في background-image — الأولى هي العليا.
+    // التدرّج 274deg يبدأ معتماً من اليمين وينتهي شفّافاً يساراً،
+    // فتظهر الصورة يساراً ويبقى النصّ مقروءاً يميناً.
+    heroBackgroundImage() {
+      return 'linear-gradient(274deg, rgb(38, 40, 45), rgb(38, 40, 45), transparent), '
+           + `url(${this.currentBackground})`
     }
   },
 
@@ -83,30 +116,30 @@ export default {
       const configs = {
         releases: {
           topic: 'Releases',
-          title: 'Deine Veröffentlichungen',
+          title: 'DEINE VERÖFFENTLICHUNGEN',
           description:
-            'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium...'
+            'Hier findest Du eine Übersicht Deiner bereits veröffentlichten Singles, EPs und Alben. So behältst Du Deine Releases im Blick – übersichtlich und an einem Ort. Klicke auf Deinen Release, um weitere Information zu erhalten. '
         },
 
         entwürfe: {
           topic: 'Entwürfe',
-          title: 'Deine Unveröffentlichten Entwürfe',
+          title: 'DEINE ENTWÜRFE',
           description:
-            'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit, sed quia consequuntur.'
+            'Hier findest Du eine Übersicht Deiner als Entwurf gespeicherten Singles, EPs und Alben. Bearbeite Deine Releases weiter und bereite sie in Ruhe auf die Veröffentlichung vor.'
         },
 
         korrektur: {
           topic: 'Korrektur',
-          title: 'Deine ausstehenden Korrekturen',
+          title: 'DEINE KORREKTUREN',
           description:
-            'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium...'
+            'Hier findest Du eine Übersicht Deiner Singles, EPs und Alben, bei denen noch Korrekturen nötig sind. Nimm die entsprechenden Anpassungen vor, damit Deine Releases veröffentlicht werden können.'
         },
 
         takedowns: {
           topic: 'Takedowns',
-          title: 'Deine Zurückgezogenen Releases',
+          title: 'DEINE TAKEDOWNS',
           description:
-            'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium...'
+            'Hier findest Du eine Übersicht Deiner Singles, EPs und Alben, die aus den Stores entfernt werden oder bereits entfernt wurden. So behältst Du sie im Blick.'
         },
 
         // يمكنك إضافة المزيد من الحالات هنا لاحقاً
@@ -128,23 +161,19 @@ export default {
 
 <style lang='scss' scoped>
 
-.search-input {
-  transition: all 0.2s ease;
-}
-
-.search-input:focus {
-  background: #222428;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.25);
-}
 .heroRelease {
   display: flex;
   width: 100%;
   height: 350px;
-  align-items: flex-end;
+  align-items: center;
   gap: 5px;
   border-radius: 20px;
-  background: url('../../assets/icons/catalog/bg-primary/hero-relese.jpg') lightgray 0px -85.333px / 50.714% 148.762% no-repeat;
+  /* نفس طريقة عرض stages_banner: التدرّج يملأ الإطار (100% 100%)،
+     والصورة تحته بعرض 50% وارتفاع auto — تحجيم منتظم يحفظ نسبة
+     الأبعاد عند أيّ مقاس شاشة، بلا أيّ تمطيط. */
+  background-repeat: no-repeat;
+  background-size: 100% 100%, 50% auto;
+  background-position: left center;
 }
 
 .release-details {
@@ -155,7 +184,6 @@ export default {
   flex: 1 0 0;
   align-self: stretch;
   border-radius: 20px;
-  background: linear-gradient(90deg, rgba(38, 40, 45, 0.00) 0%, var(--Main-Colors-Slate, #26282D) 50%);
 }
 
 .release-header {
@@ -221,55 +249,86 @@ export default {
   opacity: 0.7;
 }
 
+/* الإطار نفسه يحمل الخلفية والحد والارتفاع والحشو، والأيقونة والحقل
+   عنصرا flex حقيقيّان داخله. لا وضع مطلق ولا حشو محسوب يدوياً
+   لإفساح مكان للأيقونة — فلا يمكن أن يتراكبا أبداً. */
 .search-box {
   display: flex;
   align-items: center;
-  gap: 12px;
   align-self: stretch;
+  height: 50px;
+  padding: 12px 16px;
+  border-radius: 5px;
+  border: 1px solid var(--primary);
+  background: var(--Main-Colors-Slate-Dark, #1B1C20);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
   position: relative;
 }
 
+.search-box:focus-within {
+  background: #222428;
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.25);
+}
+
+/* الأيقونة خارج تدفّق الـ flex ومثبّتة عند 16px — موضعها الأصلي تماماً،
+   ولا تتحرّك ولا تختفي عند التركيز. */
+.icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
 .search-input {
-  display: flex;
-  height: 50px;
-  padding: 12px 16px 12px 30px;
-  align-items: center;
-  gap: 12px;
-  align-self: stretch;
-  border-radius: 5px;
-  background: var(--Main-Colors-Slate-Dark, #1B1C20);
-  width: 100%;
-  border: 1px solid var(--primary);
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  /* حشو ثابت: المؤشر يبدأ دائماً من حافة الإطار (16px)، أي قبل الأيقونة،
+     ولا يتغيّر شيء عند التركيز. */
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
   font-family: Heebo;
   font-size: 18px;
   font-weight: 400;
   line-height: 1;
-  color: white;
+  color: #FFF;
 }
 
+.search-input:focus,
 .search-input:focus-visible {
-  border: 1px solid var(--primary);
   outline: 0 !important;
-  color: white;
-  font-size: 18px;
-  line-height: normal;
-  height: 50px;
 }
 
-.icon {
+/* عند النقر في الحقل: تختفي الأيقونة ونصّ الإرشاد معاً،
+   والمؤشر أصلاً عند 16px (حشو الحقل صفر) فيخلو السطر تماماً.
+   يُغطّي :focus-within النقر والـ Tab والتركيز البرمجي بنفس القاعدة،
+   والـ v-if يتكفّل بحالة وجود نصّ بعد مغادرة الحقل. */
+.search-box:focus-within .icon,
+.search-box:focus-within .search-placeholder {
+  display: none;
+}
+
+/* ثابت عند 42px — نفس موضعه الأصلي — ولا يتأثّر بحشو الحقل أو بالتركيز. */
+.search-placeholder {
   position: absolute;
-  width: 18px;
-  left: 16px;
-}
-
-.search-input::placeholder {
+  left: 42px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
   color: var(--Main-Colors-Dove, #6A6C6D);
   font-family: Heebo;
   font-size: 18px;
   font-weight: 400;
   line-height: normal;
-  padding-left: 12px;
 }
+
+
 
 @media (min-width: 1440px) and (max-width: 1599px){
   .heroRelease{

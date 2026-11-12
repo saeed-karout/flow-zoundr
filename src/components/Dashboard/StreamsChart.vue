@@ -1,5 +1,5 @@
 <template>
-  <div class="streams-30-days-chart">
+  <div class="streams-30-days-chart" ref="chartRootRef">
     <div class="chart-header">
       <div class="title">Streams der letzten 30 Tage</div>
     </div>
@@ -11,7 +11,7 @@
     
     <!-- Chart -->
     <div class="chart-wrapper" ref="chartWrapperRef">
-      <div class="chart-container" ref="chartContainerRef">
+      <div v-if="hasData" class="chart-container" ref="chartContainerRef">
         <svg 
           class="streams-svg" 
           :viewBox="`0 0 ${svgWidth} ${svgHeight}`"
@@ -35,6 +35,7 @@
           
           <!-- Line stroke -->
           <path 
+            ref="linePathRef"
             :d="linePath" 
             stroke="#DD1155" 
             stroke-width="2" 
@@ -72,7 +73,7 @@
       </div>
       
       <!-- X-axis labels -->
-      <div class="chart-labels">
+      <div v-if="hasData" class="chart-labels">
         <div 
           v-for="(item, index) in displayedLabels" 
           :key="index"
@@ -87,6 +88,7 @@
     <div 
       v-if="tooltip.visible" 
       class="chart-tooltip"
+        :class="{ 'is-below': tooltip.below }"
       :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
     >
       <div class="tooltip-label">{{ tooltip.label }}</div>
@@ -99,7 +101,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import apiRequest from '@/lib/apiRequest';
 
 // ========== Reactive Data ==========
@@ -128,6 +130,8 @@ const tooltip = ref({
 
 // Hover state for circle following
 const hoveredPoint = ref(null);
+const linePathRef = ref(null);
+const chartRootRef = ref(null);
 
 let resizeObserver = null;
 let fetchTimeout = null;
@@ -145,6 +149,11 @@ const updateSvgDimensions = () => {
 const totalStreams = computed(() => {
   return chartData.value.values.reduce((sum, val) => sum + val, 0);
 });
+
+// بلا بيانات لا نرسم خطّاً مسطّحاً ولا محور تواريخ فارغاً — يبقى الرقم (0) وحده.
+const hasData = computed(() =>
+  chartData.value.values.some((value) => Number(value) > 0)
+);
 
 const chartLabels = computed(() => {
   return chartData.value.dates;
@@ -268,60 +277,81 @@ const formatNumber = (num) => {
   });
 };
 
-const getPositionOnLine = (xPos) => {
+// أقرب نقطة بيانات — منها قيمة التولتيب وتاريخه.
+const getNearestPoint = (xPos) => {
   const points = chartPoints.value;
-  if (points.length < 2) return null;
-  
-  for (let i = 0; i < points.length - 1; i++) {
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    
-    if (xPos >= p1.x && xPos <= p2.x && p2.x !== p1.x) {
-      const t = (xPos - p1.x) / (p2.x - p1.x);
-      const y = p1.y + (p2.y - p1.y) * t;
-      const value = p1.value + (p2.value - p1.value) * t;
-      const labelIndex = Math.floor(i + t);
-      
-      return { 
-        y, 
-        value, 
-        label: chartLabels.value[labelIndex] || chartLabels.value[i] || '' 
-      };
+  if (points.length === 0) return null;
+
+  let nearest = points[0];
+  let minDist = Math.abs(points[0].x - xPos);
+  for (let i = 1; i < points.length; i++) {
+    const dist = Math.abs(points[i].x - xPos);
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = points[i];
     }
   }
-  
-  return null;
+  return nearest;
+};
+
+// ✅ النقطة الحقيقية على المنحنى (الـ path) عند إحداثي x المطلوب — تتحرك الدائرة
+//    بسلاسة مع الماوس وتبقى دائماً على الخط (المنحنى Bézier وليس استيفاءً خطياً).
+const getPointOnPathAtX = (targetX) => {
+  const path = linePathRef.value;
+  if (!path || typeof path.getTotalLength !== 'function') return null;
+
+  const total = path.getTotalLength();
+  if (total === 0) return null;
+
+  // x يتزايد باطّراد على طول الخط → بحث ثنائي بطول المسار للوصول إلى x المطلوب.
+  let lo = 0;
+  let hi = total;
+  let best = path.getPointAtLength(0);
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    const p = path.getPointAtLength(mid);
+    best = p;
+    if (Math.abs(p.x - targetX) < 0.25) break;
+    if (p.x < targetX) lo = mid; else hi = mid;
+  }
+  return best;
 };
 
 const showTooltipOnLine = (event) => {
   const svg = event.target.closest('.streams-svg');
   if (!svg) return;
-  
+
   const rect = svg.getBoundingClientRect();
   const x = event.clientX - rect.left;
-  const containerRect = chartWrapperRef.value?.getBoundingClientRect();
-  
-  if (containerRect) {
-    const linePos = getPositionOnLine(x);
-    if (linePos) {
-      // Update hovered point for circle
-      hoveredPoint.value = {
-        x: x,
-        y: linePos.y
-      };
-      
-      const tooltipX = event.clientX - containerRect.left - 30;
-      const tooltipY = (linePos.y / svgHeight.value) * rect.height + padding.top - 15;
-      
-      tooltip.value = {
-        visible: true,
-        x: Math.max(0, tooltipX),
-        y: Math.max(0, tooltipY),
-        value: Math.round(linePos.value),
-        label: linePos.label
-      };
-    }
-  }
+
+  // التولتيب position: absolute داخل الجذر، فصندوق احتوائه هو الجذر لا .chart-wrapper.
+  // القياس من الورابر كان يزيحه بمقدار (الترويسة + الفجوة + الحشو) إلى الأعلى.
+  const rootRect = chartRootRef.value?.getBoundingClientRect();
+  if (!rootRect) return;
+
+  // الدائرة: تتبع الماوس بسلاسة على المنحنى نفسه.
+  const curvePoint = getPointOnPathAtX(x) || getNearestPoint(x);
+  // التولتيب: رقم اليوم المحدّد (أقرب نقطة).
+  const nearest = getNearestPoint(x);
+  if (!curvePoint || !nearest) return;
+
+  hoveredPoint.value = {
+    x: curvePoint.x,
+    y: curvePoint.y
+  };
+
+  // موضع النقطة رأسياً داخل البطاقة (من أعلى الجذر). الرفع فوقها يتمّ
+  // بـ translateY(-100%) في الـ CSS، فيتبع ارتفاع التولتيب الفعلي ولا يغطّي الدائرة.
+  const pointY = rect.top - rootRect.top + (curvePoint.y / svgHeight.value) * rect.height;
+
+  tooltip.value = {
+    visible: true,
+    x: Math.max(0, event.clientX - rootRect.left - 60),
+    y: pointY,
+    below: pointY < 60,
+    value: Math.round(nearest.value),
+    label: nearest.label
+  };
 };
 
 const hideTooltip = () => {
@@ -391,16 +421,30 @@ const handleResize = () => {
 };
 
 // ========== Lifecycle ==========
-onMounted(() => {
-  fetchStreamsData();
-  window.addEventListener('resize', handleResize);
-  
-  if (chartContainerRef.value) {
+// الحاوية تُنشأ فقط عند وجود بيانات، فقد تكون غائبة وقت التركيب.
+const observeContainer = () => {
+  if (!chartContainerRef.value) return;
+  if (!resizeObserver) {
     resizeObserver = new ResizeObserver(() => {
       updateSvgDimensions();
     });
-    resizeObserver.observe(chartContainerRef.value);
   }
+  resizeObserver.disconnect();
+  resizeObserver.observe(chartContainerRef.value);
+};
+
+watch(hasData, (value) => {
+  if (!value) return;
+  nextTick(() => {
+    observeContainer();
+    updateSvgDimensions();
+  });
+});
+
+onMounted(() => {
+  fetchStreamsData();
+  window.addEventListener('resize', handleResize);
+  observeContainer();
 });
 
 onUnmounted(() => {
@@ -417,13 +461,13 @@ onUnmounted(() => {
 <style lang="scss" scoped>
 .streams-30-days-chart {
   width: 100%;
-  height: 300px;
+  height: 100%; /* البطاقة .row2 تأخذ --chart-h وهذا يملأها */
   min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--secondary);
   border-radius: 20px;
-  padding: 20px 30px;
+  // padding: 20px 30px;
   position: relative;
   gap: 16px;
   box-sizing: border-box;
@@ -503,25 +547,32 @@ onUnmounted(() => {
 .chart-label {
   color: #FFF;
   font-family: Heebo;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 300;
   opacity: 0.7;
+  line-height:0.6;
   white-space: nowrap;
 }
 
 .chart-tooltip {
   position: absolute;
-  background: rgba(0, 0, 0, 0.85);
   backdrop-filter: blur(8px);
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 8px 8px;
   min-width: 60px;
   text-align: center;
   pointer-events: none;
   z-index: 100;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   transition: opacity 0.2s ease;
-  transform: translateX(18px);
+  /* يُرفع بكامل ارتفاعه فوق النقطة + 12px فجوة، فلا يغطّي الدائرة أبداً
+     مهما طال نصّه (رقم طويل أو تاريخ أعرض). */
+  transform: translateX(24px) translateY(calc(-100% - 12px));
+}
+
+/* قرب قمّة البطاقة لا متّسع فوقه — يُقلَب تحت النقطة بدل أن يُقصّ. */
+.chart-tooltip.is-below {
+  transform: translateX(24px) translateY(12px);
 }
 
 .tooltip-label {
@@ -594,22 +645,19 @@ onUnmounted(() => {
 /* Responsive */
 @media (max-width: 1599px) {
   .watermark-number {
-    font-size: 120px;
+    font-size: 160px;
     letter-spacing: 6px;
   }
 }
 
 @media (min-width: 1600px) and (max-width: 2074px) {
   .watermark-number {
-    font-size: 150px;
+    font-size: 180px;
     letter-spacing: 7px;
   }
 }
 
 @media (min-width: 2075px) and (max-width: 2560px) {
-  .watermark-number {
-    font-size: 200px;
-    letter-spacing: 10px;
-  }
+ 
 }
 </style>

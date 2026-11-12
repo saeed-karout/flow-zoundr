@@ -1,10 +1,10 @@
 <template>
   <main>
     <!-- عرض Start.vue عندما لا توجد Releases -->
-    <Start v-if="showStart" />
+    <Start v-if="showStart === true" />
     
     <!-- عرض المحتوى العادي مع containers فقط عندما يكون هناك Releases -->
-    <div v-else class="containers">
+    <div v-else-if="showStart === false" class="containers">
       <div class="first-row">
         <div class="hero-section">
           
@@ -20,7 +20,7 @@
               <div class="box-title">Aktuelles Guthaben</div>
               <div class="total_money">{{ formattedBalance }}</div>
             </div>
-            <router-link to="/catalog" class="buttons">
+            <router-link to="/auszahlung" class="buttons">
               <span>Auszahlen</span>
             </router-link>
           </div>
@@ -45,31 +45,31 @@
                   <div class="media">
                     <img src="../assets/icons/dashboard/media/phone.png" alt="Phone" />
                   </div>
-                  <div class="name-media">
-                    <span>Telefon</span>
-                  </div>
+                
+                    <span class="name-media">Telefon</span>
+                  
                 </div>
                 <div class="icon" @click="openWhatsApp">
                   <div class="media">
                     <img src="../assets/icons/dashboard/media/whatsapp.png" alt="Whatsapp" />
                   </div>
-                  <div class="name-media">
-                    <span>Whatsapp</span>
-                  </div>
+                 
+                    <span class="name-media">Whatsapp</span>
+                 
                 </div>
                 <div class="icon" @click="openQuestionModal">
                   <div class="media">
                     <img src="../assets/icons/dashboard/media/mail.png" alt="Email" />
                   </div>
-                  <div class="name-media">
-                    <span>Mail</span>
-                  </div>
+                 
+                    <span class="name-media">Mail</span>
+                  
                 </div>
               </div>
               <QuestionModal
                 ref="questionModalRef"
                 modal-id="emailQuestionModal"
-                reference="KONTAKT_RIGHTS"
+                reference="KONTAKT_FLOW"
               />
             </div>
           </div>
@@ -80,9 +80,10 @@
           <p>Neueste Releases</p>
           <div class="releases">
             <routerLink class="add" to="/create-release">
-              <div class="plus">
-                <img src="../assets/icons/dashboard/plus.svg" alt="plus icon" />
-              </div>
+             <svg class="plus" xmlns="http://www.w3.org/2000/svg" width="84" height="84" viewBox="0 0 84 84" fill="none">
+  <path d="M42 0C18.8045 0 0 18.8045 0 42C0 65.1954 18.8045 84 42 84C65.1954 84 84 65.1954 84 42C84 18.8045 65.1954 0 42 0ZM42 78.5591C21.8591 78.5591 5.44091 62.1409 5.44091 42C5.44091 21.8591 21.8591 5.44091 42 5.44091C62.1409 5.44091 78.5591 21.8591 78.5591 42C78.5591 62.1409 62.1409 78.5591 42 78.5591Z" fill="#6A6C6D"/>
+  <path d="M63.6682 39.3273H44.8636V20.5227C44.8636 18.9955 43.6227 17.7545 42.0955 17.7545C40.5682 17.7545 39.3273 18.9955 39.3273 20.5227V39.2318H20.5227C18.9955 39.2318 17.7545 40.4727 17.7545 42C17.7545 43.5273 18.9955 44.7682 20.5227 44.7682H39.2318V63.5727C39.2318 65.1 40.4727 66.3409 42 66.3409C43.5273 66.3409 44.7682 65.1 44.7682 63.5727V44.7682H63.4773C65.1 44.7682 66.3409 43.5273 66.4364 42.0955C66.4364 40.5682 65.1954 39.3273 63.6682 39.3273Z" fill="#6A6C6D"/>
+</svg>
             </routerLink>
 
             <div class="favoriten">
@@ -99,7 +100,7 @@
                 >
                   <div class="text">
                     <div class="sub-text">
-                      <span>{{ release.artist_name || 'Artist' }}</span>
+                      <span>{{ getArtistName(release) }}</span>
                       <h1>{{ release.title || 'Untitled' }}</h1>
                     </div>
                     <p>{{ formatStreams(release.streams) || '0' }} Streams</p>
@@ -121,6 +122,17 @@
   </main>
 </template>
 
+<script>
+// ذاكرة على مستوى الوحدة (خارج setup فتُشارَك بين كلّ عمليات التركيب).
+// العودة إلى اللوحة — بزرّ الرجوع مثلاً — تُعيد تركيب المكوّن من الصفر،
+// فنحتفظ بآخر بيانات لعرضها فوراً ثم نحدّثها في الخلفية بلا وميض.
+const dashboardCache = {
+  loaded: false,
+  settings: null,
+  releases: [],
+};
+</script>
+
 <script setup>
 import { ref, onMounted, computed } from "vue";
 import { useRouter } from "vue-router";
@@ -133,21 +145,22 @@ import StreamsChart from "@/components/Dashboard/StreamsChart.vue";
 
 import Start from "@/components/Dashboard/Start.vue"; 
 import { useSubscriptionStore } from '@/stores/subscription';
+import { useWalletStore } from '@/stores/wallet';
+import { dateSortValue } from '@/utils/date';
 
 const subscriptionStore = useSubscriptionStore();
+// الرصيد من مخزن المحفظة — مصدر واحد مشترك مع Auszahlung و Guthaben.
+const walletStore = useWalletStore();
 
 const router = useRouter();
 const questionModalRef = ref(null);
-const settings = ref({});
-const releases = ref([]);
-const isLoading = ref(true);
-const balance = ref(0);
-const userUuid = ref(null);
-const userName = ref(null);
-const userEmail = ref(null);
+const settings = ref(dashboardCache.settings || {});
+const releases = ref(dashboardCache.releases);
+const balance = computed(() => walletStore.balance);
 
-// متغير للتحكم بعرض Start
-const showStart = ref(true); 
+// عرض Start أو اللوحة. null = لم نعرف بعد (أثناء أوّل تحميل)، فلا نعرض
+// أيّاً منهما حتى تصل البيانات — سابقاً كانت true فتومض شاشة Start أوّلاً.
+const showStart = ref(dashboardCache.loaded ? dashboardCache.releases.length === 0 : null);
 
 const contactImageUrl = computed(() => {
   return settings.value.contact_image
@@ -155,130 +168,35 @@ const contactImageUrl = computed(() => {
     : "../assets/icons/dashboard/user/user.jpg";
 });
 
-// تنسيق الرصيد
-const formattedBalance = computed(() => {
-  if (balance.value === null || balance.value === undefined) {
-    return '0,00 EUR';
-  }
-  
-  const formatted = balance.value.toLocaleString('de-DE', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
-  
-  return `${formatted} EUR`;
-});
+// تنسيق الرصيد — نفس التنسيق في كلّ الشاشات (getter المخزن).
+const formattedBalance = computed(() => walletStore.formattedBalance);
 
 // تنسيق عدد الاستماعات
+// الـ API يرجّع artists كمصفوفة (["Nora Blaine"]) ولا يرجّع artist_name إطلاقاً،
+// فكان القالب يسقط دائماً إلى النصّ البديل "Artist".
+// نفس منطق artistName في ReleaseDetail: يقبل مصفوفة نصوص أو كائنات، أو نصّاً مفرداً.
+const getArtistName = (release) => {
+  const list = release?.artists;
+
+  if (Array.isArray(list)) {
+    const names = list
+      .map(a => (typeof a === 'string' ? a : a?.name))
+      .filter(a => a && String(a).trim() !== '');
+    if (names.length) return names.join(', ');
+  }
+
+  if (typeof list === 'string' && list.trim() !== '') return list;
+
+  return release?.artist_name || '—';
+};
+
 const formatStreams = (streams) => {
   if (!streams && streams !== 0) return '0';
   return streams.toLocaleString('de-DE');
 };
 
-// جلب بيانات المستخدم من localStorage أو store
-const getUserData = () => {
-  try {
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      const parsed = JSON.parse(userData);
-      userUuid.value = parsed.uuid || parsed.id;
-      userName.value = parsed.name || parsed.username;
-      userEmail.value = parsed.email;
-      console.log('👤 User data loaded from localStorage:', { 
-        uuid: userUuid.value, 
-        name: userName.value, 
-        email: userEmail.value 
-      });
-      return true;
-    }
-    
-    const sessionUser = sessionStorage.getItem('user');
-    if (sessionUser) {
-      const parsed = JSON.parse(sessionUser);
-      userUuid.value = parsed.uuid || parsed.id;
-      userName.value = parsed.name || parsed.username;
-      userEmail.value = parsed.email;
-      console.log('👤 User data loaded from sessionStorage:', { 
-        uuid: userUuid.value, 
-        name: userName.value, 
-        email: userEmail.value 
-      });
-      return true;
-    }
-    
-    console.warn('⚠️ No user data found in storage');
-    return false;
-  } catch (error) {
-    console.error('❌ Error parsing user data:', error);
-    return false;
-  }
-};
-
-// جلب الرصيد من API
-const fetchBalance = async () => {
-  try {
-    if (!userUuid.value || !userName.value || !userEmail.value) {
-      console.warn('⚠️ Missing user data, cannot fetch balance');
-      return;
-    }
-    
-    const params = new URLSearchParams({
-      user_uuid: userUuid.value,
-      user_name: encodeURIComponent(userName.value),
-      user_email: encodeURIComponent(userEmail.value)
-    });
-    
-    const url = `/wallet/balance?${params.toString()}`;
-    console.log('💰 Fetching balance from:', url);
-    
-    const response = await apiRequest.get(url);
-    console.log('✅ Balance response:', response.data);
-    
-    if (response.data) {
-      if (typeof response.data === 'number') {
-        balance.value = response.data;
-      } 
-      else if (response.data.balance !== undefined) {
-        balance.value = response.data.balance;
-      }
-      else if (response.data.data && response.data.data.balance !== undefined) {
-        balance.value = response.data.data.balance;
-      }
-      else if (response.data.amount !== undefined) {
-        balance.value = response.data.amount;
-      }
-      else {
-        const possibleFields = ['total', 'amount', 'value', 'credit', 'balance_amount'];
-        let found = false;
-        for (const field of possibleFields) {
-          if (response.data[field] !== undefined && typeof response.data[field] === 'number') {
-            balance.value = response.data[field];
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          console.warn('⚠️ Could not find balance in response:', response.data);
-          balance.value = 0;
-        }
-      }
-    } else {
-      balance.value = 0;
-    }
-    
-    console.log('💰 Final balance:', balance.value);
-  } catch (error) {
-    console.error('❌ Error fetching balance:', error);
-    balance.value = 0;
-    
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      console.warn('⚠️ Authentication error, user may not be logged in');
-    }
-  }
-};
-
 // ========== جلب الـ Releases من API /releases ==========
-const fetchReleases = async () => {
+const fetchReleases = async (silent = false) => {
   try {
     console.log('📡 Fetching releases from /releases');
     
@@ -312,6 +230,8 @@ const fetchReleases = async () => {
     
   } catch (error) {
     console.error("❌ Error fetching releases:", error);
+    // في التحديث الصامت نُبقي القائمة المعروضة بدل استبدالها بشاشة Start.
+    if (silent) return;
     releases.value = [];
     showStart.value = true;
   }
@@ -320,9 +240,9 @@ const fetchReleases = async () => {
 // الحصول على آخر 10 Releases (مرتبة حسب تاريخ الإنشاء)
 const recentReleases = computed(() => {
   // ترتيب حسب created_at أو release_date
-  const sorted = [...releases.value].sort((a, b) => 
-    new Date(b.created_at || b.release_date || b.date) - 
-    new Date(a.created_at || a.release_date || a.date)
+  const sorted = [...releases.value].sort((a, b) =>
+    dateSortValue(b.created_at || b.release_date || b.date) -
+    dateSortValue(a.created_at || a.release_date || a.date)
   ).slice(0, 10);
   
   console.log(`📋 Recent releases: ${sorted.length} items`);
@@ -344,39 +264,15 @@ const goToReleaseDetail = (uuid) => {
 };
 
 
-onMounted(async () => {
-  isLoading.value = true;
-  
+// إعدادات صفحة الاتصال. لها معالجة خطأ خاصّة بها حتى لا يُفرغ فشلُها
+// بقيّةَ اللوحة (الرصيد والإصدارات).
+const fetchSettings = async (silent = false) => {
   try {
-    // 1. جلب بيانات المستخدم أولاً
-    const userLoaded = getUserData();
-    
-    // 2. جلب الإعدادات
     const settingsResponse = await apiRequest.get("/settings");
     settings.value = settingsResponse.data || {};
-    
-    // 3. جلب الرصيد (إذا توفرت بيانات المستخدم)
-    if (userLoaded) {
-      await fetchBalance();
-    } else {
-      console.warn('⚠️ Skipping balance fetch - no user data');
-      balance.value = 0;
-    }
-    
-    // 4. 🔥 جلب الـ Releases من API /releases
-    await fetchReleases();
-    
-    // 5. 🔥 جلب حالة الاشتراك من API /subscription
-    try {
-      await subscriptionStore.fetchSubscription();
-      console.log('✅ Subscription status loaded:', subscriptionStore.isActive ? 'Active' : 'Inactive');
-    } catch (subError) {
-      console.warn('⚠️ Could not load subscription:', subError);
-      // لا نوقف التطبيق إذا فشل جلب الاشتراك
-    }
-    
   } catch (error) {
-    console.error("Error fetching data:", error);
+    console.error("❌ Error fetching settings:", error);
+    if (silent) return;
     settings.value = {
       contact_name: "null",
       contact_title: "null",
@@ -385,20 +281,43 @@ onMounted(async () => {
       contact_email: null,
       contact_image: null,
     };
-    releases.value = [];
-    showStart.value = true;
-    balance.value = 0;
-    
-  } finally {
-    isLoading.value = false;
-    console.log("🏁 Final state:", {
-      showStart: showStart.value,
-      releases: releases.value.length,
-      balance: balance.value,
-      subscriptionActive: subscriptionStore.isActive
-    });
   }
+};
+
+// تحميل بيانات اللوحة.
+// silent: البيانات معروضة أصلاً من الذاكرة، فنحدّثها في الخلفية دون
+//         استبدالها بحالة فارغة إن فشل أحد الطلبات.
+const loadDashboard = async (silent = false) => {
+  // الطلبات مستقلّة عن بعضها، فتُنفَّذ معاً: أوّل رسم للّوحة كان ينتظرها
+  // واحداً تلو الآخر. وكلّ واحد يعالج خطأه بنفسه.
+  await Promise.all([
+    fetchSettings(silent),
+    walletStore.fetchBalance({ force: !silent }),
+    fetchReleases(silent),
+    subscriptionStore.fetchSubscription()
+      .then(() => console.log('✅ Subscription status loaded:', subscriptionStore.isActive ? 'Active' : 'Inactive'))
+      // لا نوقف اللوحة إذا فشل جلب الاشتراك
+      .catch((subError) => console.warn('⚠️ Could not load subscription:', subError)),
+  ]);
+
+  // حفظ آخر حالة معروفة لعرضها فوراً عند العودة إلى اللوحة
+  dashboardCache.loaded = true;
+  dashboardCache.settings = settings.value;
+  dashboardCache.releases = releases.value;
+
+  console.log("🏁 Final state:", {
+    showStart: showStart.value,
+    releases: releases.value.length,
+    balance: balance.value,
+    subscriptionActive: subscriptionStore.isActive
+  });
+};
+
+onMounted(() => {
+  // مع وجود بيانات محفوظة تُعرض اللوحة فوراً ثم تُحدَّث في الخلفية.
+  loadDashboard(dashboardCache.loaded);
 });
+
 // ========== Functions ==========
 const makeCall = () => {
   const phone = settings.value.contact_phone;
@@ -415,10 +334,11 @@ const openWhatsApp = () => {
 };
 
 const openQuestionModal = () => {
-  if (questionModalRef.value && settings.value.contact_email) {
-    questionModalRef.value.openModal();
-    questionModalRef.value.resetModal();
-  }
+  // النافذة ترسل إلى /contact ببيانات المستخدم الحالي، لا إلى settings.contact_email،
+  // فاشتراط وجوده كان يجعل النقر بلا أثر كلّما غاب الحقل من ردّ /settings.
+  if (!questionModalRef.value) return;
+  questionModalRef.value.resetModal();
+  questionModalRef.value.openModal();
 };
 
 const handleImageError = () => {
@@ -457,11 +377,16 @@ main {
 .containers {
   display: flex;
   flex-direction: column;
+  /* تملأ ارتفاع main بالضبط، فيتوزّع المتاح على الصفوف بدل أن يفيض المحتوى.
+     overflow باقٍ للشاشات القصيرة (أقل من ~850px) حيث يبلغ كلّ عنصر حدّه الأدنى. */
+  height: 100%;
   width: 100%;
   max-width: 2560px;
   margin: 0 auto;
   gap: 20px;
   align-items: flex-start;
+  overflow:auto;
+  scrollbar-width:none;
 }
 
 .first-row {
@@ -470,10 +395,17 @@ main {
   gap: 20px;
   align-self: stretch;
   width: 100%;
+  flex: 1 1 auto;
+  /* بدونها يمنع min-height الضمنيّ (auto) الصفَّ من التقلّص إلى المساحة
+     المتاحة، فيتجاوز المحتوى ارتفاع الصفحة ويظهر شريط تمرير. */
+  min-height: 447px;
 }
 
 .hero-section {
+  /* ارتفاع المخططين معرّف هنا فقط ويُورَث إلى EinnahmenChart و StreamsChart،
+     فلا يمكن أن يختلفا أبداً. القيم لكلّ مدى في آخر الملفّ. */
   height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -481,6 +413,7 @@ main {
   gap: 20px;
   flex: 1 0 0;
   align-self: stretch;
+  min-height: 213.5px;
 }
 
 .row1 p,
@@ -497,8 +430,12 @@ main {
 
 .row2 {
   display: flex;
-  height: 100%;
-  padding: 20px 30px 15px 30px;
+  /* --chart-h سقف لا إلزام: يُبلَغ عند وجود متّسع، ويتقلّص عند ضيق الارتفاع. */
+  // height: var(--chart-h, 300px);
+  // max-height: var(--chart-h, 300px);
+  flex: 1;
+  min-height: 213.5px;
+  padding: 20px 30px 12px 30px;
   flex-direction: column;
   justify-content: center;
   align-items: flex-start;
@@ -532,11 +469,13 @@ main {
   align-items: flex-start;
   gap: 20px;
   height: 100%;
+  min-height: 0;
   min-width: 0;
 }
 
 .boxes {
   width: 100%;
+  flex: 0 0 auto;
   display: flex;
   align-items: flex-start;
   gap: 20px;
@@ -629,20 +568,22 @@ main {
   z-index: 10;
 }
 
-.plus {
+/* .plus هو الـ svg نفسه لا حاويةً له، واللون على <path> يسبق الوراثة من الـ svg
+   — لذا يستهدف اللون المسارات مباشرةً. */
+svg.plus {
   width: 84px;
   height: 84px;
   flex-shrink: 0;
   aspect-ratio: 1/1;
+}
+
+svg.plus path {
   fill: var(--Main-Colors-Dove, #6a6c6d);
+  transition: fill 0.3s ease;
 }
 
-.add:hover .plus img {
-  filter: brightness(0) invert(1);
-}
-
-.plus img {
-  transition: filter 0.3s ease;
+.add:hover svg.plus path {
+  fill: var(--Strawberry, #DD1155);
 }
 
 .favoriten {
@@ -699,6 +640,7 @@ main {
   justify-content: flex-end;
   align-items: flex-start;
   gap: 12px;
+  max-width:207px;
   flex: 1 0 0;
   align-self: stretch;
   border-radius: 20px;
@@ -719,14 +661,13 @@ main {
 .music-card .image:hover .sub-text span,
 .music-card .image:hover .text p {
   opacity: 1;
-  transition: 0.3s ease;
 }
 
 .music-card .text {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  gap: 10px;
   align-self: stretch;
 }
 
@@ -739,12 +680,20 @@ main {
 }
 
 .music-card .sub-text span {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+  /* نفس معالجة النصّ في ArtistsTab: سطر واحد مع ...
+     nowrap أوثق من -webkit-line-clamp الذي لا يقصّ دون overflow: hidden.
+     ولأن line-height أصغر من 1 يفيض المحرف خارج صندوق المحتوى،
+     نوسّع صندوق القصّ بـ padding ونلغي أثره بـ margin سالب مساوٍ —
+     فلا تُقصّ أعلى الحروف ولا تتغيّر المسافات بين الأسطر. */
+  display: block;
+  align-self: stretch;
+  max-width: 90%;
+  white-space: nowrap;
   overflow: hidden;
-  color: var(--Main-Colors-White, #fff);
   text-overflow: ellipsis;
+  padding-block: 6px;
+  margin-block: -6px;
+  color: var(--Main-Colors-White, #fff);
   font-family: Heebo;
   font-size: 14px;
   font-style: normal;
@@ -752,16 +701,24 @@ main {
   line-height: 1;
   text-transform: uppercase;
   opacity: 0.3;
+  transition: opacity 0.3s ease;
 }
 
 .music-card .sub-text h1 {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+  /* نفس معالجة النصّ في ArtistsTab: سطر واحد مع ...
+     nowrap أوثق من -webkit-line-clamp الذي لا يقصّ دون overflow: hidden.
+     ولأن line-height أصغر من 1 يفيض المحرف خارج صندوق المحتوى،
+     نوسّع صندوق القصّ بـ padding ونلغي أثره بـ margin سالب مساوٍ —
+     فلا تُقصّ أعلى الحروف ولا تتغيّر المسافات بين الأسطر. */
+  display: block;
   align-self: stretch;
+  max-width: 90%;
+  white-space: nowrap;
   overflow: hidden;
-  color: var(--Main-Colors-White, #fff);
   text-overflow: ellipsis;
+  padding-block: 6px;
+  margin-block: -6px;
+  color: var(--Main-Colors-White, #fff);
   font-family: Heebo;
   font-size: 18px;
   font-style: normal;
@@ -769,17 +726,31 @@ main {
   line-height: .8;
   text-transform: uppercase;
   opacity: 0.7;
+  transition: opacity 0.3s ease;
 }
 
 .music-card .text p {
+  /* نفس معالجة النصّ في ArtistsTab: سطر واحد مع ...
+     nowrap أوثق من -webkit-line-clamp الذي لا يقصّ دون overflow: hidden.
+     ولأن line-height أصغر من 1 يفيض المحرف خارج صندوق المحتوى،
+     نوسّع صندوق القصّ بـ padding ونلغي أثره بـ margin سالب مساوٍ —
+     فلا تُقصّ أعلى الحروف ولا تتغيّر المسافات بين الأسطر. */
+  display: block;
   align-self: stretch;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-block: 6px;
+  margin-block: -6px;
   color: var(--Main-Colors-White, #fff);
   font-family: Heebo;
   font-size: 14px;
   font-style: normal;
   font-weight: 300;
-  line-height: .8;
+  line-height: 1; /* نفس ArtistsTab (كانت 0.8) */
   opacity: 0.7;
+  transition: opacity 0.3s ease;
 }
 
 .no-releases {
@@ -810,17 +781,23 @@ main {
   justify-content: center;
   align-items: center;
   gap: 24px;
+  flex: 1;
   align-self: stretch;
   border-radius: 20px;
   background: linear-gradient(54deg, #26282d 0%, #de1456 100%);
   padding: 20px;
+
+  /* الارتفاع يتدرّج مع عرض الصفحة بدل قيمة ثابتة لكلّ مدى: مستقيم يمرّ
+     بنقطتي التصميم (124px عند 1440 و250px عند 2074) — والمدى الأعلى في
+     استعلام 2075 فيلتقي الخطّان عند 250px بلا قفزة.
+     و45vh سقف أمان كيلا يدفع الصندوق الصفحة على شاشة قصيرة. */
+  // min-height: min(clamp(124px, calc(19.874vw - 162.2px), 250px), 45vh);
 }
 
 .box-werk .box-title {
   display: flex;
   width: 300px;
   max-width: 300px;
-  height: 21.565px;
   flex-direction: column;
   justify-content: center;
   color: #fff;
@@ -829,7 +806,7 @@ main {
   font-size: 18px;
   font-style: normal;
   font-weight: 700;
-  line-height: 1;
+  line-height: .73;
   letter-spacing: 0.9px;
   text-transform: uppercase;
 }
@@ -841,7 +818,7 @@ main {
   font-size: 38px;
   font-style: normal;
   font-weight: 700;
-  line-height: 1;
+  line-height: .8;
   letter-spacing: 1.9px;
   text-transform: uppercase;
 }
@@ -852,7 +829,14 @@ main {
   align-items: flex-start;
   gap: 1px;
   align-self: stretch;
-  flex: 1;
+  /* نسبة التصميم نفسها (عرض 290 × ارتفاع 315): الارتفاع يتبع العرض بدل أن
+     يملأ كلّ ما تبقّى، فلا تتمدّد الصورة بلا حدّ.
+     0 1 auto: يأخذ مقاس النسبة عند وجود متّسع، ويتقلّص عند ضيق الارتفاع بدل
+     أن يتجاوز الصندوق ويتداخل مع صفّ الإصدارات تحته. */
+  flex: 0 1 auto;
+  aspect-ratio: 290 / 315;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .contact-content {
@@ -862,6 +846,7 @@ main {
   gap: 1px;
   align-self: stretch;
   flex: 1;
+  min-height: 0;
 }
 
 .loading,
@@ -913,6 +898,7 @@ main {
   gap: 22px;
   align-self: stretch;
   flex: 1;
+  min-height: 0;
   border-radius: 20px 20px 0 0;
   padding: 20px;
   position: relative;
@@ -1004,20 +990,21 @@ main {
   transition: background 0.3s ease;
 }
 
-.contact-links .icon .name-media span {
+.contact-links .icon .name-media {
   color: #fff;
   text-align: center;
   font-family: Heebo;
   font-size: 18px;
   font-weight: 300;
-  line-height: 1;
+  line-height: .8;
+  height: 13px;
 }
 
 /* Responsive */
 @media (min-width: 1440px) and (max-width: 1599px) {
-  .containers {
-    min-width: 810px;
-    max-width: 1599px;
+  .box-werk .total_money{
+    font-size: 28px;
+    letter-spacing: 1.4px;
   }
   .add, .music-card, .no-releases {
     width: 160px;
@@ -1029,15 +1016,11 @@ main {
     top: 40px;
   }
   
-  .first-row {
-    flex-shrink: 0;
-  }
+ 
 
   .second-col {
     width: clamp(260px, 19vw, 300px);
   }
-  .box-werk   { height: clamp(150px, 12vw, 180px); }
-  .contact    { height: clamp(280px, 22vw, 350px); }
 
   .contact-links {
     padding: 12px;
@@ -1048,17 +1031,25 @@ main {
 
 @media (min-width: 1600px) {
   .first-row {
-    flex: 1 0 0;
+    /* 1 1 auto لا 1 0 0: الصفّ يتقلّص عند نقص الارتفاع بدل أن يدفع الصفحة. */
+    flex: 1 1 auto;
     height: auto;
   }
-
   .second-col {
     width: clamp(300px, 23vw, 530px);
   }
-  .box-werk { height: clamp(180px, 16vw, 420px); }
-  .contact  { flex: 1; min-height: 350px; }
+
+
+ 
 }
 
+/* المدى الأعلى من مستقيم .box-werk: من (2074, 250px) إلى (2560, 433px). */
+@media (min-width: 2075px) {
+  // .box-werk {
+  //   min-height: min(clamp(250px, calc(37.654vw - 530.9px), 433px), 45vh);
+  // }
+
+}
 @media (min-width: 1600px) and (max-width: 2560px) {
   .containers {
     min-width: 1220px;
@@ -1069,7 +1060,8 @@ main {
     display: flex;
     align-items: center;
     gap: 20px;
-    flex: 1 0 0;
+    flex: 1 1 auto;
+    
     align-self: stretch;
     height: auto;
   }
@@ -1079,19 +1071,11 @@ main {
     width: clamp(290px, 22vw, 530px);
   }
 
-  .box-werk {
-    height: clamp(174px, 12vw, 420px);
-  }
-
-  .contact {
-    flex: 1;
-    min-height: 315px;
-  }
+ 
 }
 
-@media (min-width: 2561px) {
-  .first-row {
-    flex: 1 0 0;
-  }
-}
+
+
+
+
 </style>

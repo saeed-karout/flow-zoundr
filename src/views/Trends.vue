@@ -44,7 +44,7 @@ import apiRequest from '@/lib/apiRequest';
 
 // ========== تعريف التابات ==========
 const tabsConfig = [
-  { title: 'Streaming', icon: '/icon/icon-stream/music.svg', component: StreamingTab, dataKey: null },
+  { title: 'Streams', icon: '/icon/icon-stream/music.svg', component: StreamingTab, dataKey: null },
   { title: 'Songs', icon: '/icon/icon-stream/songs.svg', component: SongsTab, dataKey: 'songs' },
   { title: 'Releases', icon: '/icon/icon-stream/release.svg', component: ReleasesTab, dataKey: 'releases' },
   { title: 'Shazams', icon: '/icon/icon-stream/release.svg', component: ShazamsTab, dataKey: null },
@@ -208,6 +208,13 @@ const handleFiltersChanged = (filters) => {
   if (filters.dateType) {
     currentFilters.dateType = filters.dateType;
     sessionStorage.setItem('audience_date_type', filters.dateType);
+
+    // التواريخ تخصّ custom وحده. بدون تفريغها يبقى مدى مخصّص سابق
+    // عالقاً بعد اختيار preset فيُرسَل معه (date-type=last_28_days&start_date=…).
+    if (filters.dateType !== 'custom') {
+      currentFilters.startDate = null;
+      currentFilters.endDate = null;
+    }
   }
   
   if (filters.startDate) currentFilters.startDate = filters.startDate;
@@ -259,7 +266,7 @@ main {
   min-height: 0;
   overflow: hidden;
   isolation: isolate; /* إنشاء سياق تراص جديد */
-  min-height: 484px;
+  min-height: 488px;
 }
 
 .component-wrapper {

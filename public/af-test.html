@@ -1,0 +1,14 @@
+<!doctype html><meta charset="utf-8">
+<style>
+:root{--primary:#26282D}
+body{background:#1B1C20;padding:40px;font-family:Heebo,sans-serif}
+.input-container{display:flex;align-items:center;gap:8px;border-radius:5px;background:var(--primary);
+  padding:8px 12px;position:relative;height:38px;width:460px;margin-bottom:20px}
+.formField{flex:1;border:none;outline:none;background:transparent;color:#6a6c6d;font-size:20px;font-weight:300;line-height:1}
+/* محاكاة خلفية الملء التلقائي في Chrome */
+.fake-autofill{background-color:rgb(232,240,254) !important}
+/* الإصلاح */
+.fixed{box-shadow:0 0 0 1000px var(--primary) inset;-webkit-text-fill-color:#fff}
+</style>
+<div class="input-container"><input class="formField fake-autofill" value="geheim1234"></div>
+<div class="input-container"><input class="formField fake-autofill fixed" value="geheim1234"></div>

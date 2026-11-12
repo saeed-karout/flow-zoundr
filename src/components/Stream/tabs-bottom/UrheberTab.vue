@@ -112,6 +112,7 @@ const getTitleLine3 = (title) => {
   width: 100%;
   max-width: 100%;
   min-height: 281px;
+  height: 100%;
 }
 
 .section {
@@ -127,6 +128,8 @@ const getTitleLine3 = (title) => {
   position: relative;
   width: 100%;
   max-width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .section .p {
@@ -138,7 +141,7 @@ const getTitleLine3 = (title) => {
   line-height: 0.6;
   letter-spacing: 0.9px;
   text-transform: uppercase;
-  padding-top: 3px;
+  flex-shrink: 0;
 }
 
 .top-song {
@@ -152,12 +155,16 @@ const getTitleLine3 = (title) => {
   border-radius: 20px;
   flex-wrap: nowrap;
   min-width: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .urheber-container {
   display: flex;
   gap: 20px;
   flex-wrap: nowrap;
+  height: 100%;
+  align-items: stretch;
 }
 
 .top-song::-webkit-scrollbar {
@@ -180,7 +187,7 @@ const getTitleLine3 = (title) => {
 .music-title {
   display: flex;
   width: 207px;
-  height: 207px;
+  height: 100%;
   justify-content: space-between;
   align-items: flex-end;
   border-radius: 20px;
@@ -189,6 +196,8 @@ const getTitleLine3 = (title) => {
   isolation: isolate;
   flex-shrink: 0;
   background: linear-gradient(135deg, rgba(0, 0, 0, 0.5), transparent);
+  min-height: 207px;
+  min-width: 207px;
 }
 
 .background-layer {
@@ -308,32 +317,59 @@ const getTitleLine3 = (title) => {
 }
 
 .title .sub-title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  color: #FFF;
+  /* line-height: 0.8 يجعل صندوق السطر 14.4px بينما صندوق المحرف 18px،
+     فيفيض 1.8px فوق وتحت ويقصّه overflow: hidden. نوسّع صندوق القصّ
+     بـ padding ونلغي أثره بـ margin سالب مساوٍ: المقاس الخارجي لا يتغيّر،
+     والـ gap في flexbox يُقاس بين الصناديق الخارجية — فالمسافات ثابتة تماماً. */
+  padding-block: 6px;
+  margin-block: -6px;
+  /* سطر واحد مع ... — nowrap أوثق من -webkit-line-clamp
+     الذي لا يقصّ في Chromium دون overflow: hidden. */
+  display: block;
+  align-self: stretch;
+  max-width: 90%;
+  white-space: nowrap;
+  overflow: hidden;
   text-overflow: ellipsis;
-  font-family: Heebo;
-  font-size: 18px;
-  font-style: normal;
-  font-weight: 700;
-  line-height: 0.6;
-  text-transform: uppercase;
+  
+color: var(--Main-Colors-White, #FFF);
+leading-trim: both;
+text-edge: cap;
+font-family: Heebo;
+font-size: 18px;
+font-style: normal;
+font-weight: 700;
+line-height: 0.8;
+text-transform: uppercase;
+  opacity: 0.7;
   transition: opacity 0.3s ease;
-  z-index: 150;
-  opacity: .7;
 }
 
 .info .p {
+  /* سطر واحد مع قصّ بـ ... للنص الطويل.
+     الـ line-height أصغر من 1 فيفيض المحرف خارج صندوق المحتوى،
+     وـ overflow: hidden وحده كان سيقصّ أعلى الحروف وأسفلها؛
+     لذلك نوسّع صندوق القصّ بـ padding ونلغي أثره بـ margin سالب
+     — فلا يتغيّر المقاس النهائي ولا الـ gap بين العناصر. */
+  display: block;
   align-self: stretch;
-  color: #FFF;
-  font-family: Heebo;
-  font-size: 14px;
-  font-style: normal;
-  font-weight: 300;
-  line-height: 0.6;
-  padding-top: 2px;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  // padding-top: 8px;
+  // padding-bottom: 6px;
+ color: var(--Main-Colors-White, #FFF);
+leading-trim: both;
+text-edge: cap;
+font-family: Heebo;
+font-size: 14px;
+font-style: normal;
+font-weight: 300;
+line-height: 1;
+align-self: stretch;
+  opacity: 0.7;
   transition: opacity 0.3s ease;
-  z-index: 150;
 }
 
 .music-title:hover .sub-title,

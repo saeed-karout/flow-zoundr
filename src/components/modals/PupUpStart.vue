@@ -2,13 +2,14 @@
   <div class="popup-overlay">
     <div class="main">
       <div class="top-line">
-        <div class="title">Dein erster Release!</div>
+        <div class="title">RECHTE & KI-MUSIK</div>
         <div class="subtitle">
-          Hey, Du erstellst gerade Deinen ersten Release bei uns, möchtest Du unsere Hilfe? 
-          Du kannst die Hilfe auch später jederzeit Um-/Ein- oder Ausschalten.
+         Wir bei ZOUNDR finden es großartig, dass heute jeder die Möglichkeit hat, sich auf seine eigene Weise musikalisch auszudrücken. ZOUNDR steht jedoch für echte Künstler, echte Kreativität und echte Musik. Deshalb akzeptieren und unterstützen wir keine KI-generierten Künstler oder Bands.
+Mit dem Hochladen Deiner Inhalte bestätigst Du außerdem, dass Du alle erforderlichen Rechte an den eingereichten Inhalten besitzt. Verwendest Du Musik, Aufnahmen, Samples oder andere Inhalte Dritter, musst Du über die dafür notwendigen Urheber-, Nutzungs- und/oder Leistungsschutzrechte verfügen.
+
         </div>
       </div>
-      <div class="content">
+      <!-- <div class="content">
         <iframe
           ref="vimeo_ref"
           class="vimeo-iframe"
@@ -16,10 +17,10 @@
           frameborder="0"
           allow="autoplay;"
         ></iframe>
-      </div>
+      </div> -->
       <div class="Buttons">
         <button class="button-primary" @click="$emit('deny')">
-          <span class="p">Nein Danke!</span>
+          <span class="p">VERSTANDEN</span>
         </button>
       </div>
     </div>
@@ -123,7 +124,7 @@ onUnmounted(() => {
   font-family: Heebo, sans-serif;
   font-size: 18px;
   font-weight: 300;
-  line-height: 1.2;
+
 }
 
 .content {
@@ -151,20 +152,20 @@ onUnmounted(() => {
 
 .button-primary {
   display: flex;
-  width: 160px;
+  
   padding: 12px 20px 13px 20px;
   justify-content: center;
   align-items: center;
   gap: 10px;
   border-radius: 5px;
-  background: var(--Main-Colors-Slate-Light, #3A3E42);
+  background:#dd1155;
   cursor: pointer;
   border: none;
 }
 
 .button-primary:hover {
   transition: 0.3s ease;
-  background: var(--Strawberry);
+  background: #990033;
 }
 
 .button-primary .p {

@@ -12,15 +12,14 @@
                 :class="{ 
                     'is-hovered': isHoveredForm6, 
                     'has-checkmark': isGtinValidComputed,
-                    'has-error': gtinError 
-                }"
+                    'has-error': gtinError}"
                 @mouseenter="$emit('mouseenterForm6')" 
                 @mouseleave="$emit('mouseleaveForm6')">
                 <input 
                     type="text" 
-                    class="input-field" 
+                    class="input-field" :class="{ 'is-correction': isCorrected('GTIN') }" 
                     v-model="localGtin" 
-                    placeholder="GTIN (13 Ziffern)"
+                    placeholder="GTIN "
                     :disabled="!isForm6Active" 
                     @input="onGtinInput"
                     @blur="validateGtinFinal"
@@ -57,13 +56,12 @@
                 :class="{ 
                     'is-hovered': isHoveredForm7, 
                     'has-checkmark': isCatalogValidComputed,
-                    'has-error': catalogError 
-                }"
+                    'has-error': catalogError}"
                 @mouseenter="$emit('mouseenterForm7')" 
                 @mouseleave="$emit('mouseleaveForm7')">
                 <input 
                     type="text" 
-                    class="input-field" 
+                    class="input-field" :class="{ 'is-correction': isCorrected('catalog_number') }" 
                     v-model="localCatalogNumber" 
                     placeholder="Katalognummer"
                     :disabled="!isForm7Active" 
@@ -90,8 +88,12 @@
 </template>
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue';
+import { useCorrections } from '@/composables/useCorrections';
 import { debounce } from '@/utils/debounce';
 import iconPlay from '@/assets/icons/play.png';
+
+// حقول مطلوب تصحيحها (Korrektur) → بوردر أحمر.
+const { isCorrected } = useCorrections();
 
 const props = defineProps({
     gtin: { type: String, default: '' },

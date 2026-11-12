@@ -6,7 +6,24 @@
     <div v-else-if="filteredTracks.length > 0" class="tracks-list">
       <div class="title">TrackList</div>
 
-      <div v-for="(track, index) in filteredTracks" :key="track.uuid" class="line" :class="{ 'has-warning': !isTrackComplete(track) }">
+      <div
+        v-for="(track, index) in filteredTracks"
+        :key="track.uuid"
+        class="line drag-handle"
+        :class="{
+          'has-warning': !isTrackComplete(track),
+          'is-dragging': dragIndex === index,
+          'drag-over': dragOverIndex === index && dragIndex !== index
+        }"
+        draggable="true"
+        @dragstart="onDragStart(index, $event)"
+        @dragover.prevent="onDragOver(index)"
+        @dragenter.prevent
+        @dragleave="onDragLeave(index)"
+        @drop.prevent="onDrop(index)"
+        @dragend="onDragEnd"
+      >
+       
         <div class="id">{{ formatTrackNumber(index) }}</div>
         <div class="check" v-if="isTrackComplete(track)">
           <img src="/icon/y.png" alt="Completed">
@@ -16,7 +33,7 @@
         </div>
         <div class="name-feeling">{{ getTrackDisplayTitle(track) || "Song Titel" }}</div>
         <div class="subtitle">{{ getArtistNameFromRelease() || "" }}</div>
-        
+
         <div class="button-edit" @click="editTrack(track.uuid)" title="">
           <svg xmlns="http://www.w3.org/2000/svg" width="23" height="21" viewBox="0 0 23 21" fill="currentColor" title="">
             <path d="M3.18477 14.1986C2.76556 13.908 2.73936 13.3796 3.10617 13.0361L17.4377 0.327954C17.8307 -0.0155099 18.5119 -0.0947708 18.9835 0.116592L20.4245 0.829939C20.8961 1.06772 20.9485 1.51687 20.5555 1.86033L5.85719 14.9384C5.46419 15.2818 4.80918 15.3083 4.38998 15.0176L3.18477 14.1986Z"/>
@@ -43,8 +60,8 @@
   <!-- زر Weiter zu Shops -->
   <div v-if="filteredTracks.length > 0" class="btn-right" 
      :class="{
-       'active': allTracksComplete && canProceedToShops && (!isPreReleaseActive.value || (uploadedImage.value && isReleaseDateSelected.value)),
-       'inactive': !allTracksComplete || !canProceedToShops || (isPreReleaseActive.value && (!uploadedImage.value || !isReleaseDateSelected.value))
+       'active': allTracksComplete && canProceedToShops && (!isPreReleaseActive || (uploadedImage && isReleaseDateSelected)),
+       'inactive': !allTracksComplete || !canProceedToShops || (isPreReleaseActive && (!uploadedImage || !isReleaseDateSelected))
      }"
      @click="handleNext">
     Weiter zu Shops
@@ -66,6 +83,7 @@ import { useRouter } from 'vue-router';
 import apiRequest from '@/lib/apiRequest';
 import ConfirmDeletePopup from '@/components/modals/ConfirmDeletePopup.vue';
 import { useReleaseStore } from '@/stores/release';
+import { computeTabCompletion, isSongComplete, isInstrumentalSong } from '@/utils/songCompletion';
 
 const router = useRouter();
 const releaseStore = useReleaseStore();
@@ -75,13 +93,13 @@ const props = defineProps({
   selectedCardIndex: { type: Number, default: null },
   tracks: { type: Array, default: () => [] },
   releaseUuid: { type: String, required: true },
-  songType: { type: String, default: '' },
+  audioQuality: { type: String, default: '' },
   isInSubLayout: { type: Boolean, default: false },
   releaseTitle: { type: String, default: '' },
   releaseArtists: { type: Array, default: () => [] }
 });
 
-const emit = defineEmits(['back', 'update:topLineImage', 'add-track', 'edit-track', 'delete-track', 'next']);
+const emit = defineEmits(['back', 'update:topLineImage', 'add-track', 'edit-track', 'delete-track', 'next', 'reorder-tracks']);
 
 // ========== Inject draftRelease ==========
 const draftRelease = inject('draftRelease', null);
@@ -89,6 +107,81 @@ const draftRelease = inject('draftRelease', null);
 // ========== Popup الحذف ==========
 const showDeletePopup = ref(false);
 const songToDelete = ref(null);
+
+// ========== Drag & Drop ==========
+const dragIndex = ref(null);
+const dragOverIndex = ref(null);
+const localOrder = ref([]);
+
+const onDragStart = (index, event) => {
+  dragIndex.value = index;
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', index.toString());
+};
+
+const onDragOver = (index) => {
+  if (dragIndex.value !== null && dragIndex.value !== index) {
+    dragOverIndex.value = index;
+  }
+};
+
+const onDragLeave = (index) => {
+  if (dragOverIndex.value === index) {
+    dragOverIndex.value = null;
+  }
+};
+
+const onDrop = async (toIndex) => {
+  const fromIndex = dragIndex.value;
+  dragOverIndex.value = null;
+  dragIndex.value = null;
+
+  if (fromIndex === null || fromIndex === toIndex) return;
+
+  // ✅ الحصول على الأغنية التي تم نقلها
+  const movedTrack = localOrder.value[fromIndex];
+  
+  // ✅ إعادة ترتيب القائمة المحلية
+  const reordered = [...localOrder.value];
+  const [moved] = reordered.splice(fromIndex, 1);
+  reordered.splice(toIndex, 0, moved);
+  localOrder.value = reordered;
+
+  // ✅ إعلام المكون الأب بالتغيير
+  emit('reorder-tracks', reordered);
+
+  // ✅ إرسال طلب PUT واحد فقط
+  try {
+    await apiRequest.put(
+      `/releases/${props.releaseUuid}/songs/${movedTrack}`,
+      { sort_order: toIndex + 1 }
+    );
+    console.log('✅ تم تحديث ترتيب الأغنية:', movedTrack, 'إلى:', toIndex + 1);
+    
+    // ✅ تحديث القائمة المحلية بترتيب جديد من الخادم (اختياري)
+    const response = await apiRequest.get(`/releases/${props.releaseUuid}/songs`);
+    if (response.data?.data) {
+      const updatedSongs = response.data.data;
+      localOrder.value = updatedSongs.map(s => s.uuid);
+      emit('reorder-tracks', localOrder.value);
+    }
+  } catch (err) {
+    console.error('❌ فشل تحديث ترتيب الأغنية:', err);
+    
+    // ✅ إعادة تحميل الترتيب الأصلي في حالة الفشل
+    const response = await apiRequest.get(`/releases/${props.releaseUuid}/songs`);
+    if (response.data?.data) {
+      const originalOrder = response.data.data.map(s => s.uuid);
+      localOrder.value = originalOrder;
+      emit('reorder-tracks', originalOrder);
+    }
+  }
+};
+
+const onDragEnd = () => {
+  dragIndex.value = null;
+  dragOverIndex.value = null;
+};
 
 // ========== استقبال حالة Pre-release من المكون الأب ==========
 const isPreReleaseActive = ref(false);
@@ -240,122 +333,22 @@ const hasValidContributors = (track) => {
   return hasArtist || hasFeature || hasProducer || hasPLine || hasOther;
 };
 // ========== دالة التحقق من اكتمال الأغنية ==========
+// ✅ تستخدم المصدر المشترك @/utils/songCompletion كي تتطابق قائمة الأغاني هنا مع
+//    علامات التبويبات في tabs.vue و Infos1 ومع isSongsComplete في المخزَّن.
 const isTrackComplete = (track) => {
   if (!track) return false;
-  
-  // ✅ 1. التحقق من Infos - تأكد من أن النتيجة boolean
-  const hasValidTitle = track.title && 
-    track.title !== 'Song Titel' &&
-    track.title.trim() !== '';
-  
-  const hasExplicitLyrics = track.explicit_lyrics && 
-    track.explicit_lyrics !== null && 
-    track.explicit_lyrics !== '';
-  
-  const hasTitleLanguage = track.title_language && 
-    track.title_language !== null && 
-    track.title_language !== '';
-  
-  const hasLyricsLanguage = track.lyrics_language && 
-    track.lyrics_language !== null && 
-    track.lyrics_language !== '';
-  
-  const infosComplete = 
-    (hasValidTitle === true) && 
-    (hasExplicitLyrics === true) && 
-    (hasTitleLanguage === true) && 
-    (hasLyricsLanguage === true);
-  
-  // ✅ 2. التحقق من Urheber
-  const komponistValid = track.authors?.composer && 
-    track.authors.composer.length > 0 && 
-    track.authors.composer.some(v => v?.trim() && v.trim().length >= 4 && v.trim().includes(' '));
-  
-  const textdichterValid = track.authors?.lyricist && 
-    track.authors.lyricist.length > 0 && 
-    track.authors.lyricist.some(v => v?.trim() && v.trim().length >= 4 && v.trim().includes(' '));
-  
-  const verlagValid = track.authors?.verlog && 
-    track.authors.verlog.length > 0 && 
-    track.authors.verlog.some(v => v?.trim() && v.trim() !== '');
-  
-  const cLineValid = track.authors?.c_line && 
-    track.authors.c_line.length > 0 && 
-    track.authors.c_line.some(v => v?.trim() && v.trim() !== '');
-  
-  const urheberComplete = 
-    (komponistValid === true) && 
-    (textdichterValid === true) && 
-    (verlagValid === true) && 
-    (cLineValid === true);
-  
-  // ✅ 3. التحقق من Mitwirkende
-  const hasArtist = track.contributors?.artist && 
-    track.contributors.artist.length > 0 && 
-    track.contributors.artist.some(a => a?.name?.trim() && a.name.trim() !== '');
-  
-  let hasFeature = true;
-  const hasFeatureData = track.contributors?.feature && track.contributors.feature.length > 0;
-  if (hasFeatureData) {
-    hasFeature = track.contributors.feature.some(f => f?.name?.trim() && f.name.trim() !== '');
-  }
-  
-  const hasPLine = track.contributors?.p_line && 
-    track.contributors.p_line.length > 0 && 
-    track.contributors.p_line.some(p => p?.name?.trim() && p.name.trim() !== '');
-  
-  const hasProducer = track.contributors?.producer && 
-    track.contributors.producer.length > 0 && 
-    track.contributors.producer.some(p => p?.name?.trim() && p.name.trim() !== '');
-  
-  let hasWeitere = true;
-  const hasWeitereData = track.contributors?.other_contributors && track.contributors.other_contributors.length > 0;
-  if (hasWeitereData) {
-    hasWeitere = track.contributors.other_contributors.some(w => 
-      w?.role?.trim() && w.role.trim() !== '' && 
-      w?.name?.trim() && w.name.trim() !== ''
-    );
-  }
-  
-  const mitwirkendeComplete = 
-    (hasArtist === true) && 
-    (hasFeature === true) && 
-    (hasPLine === true) && 
-    (hasProducer === true) && 
-    (hasWeitere === true);
-  
-  // ✅ 4. Deals دائماً مكتمل
-  const dealsComplete = true;
-  
-  // ✅ 5. Pre-Release
-  let preReleaseComplete = false;
-  const isPreReleaseActive = track.is_pre_release_active === true;
-  
-  if (!isPreReleaseActive) {
-    preReleaseComplete = true;
-  } else {
-    const hasImage = track.pre_release_image && track.pre_release_image !== null && track.pre_release_image !== '';
-    const hasDate = track.release_date && track.release_date !== null && track.release_date !== '';
-    preReleaseComplete = (hasImage === true) && (hasDate === true);
-  }
-  
-  // ✅ جميع التابات مكتملة
-  const isComplete = 
-    (infosComplete === true) && 
-    (urheberComplete === true) && 
-    (mitwirkendeComplete === true) && 
-    (dealsComplete === true) && 
-    (preReleaseComplete === true);
-  
-  console.log(`📌 [FirstSection] تحليل الأغنية: ${track.title || 'Untitled'}`);
-  console.log(`  infosComplete: ${infosComplete}`);
-  console.log(`  urheberComplete: ${urheberComplete}`);
-  console.log(`  mitwirkendeComplete: ${mitwirkendeComplete}`);
-  console.log(`  dealsComplete: ${dealsComplete}`);
-  console.log(`  preReleaseComplete: ${preReleaseComplete}`);
-  console.log(`  ✅ isComplete: ${isComplete}`);
-  
-  return isComplete === true;
+
+  const completion = computeTabCompletion(track);
+  const complete = isSongComplete(track);
+
+  console.log(`📌 [FirstSection] تحليل الأغنية: ${track.title || 'Untitled'}`, {
+    ...completion,
+    isInstrumental: isInstrumentalSong(track),
+    hasSongFile: !!track.song_file,
+    isComplete: complete
+  });
+
+  return complete;
 };
 // ========== ✅ التحقق من اكتمال جميع الأغاني ==========
 const allTracksComplete = ref(false);
@@ -382,18 +375,28 @@ const updateAllTracksComplete = () => {
   const allComplete = trackStatus.every(item => item.isComplete === true);
   allTracksComplete.value = allComplete;
   releaseStore.setSongsComplete(allComplete);
-  
+
+  // ✅ مزامنة draftRelease.songs مع الأغاني المحدّثة هنا. بدون ذلك يقرأ
+  //    determineStepFromRelease أعلاماً قديمة (deals/pre_release) لأغنية عُدّلت
+  //    للتو فيعيد ضبط isSongsComplete إلى false ويمنع "Weiter zu Shops".
+  if (releaseStore.draftRelease && Array.isArray(props.tracks)) {
+    releaseStore.draftRelease.songs = props.tracks.map(t => ({ ...t }));
+  }
+
   console.log(`📌 [FirstSection] جميع الأغاني مكتملة: ${allComplete}`);
   return trackStatus;
 };
 // ========== تصفية الأغاني ==========
 const filteredTracks = computed(() => {
-  if (!props.songType) {
-    return props.tracks;
+  if (localOrder.value.length === 0) {
+    return [...props.tracks].sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999));
   }
-  const filtered = props.tracks.filter(track => track.song_type === props.songType);
-  console.log(`📊 [FirstSection] filtered tracks: ${filtered.length} of ${props.tracks.length}`);
-  return filtered;
+  const order = localOrder.value;
+  return [...props.tracks].sort((a, b) => {
+    const ia = order.indexOf(a.uuid);
+    const ib = order.indexOf(b.uuid);
+    return (ia === -1 ? 9999 : ia) - (ib === -1 ? 9999 : ib);
+  });
 });
 
 // ========== 🔥 دالة تنسيق رقم الأغنية (01, 02, 03, ...) ==========
@@ -452,7 +455,7 @@ const addNewTrack = async (force = false) => {
     return;
   }
 
-  if (!props.songType) {
+  if (!props.audioQuality) {
     console.error('❌ نوع الأغنية غير محدد، الرجاء اختيار نوع أولاً');
     return;
   }
@@ -469,7 +472,7 @@ const addNewTrack = async (force = false) => {
     
     formData.append('title', trackTitle);
     formData.append('subtitle', '');
-    formData.append('song_type', props.songType);
+    formData.append('sort_order', filteredTracks.value.length + 1);
     
     console.log('🎵 إنشاء أغنية جديدة:', trackTitle);
 
@@ -505,12 +508,22 @@ const editTrack = (songUuid) => {
 
 // ========== الانتقال إلى الخطوة التالية ==========
 const handleNext = () => {
-  const isComplete = releaseStore.isSongsComplete === true;
-  
+  // ✅ نحسب الاكتمال من الأغاني الحالية مباشرةً (المصدر الحقيقي المحدّث) بدل
+  //    الاعتماد على releaseStore.isSongsComplete الذي قد يكون قديماً أو تخطّاه
+  //    قفل التحديث في الـ store، فيمنع المتابعة رغم اكتمال الأغاني فعلاً.
+  const isComplete =
+    filteredTracks.value.length > 0 &&
+    filteredTracks.value.every(t => isTrackComplete(t));
+
+  // نزامن قيمة الـ store مع الحقيقة حتى تتفق بقية الشاشة (الشريط/التنقل).
+  if (isComplete && releaseStore.isSongsComplete !== true) {
+    releaseStore.isSongsComplete = true;
+  }
+
   if (!isComplete) {
     console.warn('⚠️ لا يمكن المتابعة: بعض الأغاني غير مكتملة');
     window.dispatchEvent(new CustomEvent('show-toast', {
-      detail: { 
+      detail: {
         message: 'Bitte vervollständige alle Songs (Audio-Datei, Cover, Autoren und Mitwirkende).',
         type: 'warning'
       }
@@ -598,7 +611,7 @@ const confirmDelete = async (songUuid) => {
 // ✅ عند تغيير قائمة الأغاني
 watch(() => props.tracks, (newTracks) => {
   console.log('📊 [FirstSection] tracks updated:', newTracks.length);
-  
+
   if (newTracks.length > 0) {
     isLoadingTracks.value = false;
   } else {
@@ -608,19 +621,21 @@ watch(() => props.tracks, (newTracks) => {
       }
     }, 1000);
   }
-  
-  // ✅ تحليل جميع الأغاني
+
+  const sorted = [...newTracks].sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999));
+  localOrder.value = sorted.map(t => t.uuid);
+
   updateAllTracksComplete();
-  
+
   if (newTracks.length > 0) {
     isInitialLoad.value = false;
   }
 }, { immediate: true, deep: true });
 
-// ✅ عند تغيير songType
-watch(() => props.songType, (newType) => {
+// ✅ عند تغيير audioQuality
+watch(() => props.audioQuality, (newType) => {
   if (newType) {
-    console.log('📌 [FirstSection] songType changed to:', newType);
+    console.log('📌 [FirstSection] audioQuality changed to:', newType);
     // ✅ إعادة تحليل الأغاني
     updateAllTracksComplete();
   }
@@ -667,7 +682,7 @@ watch(() => releaseType.value, (newType) => {
 onMounted(async () => {
   console.log('🚀 [FirstSection] mounted');
   console.log('📌 tracks:', props.tracks.length);
-  console.log('📌 songType:', props.songType);
+  console.log('📌 audioQuality:', props.audioQuality);
   
   await nextTick();
   
@@ -743,6 +758,7 @@ defineExpose({
   max-height: 24px;
   border-radius: 8px;
   transition: background 0.2s ease;
+  overflow: hidden;
 }
 
 .button-edit,
@@ -752,7 +768,7 @@ defineExpose({
   justify-content: center;
   cursor: pointer;
   transition: all 0.3s ease;
-  width: 32px;
+  
   height: 32px;
   border-radius: 50%;
   background: transparent;
@@ -918,4 +934,27 @@ defineExpose({
   color: #6A6C6D;
   cursor: not-allowed;
 }
+
+.drag-handle {
+  overflow: hidden;
+  cursor: grab;
+  color: #6A6C6D;
+  flex-shrink: 0;
+
+  transition: color 0.2s ease;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.line:hover .drag-handle {
+  color: #FFF;
+}
+
+.line.is-dragging {
+  // opacity: 0.4;
+}
+
+
 </style>

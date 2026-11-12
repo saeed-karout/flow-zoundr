@@ -5,7 +5,7 @@ import authHeader from '@/services/auth-header';
 // 🔥 زيادة الـ timeout إلى 60 ثانية للملفات الكبيرة
 const apiRequest = axios.create({
   baseURL: api_url,
-  timeout: 60000, // 60 ثانية
+  timeout: 120000, // 120 ثانية
   maxContentLength: 50 * 1024 * 1024, // 50 MB
   maxBodyLength: 50 * 1024 * 1024, // 50 MB
 });

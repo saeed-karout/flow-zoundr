@@ -10,7 +10,7 @@
                     @set-active="setActiveTabBottom" 
                 />
             </div>
-            <div class="Content-Box">
+            <div class="Content-Box" @wheel="onWheel">
                 <div class="Fade-left"></div>
                 <div class="component-wrapper">
                     <component 
@@ -92,6 +92,29 @@ const currentTabData = computed(() => {
 
 const setActiveTabBottom = (tab) => {
     activeTabBottom.value = tab;
+};
+
+// عجلة الفأرة الرأسيّة تحرّك شريط البطاقات أفقياً.
+// المتصفّح لا يربط deltaY بـ overflow-x تلقائياً (إلا مع Shift)،
+// فنترجمه يدوياً — ونترك الصفحة تُمرّر عند بلوغ الطرفين.
+const onWheel = (e) => {
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;   // إيماءة أفقية أصلاً
+    const strip = e.currentTarget.querySelector('.top-song');
+    if (!strip) return;
+
+    const max = strip.scrollWidth - strip.clientWidth;
+    if (max <= 1) return;                                  // لا فائض يُمرّر
+
+    if ((e.deltaY < 0 && strip.scrollLeft <= 0) ||
+        (e.deltaY > 0 && strip.scrollLeft >= max - 1)) return;
+
+    // deltaMode: 0 بكسل، 1 أسطر (Firefox)، 2 صفحات
+    const step = e.deltaMode === 1 ? e.deltaY * 16
+               : e.deltaMode === 2 ? e.deltaY * strip.clientWidth
+               : e.deltaY;
+
+    e.preventDefault();
+    strip.scrollLeft += step;
 };
 </script>
 
@@ -175,6 +198,12 @@ const setActiveTabBottom = (tab) => {
     pointer-events: none;
 }
 
+
+@media (max-width:1599px) {
+    .Tab-content .Tabs{
+        justify-content: space-between;
+    }
+}
 @media (min-width:2075px) and (max-width:2560px) {
     .Tab-content .Tabs {
         justify-content: start;

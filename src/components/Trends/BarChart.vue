@@ -4,6 +4,9 @@
     
     <!-- Bars Container -->
     <div class="bars" ref="barsContainer">
+      <!-- بلا بيانات: لا تواريخ ولا 0€ — يبقى الرقم الكبير خلف الصندوق وحده.
+           الحاوية نفسها تبقى فيحتفظ الصندوق بارتفاعه. -->
+      <template v-if="hasData">
       <div 
         v-for="bar in displayedBars" 
         :key="bar.label" 
@@ -15,7 +18,7 @@
         <div 
           class="number" 
           :style="{ 
-            top: `calc(${barHeight}px - ${bar.percentage * (barHeight / 100)}px - 16px)`
+            top: `calc(${barHeight}px - ${bar.percentage * (barHeight / 100)}px + 16px )`
           }"
         >
           {{ formatNumber(hoveredBar.label === bar.label ? hoveredBar.value : bar.value) }}€
@@ -36,6 +39,7 @@
           <div class="hover-line"></div>
         </div>
       </div>
+      </template>
     </div>
 
     <!-- Background Watermark Number -->
@@ -75,7 +79,7 @@ const chartData = ref({
   dates: [],
   values: []
 });
-const barHeight = ref(340); // ارتفاع ثابت مثل الكود الأول
+const barHeight = ref(330); // ارتفاع ثابت مثل الكود الأول
 const barsContainer = ref(null);
 let fetchTimeout = null;
 let resizeObserver = null;
@@ -91,6 +95,10 @@ const hoveredBar = ref({
 const totalValue = computed(() => {
   return chartData.value.values.reduce((sum, val) => sum + val, 0);
 });
+
+const hasData = computed(() =>
+  chartData.value.values.some((value) => Number(value) > 0)
+);
 
 const maxValue = computed(() => {
   const max = Math.max(...chartData.value.values, 1);
@@ -176,7 +184,7 @@ const resetHoverData = () => {
 const updateBarHeight = () => {
   if (barsContainer.value) {
     const containerHeight = barsContainer.value.clientHeight;
-    const availableHeight = containerHeight - 40;
+    const availableHeight = containerHeight - 75;
     if (availableHeight > 100) {
       barHeight.value = availableHeight;
     } else {
@@ -203,6 +211,7 @@ const buildApiParams = () => {
     } else if (props.filters.dateType === 'last_12_months') {
       params.append('date-type', 'last_12_months');
     } else if (props.filters.dateType === 'custom' && props.filters.startDate && props.filters.endDate) {
+      params.append('date-type', 'custom');
       params.append('start_date', props.filters.startDate);
       params.append('end_date', props.filters.endDate);
     } else {
@@ -210,12 +219,9 @@ const buildApiParams = () => {
     }
   }
   
-  if (props.filters?.startDate && props.filters.dateType !== 'custom') {
-    params.append('start_date', props.filters.startDate);
-  }
-  if (props.filters?.endDate && props.filters.dateType !== 'custom') {
-    params.append('end_date', props.filters.endDate);
-  }
+  // التواريخ تُرسَل مع custom فقط، وهي مُضافة أعلاه في فرعه.
+  // سابقاً كانت تُرفق مع كلّ preset — وهذا تحديداً ما ولّد
+  // date-type=last_7_days&start_date=…&end_date=…
   
   // Array filters
   if (props.filters?.songUuid?.length) {
@@ -394,7 +400,7 @@ onUnmounted(() => {
   flex-direction: column;
   justify-content: flex-end;
   align-items: center;
-  gap: 8px;
+  gap: 27px;
   min-width: 0;
   cursor: pointer;
   transition: 0.3s ease;
@@ -425,7 +431,7 @@ onUnmounted(() => {
 
 .graph-month:hover .number {
   opacity: 1;
-  transform: translateX(-50%) translateY(-5px);
+  transform: translateX(-50%) translateY(-20px);
 }
 
 .graph-month .bar-graph {
@@ -491,11 +497,12 @@ onUnmounted(() => {
   color: #FFF;
   text-align: center;
   font-family: Heebo, sans-serif;
-  font-size: 14px;
+  font-size: 16px;
   font-style: normal;
   font-weight: 300;
   line-height: 0.6;
   letter-spacing: 0.7px;
+  opacity: 0.7;
   text-transform: uppercase;
   top: 0;
 }
@@ -572,24 +579,10 @@ onUnmounted(() => {
   }
 }
 
-@media (max-width: 1439px) {
-  .graph-month .bar-graph {
-    min-width: 30px;
-    max-width: 45px;
-  }
-  
-  .graph-month .month-container .p {
-    font-size: 10px;
-  }
-  
-  .graph-month .number {
-    font-size: 10px;
-  }
-  
-  .bg-number {
-    font-size: 120px;
-    letter-spacing: 6px;
-  }
+@media (min-width:1600px) and (max-width:2074px) {
+.bg-number{
+  font-size: 150px;
+}
 }
 
 @media (min-width: 2075px) and (max-width: 2560px) {

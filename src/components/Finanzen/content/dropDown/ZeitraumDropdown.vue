@@ -53,6 +53,9 @@
                         <div v-for="(day, index) in calendarDaysVon" :key="index" :class="['cal-day', {
                             'this-month': day.isCurrentMonth,
                             'active': isDayActive(day, 'von'),
+                            'in-range': isDayInRange(day),
+                            'custom-disabled': !isCustomMode,
+                            'future-disabled': isFutureDay(day),
                             'Current_day': isCurrentDay(day)
                         }]" @click.stop="selectDay(day, 'von')">
                             {{ day.date.getDate() }}
@@ -88,6 +91,9 @@
                         <div v-for="(day, index) in calendarDaysBis" :key="index" :class="['cal-day', {
                             'this-month': day.isCurrentMonth,
                             'active': isDayActive(day, 'bis'),
+                            'in-range': isDayInRange(day),
+                            'custom-disabled': !isCustomMode,
+                            'future-disabled': isFutureDay(day),
                             'Current_day': isCurrentDay(day)
                         }]" @click.stop="selectDay(day, 'bis')">
                             {{ day.date.getDate() }}
@@ -116,8 +122,12 @@ const emit = defineEmits(['select']);
 // ========== المتغيرات الأساسية ==========
 const isOpen = ref(false);
 const currentTitle = ref(props.title || 'Zeitraum');
-const activeItem = ref('last_year');
-const tempSelectedItem = ref('last_3_months');
+// الفلتر الافتراضي — نقطة واحدة يعود إليها Löschen وتبدأ منها المتغيرات.
+// (كان activeItem يبدأ بـ last_year و tempSelectedItem بـ last_3_months — تعارض بلا فائدة.)
+const DEFAULT_FILTER = 'last_year';
+
+const activeItem = ref(DEFAULT_FILTER);
+const tempSelectedItem = ref(DEFAULT_FILTER);
 const currentDateVon = ref(new Date());
 const currentDateBis = ref(new Date());
 const tempSelectedDaysVon = ref([]);
@@ -152,6 +162,9 @@ const currentMonthNameBis = computed(() => {
 
 const calendarDaysVon = computed(() => computeCalendarDays(currentMonthVon.value, currentYearVon.value));
 const calendarDaysBis = computed(() => computeCalendarDays(currentMonthBis.value, currentYearBis.value));
+
+// ✅ التقويمان لا يعملان إلا في خيار Individuell (custom).
+const isCustomMode = computed(() => tempSelectedItem.value === 'custom');
 
 const computeCalendarDays = (month, year) => {
     const firstDay = new Date(year, month, 1);
@@ -202,8 +215,34 @@ const isDayActive = (day, calendarType) => {
     return tempSelectedDaysBis.value.includes(dateStr);
 };
 
+// ✅ لا يُختار تاريخ بعد اليوم. كان المنع في applySelection فقط — أي بعد أن
+//    يختار المستخدم ويضغط Anwenden — فيُرفَض صامتاً في console. الآن يُمنَع من الأصل.
+const isFutureDay = (day) => {
+    const today = new Date();
+    const dayDate = new Date(day.date.getFullYear(), day.date.getMonth(), day.date.getDate());
+    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return dayDate > todayDate;
+};
+
+// ✅ حدود النطاق المختار (Von ← Bis) — تُحسب مرّة واحدة لا لكل يوم.
+const selectedRange = computed(() => {
+    const start = tempSelectedDaysVon.value[0] || null;
+    const end = tempSelectedDaysBis.value[0] || null;
+    if (!start || !end || start > end) return null;
+    return { start, end };
+});
+
+// ✅ كل يوم بين الطرفين — في التقويمين معاً — يأخذ لون النطاق.
+const isDayInRange = (day) => {
+    if (!day.isCurrentMonth) return false;
+    const range = selectedRange.value;
+    if (!range) return false;
+    const dateStr = day.date.toISOString().split('T')[0];
+    return dateStr >= range.start && dateStr <= range.end;
+};
+
 const selectDay = (day, calendarType) => {
-    if (!day.isCurrentMonth) return;
+    if (!day.isCurrentMonth || !isCustomMode.value || isFutureDay(day)) return;
 
     const dateStr = day.date.toISOString().split('T')[0];
 
@@ -250,6 +289,10 @@ const toggleDropdown = () => {
         tempSelectedItem.value = activeItem.value;
         tempSelectedDaysVon.value = activeRange.value.startDate ? [activeRange.value.startDate] : [];
         tempSelectedDaysBis.value = activeRange.value.endDate ? [activeRange.value.endDate] : [];
+
+        // ✅ متابعة الفلتر المطبّق: عند فتح القائمة على خيار جاهز نرسم مداه فوراً.
+        //    activeRange يُحفظ للمخصّص فقط، فكان التقويم يظهر فارغاً مع أن الفلتر مطبّق.
+        if (tempSelectedItem.value !== 'custom') showPresetOnCalendars(tempSelectedItem.value);
     } else {
         updateTitle();
     }
@@ -263,8 +306,60 @@ const closeDropdown = () => {
     tempSelectedDaysBis.value = activeRange.value.endDate ? [activeRange.value.endDate] : [];
 };
 
+// ✅ مدى كل خيار جاهز مقاساً من اليوم الحالي — ليُعرض على التقويمين.
+//    كان selectItem يضبط الخيار فقط دون أن يلمس التقويم، فيبقى فارغاً.
+    const toDateKey = (date) => date.toISOString().split('T')[0];
+
+    const presetRange = (value) => {
+      const now = new Date();
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const start = new Date(end);
+
+      switch (value) {
+    case 'last_3_months': start.setMonth(end.getMonth() - 3); break;
+    case 'last_6_months': start.setMonth(end.getMonth() - 6); break;
+    case 'last_9_months': start.setMonth(end.getMonth() - 9); break;
+    case 'this_year':     return { start: new Date(end.getFullYear(), 0, 1), end };
+        case 'last_month': return {
+          start: new Date(end.getFullYear(), end.getMonth() - 1, 1),
+          end: new Date(end.getFullYear(), end.getMonth(), 0)
+        };
+        case 'last_year': return {
+          start: new Date(end.getFullYear() - 1, 0, 1),
+          end: new Date(end.getFullYear() - 1, 11, 31)
+        };
+        default: return null;
+      }
+
+      return { start, end };
+    };
+
+    // يملأ التقويمين بمدى الخيار، وينقل كل تقويم إلى شهر طرفه حتى يُرى المدى.
+    const showPresetOnCalendars = (value) => {
+      const range = presetRange(value);
+      if (!range) {
+        tempSelectedDaysVon.value = [];
+        tempSelectedDaysBis.value = [];
+        return;
+      }
+      tempSelectedDaysVon.value = [toDateKey(range.start)];
+      tempSelectedDaysBis.value = [toDateKey(range.end)];
+      currentDateVon.value = new Date(range.start.getFullYear(), range.start.getMonth(), 1);
+
+      // ✅ إن وقع المدى كلّه في شهر واحد (Letzter Monat مثلاً) فتقويم Von يعرضه كاملاً؛
+      //    فلا فائدة من إظهار الشهر نفسه في Bis. نتركه على الشهر الحالي.
+      const sameMonth = range.start.getFullYear() === range.end.getFullYear()
+        && range.start.getMonth() === range.end.getMonth();
+      const now = new Date();
+      currentDateBis.value = sameMonth
+        ? new Date(now.getFullYear(), now.getMonth(), 1)
+        : new Date(range.end.getFullYear(), range.end.getMonth(), 1);
+    };
+
 const selectItem = (item) => {
     tempSelectedItem.value = item.value;
+    // Individuell يترك الاختيار للمستخدم؛ والبقية تُعرَض محسوبة من اليوم الحالي.
+    if (item.value !== 'custom') showPresetOnCalendars(item.value);
 };
 
 // ========== تطبيق الفلتر ==========
@@ -323,10 +418,20 @@ const applySelection = () => {
     tempSelectedDaysBis.value = [];
 };
 
+// ✅ Löschen: حذف ما أدخله المستخدم ثم إغلاق المكوّن.
+//    كان يفعل العكس: يُعيد نسخ القيم المطبّقة إلى الحقول (أي يستعيدها بدل حذفها)
+//    ولا يُغلق. ونمسح معها النطاق المطبّق وإلا استعادها toggleDropdown عند إعادة الفتح.
 const clearSelection = () => {
-    tempSelectedItem.value = activeItem.value;
-    tempSelectedDaysVon.value = activeRange.value.startDate ? [activeRange.value.startDate] : [];
-    tempSelectedDaysBis.value = activeRange.value.endDate ? [activeRange.value.endDate] : [];
+    tempSelectedDaysVon.value = [];
+    tempSelectedDaysBis.value = [];
+    activeRange.value = { startDate: null, endDate: null };
+
+    tempSelectedItem.value = DEFAULT_FILTER;
+    activeItem.value = DEFAULT_FILTER;
+    emit('select', { dateType: DEFAULT_FILTER });
+
+    updateTitle();
+    isOpen.value = false;
 };
 
 // ========== إغلاق القائمة عند النقر خارجها ==========
@@ -686,6 +791,25 @@ onUnmounted(() => {
     &:hover {
         background: rgba(221, 17, 85, 0.3);
     }
+}
+
+/* ✅ أيام النطاق بين Von و Bis — بلون النشط نفسه.
+   موضوعة قبل .active عمداً: الأولوية متساوية فيفوز اللاحق، فيبقى الطرفان مميّزين. */
+.calendar1 .calender-1 .in-range {
+    background: rgba(221, 17, 85, 0.50);
+    color: white;
+    font-weight: 700;
+}
+
+/* ✅ خارج وضع Individuell، والأيام بعد اليوم: معطّلة بصرياً ومنعاً. */
+.calendar1 .calender-1 .custom-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.calendar1 .calender-1 .future-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .calendar1 .calender-1 .active {

@@ -6,11 +6,11 @@
         
 
         <div class="top-line">
-          <div class="popup-title">Song Wirklich Löschen?</div>
+          <div class="popup-title">{{ title || 'Song Wirklich Löschen?' }}</div>
           <div class="sub-title">
-            Wenn Du Diesen Song löscht, ist dies unwiderruflich. Du kannst den Song aber erneut anlegen.
+            {{ message || 'Wenn Du Diesen Song löscht, ist dies unwiderruflich. Du kannst den Song aber erneut anlegen.' }}
           </div>
-         
+
         </div>
 
         <div class="popup-footer">
@@ -43,6 +43,15 @@ const props = defineProps({
     default: ''
   },
   songUuid: {
+    type: String,
+    default: ''
+  },
+  // نصوص اختيارية لإعادة استخدام البوب اب في سياقات أخرى (مثل حذف Entwurf/Release)
+  title: {
+    type: String,
+    default: ''
+  },
+  message: {
     type: String,
     default: ''
   }
@@ -120,6 +129,10 @@ watch(() => props.show, (newVal) => {
 
 
   .sub-title{
+    /* يحفظ 
+ في الرسالة فتُعرض على سطرين، دون أن يتغيّر شيء
+       للرسائل المكتوبة على سطر واحد (حذف الأغنية في FirstSection). */
+    white-space: pre-line;
     color: var(--Main-Colors-White, #FFF);
 text-align: center;
 font-family: Heebo;

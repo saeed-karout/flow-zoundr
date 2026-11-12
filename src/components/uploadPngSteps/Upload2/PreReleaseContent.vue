@@ -13,12 +13,13 @@
           
           <!-- Uploaded image covering the entire card -->
           <div v-if="uploadedImage && !isUploading" class="uploaded-image-container">
-            <img 
-              :src="uploadedImage" 
-              alt="Uploaded Cover" 
+            <img
+              :src="uploadedImage"
+              alt="Uploaded Cover"
               class="uploaded-image-full"
               @error="handleImageError"
             />
+            <span class="hover-change-text">Cover Ändern</span>
           </div>
           
           <!-- Default content when no image -->
@@ -44,7 +45,7 @@
             {{ errorMessage }}
           </div>
         </label>
-        <input id="cover-upload" type="file" :accept="allowedFileTypes.join(',')" class="hidden-input"
+        <input id="cover-upload" type="file" accept="image/jpeg,image/jpg" class="hidden-input"
           @change="handleFileUpload" :disabled="!isPreReleaseActive" ref="fileInput" />
       </div>
 
@@ -57,10 +58,12 @@
           </div>
         </div>
 
-        <div class="text2">
+        <!-- يُخفى بصرياً أثناء ظهور رسالة الخطأ (تجنّب التداخل) مع إبقاء مساحته كي لا
+             يتحرّك text1، ويعود للظهور عند اختفاء الرسالة. -->
+        <div class="text2" :class="{ 'text2-hidden': errorMessage }">
           <span>Du hast (noch) kein Cover für diese Single?</span>
           <div class="text-link">
-            <span>Coverbild des Albums übernehmen</span>
+            <span @click="useReleaseCover" :class="{ 'disabled': !isPreReleaseActive }">RELEASE COVER ÜBERNEHMEN</span>
           </div>
         </div>
       </div>
@@ -70,7 +73,7 @@
       <div class="preRelease-info">
         <div class="top-line">
           <span>Du möchtest diesen Song Pre-releasen?</span>
-          <div class="btn-switch" :class="{ active: isPreReleaseActive }" @click="togglePreRelease">
+          <div class="btn-switch" :class="{ active: isPreReleaseActive, 'is-correction': isSongCorrected('prerelease') }" @click="togglePreRelease">
             <img src="/icon/circle.svg" class="circle" alt="circle image" />
           </div>
         </div>
@@ -88,7 +91,7 @@
           <div class="Form">
             <div class="top-line" style="gap: 16px;">
               <span>Soll der gesamte Release mit dieser Single vorbestellbar sein?</span>
-              <div class="btn-switch" :class="{ active: isPreOrderActive }" @click="togglePreOrder">
+              <div class="btn-switch" :class="{ active: isPreOrderActive, 'is-correction': isSongCorrected('pre_order') }" @click="togglePreOrder">
                 <img src="/icon/circle.svg" class="circle" alt="circle image" />
               </div>
             </div>
@@ -99,14 +102,14 @@
                 :class="{ 
                   'is-hovered': isHoveredReleaseDate, 
                   'is-focused': isInputFocusedReleaseDate, 
-                  'has-checkmark': isReleaseDateSelected 
+                  'has-checkmark': isReleaseDateSelected
                 }"
                 @mouseenter="isHoveredReleaseDate = true"
                 @mouseleave="isHoveredReleaseDate = false"
               >
                 <input 
                   type="text" 
-                  class="input-field" 
+                  class="input-field" :class="{ 'is-correction': isSongCorrected('release_date') }" 
                   :value="selectedReleaseDate" 
                   readonly
                   @focus="openCalendar"
@@ -163,11 +166,13 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch, defineProps, nextTick, computed } from 'vue';
+import { useCorrections } from '@/composables/useCorrections';
 import CalendarPicker from '@/components/CalendarPicker.vue';
 import CircleProgress from 'vue3-circle-progress';
 import iconPlay from '@/assets/icons/play.png';
 import { storage_url } from '@/constants';
-import PreReleasePopup from '@/components/modals/PreReleasePopup.vue'; // ✅ استيراد البوب اب الجديد
+import { useReleaseStore } from '@/stores/release';
+import PreReleasePopup from '@/components/modals/PreReleasePopup.vue';
 
 
 const props = defineProps({
@@ -189,6 +194,9 @@ const props = defineProps({
   }
 });
 
+// حقول مطلوب تصحيحها (Korrektur) ← بوردر أحمر.
+const { isSongCorrected } = useCorrections(() => props.currentSong?.uuid);
+
 const emit = defineEmits([
   'update:form-data',
   'save-song',
@@ -196,15 +204,21 @@ const emit = defineEmits([
   'next',
   'enter-sub-layout',
   'exit-sub-layout',
-  'back-to-tracklist'
+  'back-to-tracklist',
+  'update-tab-completion'
 ]);
 
 // ========== متغير حالة المكون ==========
+const releaseStore = useReleaseStore();
 const isMounted = ref(false);
+let errorTimer = null;
 
 // ──── حالة حفظ البيانات ────
 const isSaving = ref(false);
 const saveQueue = ref([]);
+// آخر uuid حُمِّل فعلاً من props — لتمييز "إعادة تحميل نفس الأغنية أثناء الحفظ" (نتخطّاها
+// كي لا نكتب فوق تبديل المستخدم الذي لم يُدمَج بعد) عن "تبديل لأغنية أخرى" (نحمّلها).
+let lastLoadedUuid = null;
 
 // ──── Data initialization ────
 const isPreReleaseActive = ref(false);
@@ -222,6 +236,9 @@ const previousValues = ref({
   release_date: null
 });
 
+// لقطة القيم المُرسَلة والمنتظرة لردّ الخادم — تُثبّت في previousValues عند النجاح فقط.
+const pendingValues = ref(null);
+
 // State for release date input
 const isHoveredReleaseDate = ref(false);
 const isInputFocusedReleaseDate = ref(false);
@@ -234,7 +251,7 @@ const isUploading = ref(false);
 const isDragging = ref(false);
 const circleSize = ref(352);
 const borderWidth = ref(12);
-const allowedFileTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+const allowedFileTypes = ['image/jpeg', 'image/jpg'];
 const fileInput = ref(null);
 const errorMessage = ref('');
 
@@ -244,6 +261,10 @@ const uploadedFileData = ref(null);
 const showPreReleasePopup = ref(false);
 const popupSelectedDate = ref('');
 const popupDaysDifference = ref(0);
+
+// ========== ✅ متغيرات الإرسال ==========
+let lastSentCompletionData = '';
+let initialCompletionSent = false;
 
 // ========== 🔥 حساب التاريخ الموصى به (الجمعة القادمة بعد 7 أيام من اليوم) ==========
 const computeRecommendedDate = () => {
@@ -318,14 +339,16 @@ const artistName = computed(() => {
 });
 
 const songTitle = computed(() => {
-  if (props.currentSong?.title) {
-    return props.currentSong.title;
+  let title = props.currentSong?.title || props.formData?.title || '';
+  if (title) {
+    const parts = title.split(' ');
+    if (/^\d{2}$/.test(parts[0])) {
+      const display = parts.slice(1).join(' ');
+      if (display && display !== 'Song Titel') return display;
+    } else if (title !== 'Song Titel') {
+      return title;
+    }
   }
-  
-  if (props.formData?.title) {
-    return props.formData.title;
-  }
-  
   return 'song title';
 });
 
@@ -375,7 +398,8 @@ const handlePopupUpdateDate = (newDate) => {
   selectedReleaseDate.value = newDate;
   isReleaseDateSelected.value = true;
   showPreReleasePopup.value = false;
-  
+  closeCalendar();
+
   // حفظ التغيير
   sendUpdate();
   
@@ -384,10 +408,22 @@ const handlePopupUpdateDate = (newDate) => {
   }, 300);
 };
 
-// ========== 🔥 إغلاق البوب اب ==========
+// ========== 🔥 إغلاق البوب اب («Nein Danke!») ==========
+//   المستخدم رفض التاريخ المُوصى به لكنه اختار يوماً — فنُثبّت اليوم الذي اختاره
+//   (popupSelectedDate) بدل تجاهله وإغلاق البوب اب فقط.
 const handlePopupClose = () => {
-  console.log('🔄 [PreReleaseContent] إغلاق البوب اب');
+  console.log('🔄 [PreReleaseContent] إغلاق البوب اب مع تثبيت التاريخ المختار:', popupSelectedDate.value);
   showPreReleasePopup.value = false;
+
+  if (popupSelectedDate.value) {
+    selectedReleaseDate.value = popupSelectedDate.value;
+    isReleaseDateSelected.value = true;
+    closeCalendar();
+    sendUpdate();
+    setTimeout(() => {
+      emitTabCompletion();
+    }, 300);
+  }
 };
 
 // ========== 🔥 دالة إغلاق الكالندر عند النقر خارجها ==========
@@ -514,6 +550,12 @@ const handleSaveComplete = (event) => {
   
   if (success) {
     console.log('✅ PreReleaseContent: تم استلام إشارة نجاح الحفظ للأغنية:', songUuid);
+
+    // ✅ الآن فقط نعتمد اللقطة المُرسَلة كمرجع للمقارنة.
+    if (pendingValues.value) {
+      previousValues.value = { ...pendingValues.value };
+      pendingValues.value = null;
+    }
     
     if (data?.cover) {
       console.log('🖼️ PreReleaseContent: تحديث الصورة من استجابة الخادم:', data.cover);
@@ -547,7 +589,10 @@ const handleSaveComplete = (event) => {
     }, 300);
     
   } else {
-    console.warn('⚠️ PreReleaseContent: فشل الحفظ:', error);
+    // ✅ فشل الحفظ → نُسقط اللقطة المعلّقة ونُبقي المرجع القديم، فيُعاد إرسال
+    //    التغيير عند أوّل محاولة تالية بدل أن يضيع إلى الأبد.
+    pendingValues.value = null;
+    console.warn('⚠️ PreReleaseContent: فشل الحفظ، لم يُثبّت المرجع — سيُعاد الإرسال:', error);
   }
   
   isSaving.value = false;
@@ -574,7 +619,17 @@ const updateFromProps = () => {
   }
   
   if (!props.currentSong?.uuid) return;
-  
+
+  // ✅ أثناء وجود حفظ قيد التنفيذ لنفس الأغنية، لا نُزامن الحقول من props لأنها لا تزال
+  //   تحمل القيمة القديمة (قبل دمج ردّ الحفظ)، فالمزامنة ترتدّ بتبديل المستخدم (مثلاً
+  //   Pre-Release) وتُحدث تذبذباً false→true→false. بعد اكتمال الحفظ ودمج القيمة الصحيحة
+  //   يُعاد التحميل تلقائياً. أما التبديل لأغنية مختلفة (uuid جديد) فنُحمّله دائماً.
+  if (isSaving.value && props.currentSong.uuid === lastLoadedUuid) {
+    console.log('⏭️ PreReleaseContent: تخطي المزامنة (حفظ قيد التنفيذ لنفس الأغنية)');
+    return;
+  }
+  lastLoadedUuid = props.currentSong.uuid;
+
   console.log('🔄 PreReleaseContent: Updating from currentSong', {
     uuid: props.currentSong.uuid,
     prerelease: props.currentSong.prerelease,
@@ -628,6 +683,22 @@ const updateFromProps = () => {
     }
   }
   
+  // ✅ إن كان علم الخادم المحفوظ (pre_release_step_completed) لا يطابق الاكتمال الفعلي
+  //   المحسوب — مثلاً محفوظ true بينما Pre-Release مفعّل بلا غلاف/تاريخ = false — نُصفّر
+  //   مانع التكرار كي يمرّ الإرسال فيُثبّت Infos1 القيمة الصحيحة على الخادم. بدون ذلك
+  //   يبقى التعارض للأبد لأن الـ dedup يظنّ أنه أرسل القيمة مسبقاً.
+  // ✅ العلم pre_release_step_completed مزلاج (latch): يُرفع إلى true ولا يعود أبداً.
+  //    لذلك نفرض إعادة الإرسال في اتجاه واحد فقط: المحفوظ false والفعلي true.
+  //    كان الشرط هنا يشمل الاتجاه المعاكس أيضاً، فيدفع false إلى الخادم ويُلغي
+  //    تقدّماً محفوظاً.
+  const savedFlag = props.currentSong.pre_release_step_completed === true;
+  const actualComplete = isTabComplete('pre-release');
+  if (!savedFlag && actualComplete) {
+    lastSentCompletionData = '';
+    initialCompletionSent = false;
+    console.log('🔁 PreReleaseContent: الاكتمال صار true والمحفوظ false → فرض إعادة الإرسال');
+  }
+
   setTimeout(() => {
     emitTabCompletion();
   }, 300);
@@ -809,14 +880,17 @@ const sendUpdate = () => {
   }
   
   console.log('📤 PreReleaseContent: Sending changes only:', payload);
-  
-  previousValues.value = {
+
+  // ✅ لا نُثبّت المرجع إلا بعد نجاح الحفظ. كان يُحدّث هنا تفاؤلياً، فإن فشل
+  //    الطلب (أو أُسقطت حقوله لاحقاً) ظنّ المكوّن أن القيمة محفوظة فلم يُعد إرسالها
+  //    أبداً — وهذا سبب ضياع تاريخ الإصدار المدخَل.
+  pendingValues.value = {
     prerelease: prereleaseValue,
     pre_order: isPreReleaseActive.value ? (isPreOrderActive.value ? 1 : 0) : null,
     cover: isPreReleaseActive.value ? uploadedFileData.value : null,
     release_date: isPreReleaseActive.value ? apiFormattedDate : null
   };
-  
+
   isSaving.value = true;
   emit('save-song', payload);
 };
@@ -894,7 +968,6 @@ const updateReleaseDate = (displayDate) => {
   if (showPopup) {
     // ✅ نعرض البوب اب ونحتفظ بالتاريخ المختار
     console.log('📅 [PreReleaseContent] تاريخ مختار قريب جداً، إظهار البوب اب');
-    // لا نغلق الكالندر حتى يتمكن المستخدم من الرؤية
     return;
   }
   
@@ -915,6 +988,80 @@ const updateReleaseDate = (displayDate) => {
   }, 300);
 };
 
+// ──── Image validation ────
+const validateImageDimensions = (file) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      if (img.width === 3000 && img.height === 3000) {
+        resolve(true);
+      } else {
+        reject(`Die Bildgröße muss genau 3.000 x 3.000 Pixel betragen. Aktuelle Größe: ${img.width} x ${img.height} px`);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject('Die Bilddatei ist beschädigt oder ungültig.');
+    };
+    img.src = url;
+  });
+};
+
+const validateFileType = (file) => {
+  const validTypes = ['image/jpeg'];
+  const validExtensions = ['.jpg', '.jpeg'];
+  const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+  return validTypes.includes(file.type) && validExtensions.includes(fileExtension);
+};
+
+const setError = (msg) => {
+  errorMessage.value = msg;
+  if (errorTimer) clearTimeout(errorTimer);
+  errorTimer = setTimeout(() => {
+    errorMessage.value = '';
+  }, 3000);
+};
+
+// ──── Use release cover ────
+const useReleaseCover = async () => {
+  if (!isMounted.value) return;
+  if (!isPreReleaseActive.value) return;
+
+  const coverUrl = releaseStore.serverCoverUrl;
+  if (!coverUrl || coverUrl === '/img/bgCardSongs/card1.png' || coverUrl.includes('bgCardSongs/card1.png')) {
+    setError('Kein Release-Cover vorhanden.');
+    return;
+  }
+
+  errorMessage.value = '';
+  isUploading.value = true;
+  fileProgress.value = 0;
+
+  try {
+    const response = await fetch(coverUrl);
+    if (!response.ok) throw new Error('Failed to fetch release cover');
+
+    const blob = await response.blob();
+    const coverFile = new File([blob], 'release-cover.jpg', { type: blob.type || 'image/jpeg' });
+
+    file.value = {
+      id: Date.now(),
+      name: coverFile.name,
+      file: coverFile,
+      status: 'uploading',
+      progress: 0,
+    };
+
+    await uploadFile(file.value);
+  } catch (error) {
+    console.error('❌ PreReleaseContent: Failed to use release cover:', error);
+    setError('Fehler beim Übernehmen des Release-Covers.');
+    isUploading.value = false;
+  }
+};
+
 // ──── Handle image upload ────
 const triggerFileInput = () => {
   if (!isMounted.value) return;
@@ -927,24 +1074,32 @@ const triggerFileInput = () => {
 const handleFileUpload = async (event) => {
   if (!isMounted.value) return;
   if (!isPreReleaseActive.value) return;
-  
-  const uploadedFile = event.target.files[0] || event.dataTransfer.files[0];
+
+  const uploadedFile = event.target.files?.[0] || event.dataTransfer?.files?.[0];
   if (!uploadedFile) {
-    errorMessage.value = 'No file selected.';
-    return;
-  }
-
-  if (!allowedFileTypes.includes(uploadedFile.type)) {
-    errorMessage.value = 'Please upload a JPEG or PNG file.';
-    return;
-  }
-
-  if (uploadedFile.size > 10 * 1024 * 1024) {
-    errorMessage.value = 'File exceeds maximum size of 10 MB.';
     return;
   }
 
   errorMessage.value = '';
+  if (errorTimer) clearTimeout(errorTimer);
+
+  if (!validateFileType(uploadedFile)) {
+    setError('Nur JPEG Dateien sind erlaubt.');
+    return;
+  }
+
+  if (uploadedFile.size > 10 * 1024 * 1024) {
+    setError('Maximale Dateigröße ist 10 MB.');
+    return;
+  }
+
+  try {
+    await validateImageDimensions(uploadedFile);
+  } catch (err) {
+    setError(err);
+    return;
+  }
+
   file.value = {
     id: Date.now(),
     name: uploadedFile.name,
@@ -954,7 +1109,7 @@ const handleFileUpload = async (event) => {
   };
   fileProgress.value = 0;
   isUploading.value = true;
-  
+
   await uploadFile(file.value);
 };
 
@@ -1039,7 +1194,7 @@ const uploadFile = async (fileObj) => {
     console.error('❌ PreReleaseContent: Failed to upload image:', error);
     if (!isMounted.value) return;
     
-    errorMessage.value = 'Error uploading file.';
+    setError('Fehler beim Hochladen der Datei.');
     fileObj.status = 'failed';
     fileProgress.value = 0;
     isUploading.value = false;
@@ -1079,7 +1234,7 @@ const handleDrop = (event) => {
   
   const files = event.dataTransfer.files;
   if (files.length > 1) {
-    errorMessage.value = 'Only one file can be uploaded.';
+    setError('Es kann nur eine Datei hochgeladen werden.');
     return;
   }
   
@@ -1092,21 +1247,25 @@ const handleDrop = (event) => {
 // ========== ✅ التحقق من اكتمال التاب ==========
 const isTabComplete = (tabId) => {
   if (tabId === 'pre-release') {
-    // ✅ إذا كان Pre-Release غير نشط، فهو مكتمل تلقائياً
+    // ✅ زر Pre-Release مُعطّل → التبويب مكتمل تلقائياً (حالة الدخول الأول). هنا يفيد
+    //    علم pre_release_step_completed المحفوظ (يبقى true ما دام الزر معطّلاً).
     if (!isPreReleaseActive.value) {
       console.log('📌 [PreReleaseContent] Pre-Release is inactive, tab is complete');
       return true;
     }
-    
-    // ✅ إذا كان Pre-Release نشط، يجب أن تكون الصورة والتاريخ موجودين
-    const hasImage = uploadedImage.value && uploadedImage.value !== '';
-    const hasDate = isReleaseDateSelected.value && selectedReleaseDate.value && selectedReleaseDate.value !== '';
+
+    // ✅ زر Pre-Release مُفعّل → يجب توفّر الغلاف (cover) وتاريخ الإصدار (release_date)
+    //    معاً. (Pre-Order اختياري ولا يؤثّر في الاكتمال.)
+    // ⚠️ نُحوّل إلى boolean صريح بـ !!(...) لأن uploadedImage.value قد يكون null، فتُعيد
+    //    && القيمة null بدل false — وكان ذلك يُرسَل كـ "null" ويكسر منطق المقارنة/الإرسال.
+    const hasImage = !!(uploadedImage.value && uploadedImage.value !== '');
+    const hasDate = !!(isReleaseDateSelected.value && selectedReleaseDate.value && selectedReleaseDate.value !== '');
     const result = hasImage && hasDate;
-    
-    console.log('📌 [PreReleaseContent] isTabComplete:', result, { 
-      hasImage, 
-      hasDate, 
-      isActive: isPreReleaseActive.value 
+
+    console.log('📌 [PreReleaseContent] isTabComplete:', result, {
+      hasImage,
+      hasDate,
+      isActive: isPreReleaseActive.value
     });
     return result;
   }
@@ -1114,20 +1273,59 @@ const isTabComplete = (tabId) => {
 };
 
 // ========== ✅ دالة إرسال تحديث الاكتمال ==========
+// نقرة واحدة على زر Pre-Release تُطلق عدة مصادر لـ emitTabCompletion (الزر نفسه + مراقِب
+// isPreReleaseActive + مراقِب الصورة/التاريخ + إعادة الحساب بعد الحفظ). نُجمّعها في تنفيذ
+// واحد عبر debounce قصير كي لا يتكرّر العمل ويختفي الإحساس بأن الأمر يُنفَّذ مرتين.
+let emitCompletionTimer = null;
 const emitTabCompletion = () => {
+  if (emitCompletionTimer) clearTimeout(emitCompletionTimer);
+  emitCompletionTimer = setTimeout(() => {
+    emitCompletionTimer = null;
+    runEmitTabCompletion();
+  }, 60);
+};
+
+const runEmitTabCompletion = () => {
   const isComplete = isTabComplete('pre-release');
   console.log('📌 [PreReleaseContent] Emitting tab completion:', isComplete);
   
-  // ✅ إرسال كلا الحدثين لضمان التحديث
+  // ✅ حفظ البيانات للإرسال
+  const completionData = {
+    'pre-release': isComplete
+  };
+  
+  // ✅ منع الإرسال المتكرر لنفس البيانات
+  const dataStr = JSON.stringify(completionData);
+  if (dataStr === lastSentCompletionData && initialCompletionSent) {
+    console.log('ℹ️ [PreReleaseContent] No change in completion status, skipping emit');
+    return;
+  }
+  
+  lastSentCompletionData = dataStr;
+  initialCompletionSent = true;
+  
+  // ✅ 1. إرسال عبر emit إلى المكون الأب
+  emit('update-tab-completion', completionData);
+  
+  // ✅ 2. إرسال تحديث form-data
   emit('update:form-data', {
     tab: 'pre-release',
     data: { isComplete }
   });
   
-  // ✅ إرسال التحديث مباشرة إلى الـ Store عبر المكون الأب
-  emit('update-tab-completion', {
-    'pre-release': isComplete
+  // ✅ 3. لا نكتب في المخزَّن مباشرةً — update:form-data أعلاه يصل إلى Infos1 (الكاتب
+  //    الوحيد) الذي يحفظ أيضاً pre_release_step_completed على الخادم. كان النداء هنا
+  //    بصيغة خاطئة updateTabCompletion('pre-release', isComplete) فيرفضه المخزَّن.
+
+  // ✅ 4. إرسال حدث مخصص
+  const event = new CustomEvent('tab-completion-update', {
+    detail: {
+      tab: 'pre-release',
+      data: completionData
+    }
   });
+  window.dispatchEvent(event);
+  console.log('📌 [PreReleaseContent] Dispatched custom event: tab-completion-update');
 };
 
 // ========== ✅ Computed tabCompletion ==========
@@ -1207,15 +1405,19 @@ onMounted(() => {
   
   window.addEventListener('save-song-complete', handleSaveComplete);
   
+  // ✅ إرسال الاكتمال عند التحميل مع تأخير للتأكد من تحميل كل شيء
   setTimeout(() => {
     emitTabCompletion();
+    console.log('📌 [PreReleaseContent] Initial completion sent');
   }, 500);
 });
 
 onBeforeUnmount(() => {
   isMounted.value = false;
+  if (errorTimer) clearTimeout(errorTimer);
+  if (emitCompletionTimer) clearTimeout(emitCompletionTimer);
   console.log('🔄 PreReleaseContent: Unmounted');
-  
+
   window.removeEventListener('resize', updateCircleSize);
   window.removeEventListener('save-song-complete', handleSaveComplete);
   document.removeEventListener('click', handleClickOutside);
@@ -1231,26 +1433,30 @@ onBeforeUnmount(() => {
     }
   }
 });
+
 // ========== مراقبة تغييرات isPreReleaseActive ==========
 watch(() => isPreReleaseActive.value, (newVal) => {
   console.log('🔄 PreReleaseContent: isPreReleaseActive changed to', newVal);
   
-  // ✅ إذا تم إلغاء التفعيل، نرسل اكتمال
-  if (!newVal) {
-    setTimeout(() => {
-      emitTabCompletion();
-    }, 300);
-  } else {
-    // ✅ إذا تم التفعيل، نتحقق من اكتمال الحقول
-    setTimeout(() => {
-      emitTabCompletion();
-    }, 300);
-  }
+  // ✅ إرسال الاكتمال عند أي تغيير
+  setTimeout(() => {
+    emitTabCompletion();
+  }, 300);
 });
+
+// ========== مراقبة تغييرات الصورة والتاريخ ==========
+watch([() => uploadedImage.value, () => isReleaseDateSelected.value], () => {
+  console.log('🔄 PreReleaseContent: Image or date changed, checking completion');
+  setTimeout(() => {
+    emitTabCompletion();
+  }, 300);
+});
+
 defineExpose({
   isTabComplete,
   canGoToTracklist,
-  emitTabCompletion 
+  emitTabCompletion,
+  tabCompletion
 });
 
 </script>
@@ -1342,7 +1548,23 @@ defineExpose({
 }
 
 .card-upload-single-cover.has-image {
-  border: 2px solid var(--Main-Colors-White, #FFF);
+  border: 2px solid ;
+}
+
+.card-upload-single-cover.has-image::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  // background-color: rgba(35, 35, 35, 0.5);
+  border-radius: 18px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.card-upload-single-cover.has-image:hover::before {
+  opacity: 1;
 }
 
 .card-upload-single-cover.drag-over {
@@ -1390,6 +1612,32 @@ defineExpose({
   height: 100%;
   object-fit: cover;
   border-radius: 20px;
+}
+
+.hover-change-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  text-align: center;
+  font-family: Heebo;
+  font-size: clamp(1.5rem, 2.7vw, 2.8rem);
+  font-weight: bold;
+  text-transform: uppercase;
+  border-radius: 20px;
+  opacity: 0;
+  transform: translateY(80px);
+  transition: opacity 0.3s ease, transform 0.4s ease;
+  z-index: 3;
+  pointer-events: none;
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+}
+
+.card-upload-single-cover.has-image:hover .hover-change-text {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .default-upload-content {
@@ -1529,6 +1777,11 @@ defineExpose({
   gap: 12px;
 }
 
+/* إخفاء بصري مع الحفاظ على المساحة كي لا يتغيّر مكان/شكل text1 */
+.text2-hidden {
+  visibility: hidden;
+}
+
 .text2 span {
   color: var(--Main-Colors-White, #FFF);
   text-align: center;
@@ -1559,6 +1812,18 @@ defineExpose({
   text-decoration-thickness: auto;
   text-underline-offset: auto;
   text-underline-position: from-font;
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.text2 .text-link span.disabled {
+  color: var(--Main-Colors-White, #6A6C6D);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.text2 .text-link span:hover:not(.disabled) {
+  color: var(--Main-Colors-Strawberry, #D15);
 }
 
 :deep(.circle-progress__circle) {
@@ -1849,7 +2114,7 @@ defineExpose({
 
 @media (max-width:1800px) {
   .section-input{
-    max-width: 135px;
+    max-width: 150px;
   }
 
   .section-input .spacer .play.visible{

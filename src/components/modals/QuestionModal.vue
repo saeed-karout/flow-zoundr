@@ -6,11 +6,11 @@
         <div class="modal-content">
           <button type="button" class="btn-closee" data-bs-dismiss="modal" aria-label="Close"></button>
           <div class="modal-header">
-            <h5 class="modal-title" :id="modalId + 'Label'">{{ reference === 'KONTAKT_RIGHTS' ? 'WIE KÖNNEN WIR DIR HELFEN?' : 'FAQ - STELLE DEINE FRAGE' }}</h5>
+            <h5 class="modal-title" :id="modalId + 'Label'">{{ reference === 'KONTAKT_FLOW' ? 'WIE KÖNNEN WIR DIR HELFEN?' : 'FAQ - STELLE DEINE FRAGE' }}</h5>
           </div>
           <div class="modal-body">
-            <p>{{ reference === 'KONTAKT_RIGHTS' ? 'Trage hier Deine Frage ein und wir werden uns zeitnah bei Dir melden!' : 'Stelle uns Deine Frage zu den FAQs!' }}</p>
-            <textarea :placeholder="reference === 'KONTAKT_RIGHTS' ? 'Deine Frage...' : 'Deine FAQ-Frage...'" v-model="question"></textarea>
+            <p>{{ reference === 'KONTAKT_FLOW' ? 'Trage hier Deine Frage ein und wir werden uns zeitnah bei Dir melden!' : 'Stelle uns Deine Frage zu den FAQs!' }}</p>
+            <textarea :placeholder="reference === 'KONTAKT_FLOW' ? 'Deine Frage...' : 'Deine FAQ-Frage...'" v-model="question"></textarea>
           </div>
           <div class="modal-footer">
             <button
@@ -44,8 +44,8 @@ export default {
     },
     reference: {
       type: String,
-      default: 'KONTAKT_RIGHTS',
-      validator: (value) => ['KONTAKT_RIGHTS', 'FAQ_RIGHTS'].includes(value),
+      default: 'KONTAKT_FLOW',
+      validator: (value) => ['KONTAKT_FLOW', 'FAQ_FLOW'].includes(value),
     },
   },
   data() {
@@ -105,20 +105,27 @@ export default {
           this.resetModal();
         } catch (error) {
           console.error('Error sending email:', error.response?.data || error.message);
-          alert('Fehler beim Senden der Nachricht. Bitte versuche es erneut.');
+       
         } finally {
           this.isLoading = false;
         }
       } else {
-        alert('Bitte melde dich an, um eine Nachricht zu senden.');
+       
       }
     },
     openModal() {
       const modal = document.getElementById(this.modalId);
-      if (modal) {
-        const bootstrapModal = new window.bootstrap.Modal(modal);
-        bootstrapModal.show();
+      if (!modal) {
+        console.error('QuestionModal: لا يوجد عنصر بالمعرّف', this.modalId);
+        return;
       }
+      const Modal = window.bootstrap?.Modal;
+      if (!Modal) {
+        console.error('QuestionModal: Bootstrap JS غير محمّل — تعذّر فتح النافذة');
+        return;
+      }
+      // getOrCreateInstance بدل new: النقر المتكرّر كان ينشئ نسخةً وخلفيةً جديدتين.
+      Modal.getOrCreateInstance(modal).show();
     },
     resetModal() {
       this.question = '';

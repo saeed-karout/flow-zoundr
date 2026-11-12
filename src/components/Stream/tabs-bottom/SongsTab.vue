@@ -109,7 +109,7 @@ const formatNumber = (num) => {
   line-height: 0.6;
   letter-spacing: 0.9px;
   text-transform: uppercase;
-  padding-top: 3px;
+
   flex-shrink: 0;
 }
 
@@ -237,48 +237,81 @@ const formatNumber = (num) => {
 }
 
 .title .sub-title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  color: var(--Main-Colors-White, #FFF);
+  /* سطر واحد مع ... — nowrap أوثق من -webkit-line-clamp
+     الذي لا يقصّ في Chromium دون overflow: hidden. */
+  display: block;
+  align-self: stretch;
+  max-width: 95%;
+  white-space: nowrap;
+
   text-overflow: ellipsis;
-  font-family: Heebo;
-  font-size: 14px;
-  font-style: normal;
-  font-weight: 700;
-  line-height: 0.6;
-  text-transform: uppercase;
+
+color: var(--Main-Colors-White, #FFF);
+leading-trim: both;
+text-edge: cap;
+font-family: Heebo;
+font-size: 14px;
+font-style: normal;
+font-weight: 700;
+line-height: 0.70;
+text-transform: uppercase;
   opacity: 0.3;
   transition: opacity 0.3s ease;
 }
 
 .title .span {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
+  /* line-height: 0.8 يجعل صندوق السطر 14.4px بينما صندوق المحرف 18px،
+     فيفيض 1.8px فوق وتحت ويقصّه overflow: hidden. نوسّع صندوق القصّ
+     بـ padding ونلغي أثره بـ margin سالب مساوٍ: المقاس الخارجي لا يتغيّر،
+     والـ gap في flexbox يُقاس بين الصناديق الخارجية — فالمسافات ثابتة تماماً. */
+  padding-block: 6px;
+  margin-block: -6px;
+  /* سطر واحد مع ... — nowrap أوثق من -webkit-line-clamp
+     الذي لا يقصّ في Chromium دون overflow: hidden. */
+  display: block;
   align-self: stretch;
-  color: var(--Main-Colors-White, #FFF);
+  max-width: 90%;
+  white-space: nowrap;
+  overflow: hidden;
   text-overflow: ellipsis;
-  font-family: Heebo;
-  font-size: 18px;
-  font-style: normal;
-  font-weight: 700;
-  line-height: 0.9;
-  text-transform: uppercase;
+  
+color: var(--Main-Colors-White, #FFF);
+leading-trim: both;
+text-edge: cap;
+font-family: Heebo;
+font-size: 18px;
+font-style: normal;
+font-weight: 700;
+line-height: 0.8;
+text-transform: uppercase;
   opacity: 0.7;
-  padding-top: 2px;
-  padding-bottom: 0.8px;
   transition: opacity 0.3s ease;
 }
 
 .info .p {
+  /* سطر واحد مع قصّ بـ ... للنص الطويل.
+     الـ line-height أصغر من 1 فيفيض المحرف خارج صندوق المحتوى،
+     وـ overflow: hidden وحده كان سيقصّ أعلى الحروف وأسفلها؛
+     لذلك نوسّع صندوق القصّ بـ padding ونلغي أثره بـ margin سالب
+     — فلا يتغيّر المقاس النهائي ولا الـ gap بين العناصر. */
+  display: block;
   align-self: stretch;
-  color: var(--Main-Colors-White, #FFF);
-  font-family: Heebo;
-  font-size: 14px;
-  font-style: normal;
-  font-weight: 300;
-  line-height: 0.6;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  // padding-top: 8px;
+  // padding-bottom: 6px;
+ color: var(--Main-Colors-White, #FFF);
+leading-trim: both;
+text-edge: cap;
+font-family: Heebo;
+font-size: 14px;
+font-style: normal;
+font-weight: 300;
+line-height: 1;
+align-self: stretch;
   opacity: 0.7;
-  padding-top: 2px;
   transition: opacity 0.3s ease;
 }
 

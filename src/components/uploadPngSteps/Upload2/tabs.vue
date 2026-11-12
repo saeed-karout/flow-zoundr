@@ -6,22 +6,29 @@
         v-for="(tab, index) in tabs"
         :key="tab.id"
         class="tab-buttons"
-        :class="{ 
+        :class="{
           active: activeTab === tab.id,
-          completed: isTabCompleted(tab.id) && activeTab !== tab.id,
-          disabled: !isTabAccessible(tab.id) && activeTab !== tab.id
+          completed: isTabCompleted(tab.id) && activeTab !== tab.id
         }"
       >
-        <div class="top-corner">
+        <!-- <div class="top-corner" :style="getCornerBackground(index, 'top')"> -->
+        <div class="top-corner" >
+
           <div class="image-blur"></div>
         </div>
 
-        <div
+        <!-- <div
           class="btn-tab"
           @click="selectTab(tab.id)"
           @mouseenter="isHovered[tab.id] = true"
           @mouseleave="isHovered[tab.id] = false"
           :style="getTabBackground(index)"
+        > -->
+          <div
+          class="btn-tab"
+          @click="selectTab(tab.id)"
+          @mouseenter="isHovered[tab.id] = true"
+          @mouseleave="isHovered[tab.id] = false"
         >
           <div v-if="activeTab === tab.id" class="tab-blur-overlay"></div>
 
@@ -36,14 +43,13 @@
               <img src="/icon/y.png" class="checkmark-icon" alt="completed" />
             </div>
             
-            <!-- ✅ علامة القفل للتبويبات غير القابلة للوصول -->
-            <div v-if="!isTabAccessible(tab.id) && activeTab !== tab.id" class="lock-tab">
-              <!-- <img src="/icon/lock.svg" class="lock-icon" alt="locked" /> -->
-            </div>
+          
           </div>
         </div>
 
-        <div class="down-corner">
+        <!-- <div class="down-corner" :style="getCornerBackground(index, 'down')"> -->
+        <div class="down-corner" >
+
           <div class="image-blur"></div>
         </div>
       </div>
@@ -52,8 +58,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, computed, onMounted } from 'vue';
+import { ref, reactive, watch, computed } from 'vue';
 import { useReleaseStore } from '@/stores/release';
+import { computeTabCompletion } from '@/utils/songCompletion';
 
 const props = defineProps({
   serverCoverUrl: { type: String, default: null },
@@ -69,7 +76,7 @@ const tabs = [
   { id: 'urheber',      title: 'Urheber',      icon: '/icon/info-step2/urheber (1).svg' },
   { id: 'mitwirkende',  title: 'ROLLEN',       icon: '/icon/info-step2/Vector (4).svg' },
   { id: 'deals',        title: 'Deals',        icon: '/icon/info-step2/share.svg' },
-  { id: 'pre-release',  title: 'Pre-Release',  icon: '/icon/info-step2/Group.svg' },
+  { id: 'pre-release',  title: 'Pre-UP',  icon: '/icon/info-step2/Group.svg' },
 ];
 
 const activeTab = ref(props.activeTab || 'infos');
@@ -92,108 +99,133 @@ const getTabIndex = (tabId) => {
   return tabOrder.indexOf(tabId);
 };
 
+// ========== ✅ خلفية الغلاف على التبويب وزواياه ==========
+//   نستخدم غلافاً مثبّتاً بالنافذة (background-attachment: fixed) بمقاس cover — تماماً
+//   كخلفية PreReleaseLayout على اليسار. هكذا يعرض كل من التبويب والزاويتين والخلفية
+//   اليسرى *نفس* شريحة الغلاف المطابِقة لموضعها على الشاشة، فتبدو صورةً واحدة متّصلة
+//   يساراً ويمتد التبويب كتتمّة لها — ويتكيّف تلقائياً مع كل القياسات دون أرقام ثابتة.
+//   ملحوظة: serverCoverUrl يصل الآن من backgroundFullUrl في التخطيط — أي العنوان نفسه
+//   تماماً الذي ترسم به ‎.bg-image (مُطبّع عبر getFullImageUrl وبلا طابع زمني).
+//   كان سابقاً يصل الـ prop الخام للتخطيط، فيختلف عن الصورة اليسرى (خاصةً بعد
+//   رفع غلاف جديد حيث تسبق uploadedImage) → فاصل مرئي بين التبويب والخلفية.
+const coverBackgroundStyle = () => ({
+  backgroundImage: `url("${props.serverCoverUrl}")`,
+  backgroundSize: 'cover',
+  backgroundPosition: 'center',
+  backgroundAttachment: 'fixed',
+  backgroundRepeat: 'no-repeat',
+});
+
+// لا نرسم الغلاف إن غاب أو كان صورة الخلفية الافتراضية — وإلا ظهر التبويط بصورة
+// لا تطابق ما يعرضه التخطيط.
+const hasCoverBackground = () => {
+  const url = props.serverCoverUrl;
+  return !!url && !url.includes('bgCardSongs/card1.png');
+};
+
 // ========== ✅ دالة خلفية التبويب ==========
 const getTabBackground = (index) => {
-  if (activeTab.value !== tabs[index]?.id || !props.serverCoverUrl) {
+  if (activeTab.value !== tabs[index]?.id || !hasCoverBackground()) {
     return {};
   }
-
-  const positions = [
-    { backgroundPosition: '0px -20.437px', backgroundSize: '100% 579.439%' },
-    { backgroundPosition: '0px -74.437px', backgroundSize: '100% 579.439%' },
-    { backgroundPosition: '0px -128.002px', backgroundSize: '100% 579.439%' },
-    { backgroundPosition: '0px -181.994px', backgroundSize: '100% 579.439%' },
-    { backgroundPosition: '0px -238.883px', backgroundSize: '100% 579.439%' }
-  ];
-
-  const pos = positions[index] || positions[0];
-
-  return {
-    backgroundImage: `url(${props.serverCoverUrl})`,
-    backgroundPosition: pos.backgroundPosition,
-    backgroundSize: pos.backgroundSize,
-    backgroundRepeat: 'no-repeat'
-  };
+  return coverBackgroundStyle();
 };
+
+// ========== ✅ خلفية زوايا التبويب (top-corner / down-corner) ==========
+//   نفس الغلاف المثبّت بالنافذة → الزاويتان تُكمّلان شريحة التبويب والصورة اليسرى تلقائياً.
+const getCornerBackground = (index /*, corner */) => {
+  if (activeTab.value !== tabs[index]?.id || !hasCoverBackground()) {
+    return {};
+  }
+  return coverBackgroundStyle();
+};
+
+// ========== ✅ اكتمال التبويبات من بيانات الأغنية (لا يعتمد على زيارة كل تبويب) ==========
+//   releaseStore.tabCompletion لا يُملأ إلا عند تحميل مكوّن كل تبويب، فعند العودة تظهر
+//   التبويبات غير مكتملة حتى يُنقَر عليها. لذلك نحسب الحالة من بيانات الأغنية عبر المصدر
+//   المشترك @/utils/songCompletion — نفس ما يستخدمه FirstSection.isTrackComplete تماماً.
+const currentSongData = computed(() => {
+  const uuid = releaseStore.songUuid;
+  if (!uuid) return null;
+  const songs = releaseStore.draftRelease?.songs || [];
+  return songs.find(s => s.uuid === uuid) || null;
+});
+
+const dataCompletion = computed(() => computeTabCompletion(currentSongData.value));
 
 // ========== ✅ دالة التحقق من اكتمال التبويب ==========
 const isTabCompleted = (tabId) => {
-  // ✅ deals دائماً true (Coming Soon)
-  if (tabId === 'deals') {
-    console.log(`📌 [Column2] isTabCompleted: deals = true (always)`);
-    return true;
-  }
-  
-  // ✅ التحقق من القيمة في Store مباشرة
-  const value = releaseStore.tabCompletion?.[tabId];
-  
-  // ✅ إذا كانت القيمة boolean، نعيدها كما هي
-  if (typeof value === 'boolean') {
-    console.log(`📌 [Column2] isTabCompleted: ${tabId} = ${value}`);
-    return value;
-  }
-  
-  // ✅ إذا كانت القيمة غير محددة، نعيد false
-  console.log(`📌 [Column2] isTabCompleted: ${tabId} = false (not set)`);
-  return false;
+  const storeVal = (releaseStore.tabCompletion || {})[tabId] === true;
+
+  // التبويب النشط: نثق بالقيمة الحيّة من المكوّن (قد يكون المستخدم يعدّل الآن).
+  if (tabId === activeTab.value) return storeVal;
+
+  // غير النشط: نعتمد بيانات الأغنية (تُزامَن في المخزَّن عند كل حفظ فتبقى حديثة) —
+  //   فتظهر الحالة الصحيحة فور العودة، وتتحدّث فوراً بعد تغييرات مثل song_type دون
+  //   الاعتماد على قيمة tabCompletion قد تكون قديمة. إن غابت البيانات نرجع للمخزَّن.
+  const dc = dataCompletion.value;
+  if (dc) return dc[tabId] === true;
+  return storeVal;
+};
+
+// ✅ التبويبات الأساسية التي يجب إكمالها قبل فتح deals و pre-release
+const coreTabsComplete = () => {
+  return isTabCompleted('infos') && isTabCompleted('urheber') && isTabCompleted('mitwirkende');
 };
 
 // ========== ✅ دالة التحقق من إمكانية الوصول ==========
 const isTabAccessible = (tabId) => {
   // التبويب النشط دائماً قابل للوصول
   if (tabId === activeTab.value) return true;
-  
-  // ✅ إذا كان التبويب مكتملاً، يمكن الوصول إليه دائماً
-  if (isTabCompleted(tabId)) return true;
-  
+
   const currentIndex = getTabIndex(activeTab.value);
   const targetIndex = getTabIndex(tabId);
-  
+
   // التبويبات السابقة دائماً قابلة للوصول
   if (targetIndex < currentIndex) return true;
-  
-  // ✅ التبويبات التالية
+
+  // ✅ deals و pre-release مقفلتان حتى تكتمل infos + urheber + mitwirkende
+  if (tabId === 'deals' || tabId === 'pre-release') {
+    const unlocked = coreTabsComplete();
+    console.log(`📌 [Column2] isTabAccessible: ${tabId} unlocked=${unlocked} (needs infos+urheber+mitwirkende)`);
+    return unlocked;
+  }
+
+  // ✅ إذا كان التبويب مكتملاً، يمكن الوصول إليه دائماً
+  if (isTabCompleted(tabId)) return true;
+
+  // ✅ التبويبات التالية: يتطلب اكتمال التبويب الحالي وجميع السابقة
   if (targetIndex > currentIndex) {
-    // ✅ deals دائماً قابلة للوصول (تجريبية)
-    if (tabId === 'deals') {
-      return true;
-    }
-    
-    // ✅ للوصول إلى pre-release
-    if (tabId === 'pre-release') {
-      // ✅ يمكن الوصول من deals مباشرة
-      if (activeTab.value === 'deals') {
-        console.log('   - ✅ Allowing access to pre-release from deals');
-        return true;
-      }
-      // ✅ إذا كنا في pre-release بالفعل
-      if (activeTab.value === 'pre-release') {
-        return true;
-      }
-    }
-    
     const isCurrentComplete = isTabCompleted(activeTab.value);
-    
+
     let allPreviousComplete = true;
     for (let i = 0; i < targetIndex; i++) {
       const prevTabId = tabOrder[i];
-      // ✅ deals مستثنى من التحقق
-      if (prevTabId === 'deals') continue;
       if (prevTabId !== activeTab.value && !isTabCompleted(prevTabId)) {
         allPreviousComplete = false;
         break;
       }
     }
-    
+
     console.log(`📌 [Column2] isTabAccessible: target=${tabId}, current=${activeTab.value}`);
     console.log(`   - isCurrentComplete: ${isCurrentComplete}`);
     console.log(`   - allPreviousComplete: ${allPreviousComplete}`);
-    
+
     return isCurrentComplete && allPreviousComplete;
   }
-  
+
   return false;
 };
+
+// ========== ✅ tabs.vue قارئ فقط لحالة الاكتمال ==========
+//   أُزيلت هنا ثلاث آفات كانت تُفسد المزامنة:
+//   1) sendCompletionStatus كان يبعث 'update-step-completion' ولا مستمع له إطلاقاً.
+//   2) كان يكتب افتراضات (deals/pre-release = true) عند غياب القيمة، فيضع علامة اكتمال
+//      على تبويب لم يزره المستخدم.
+//   3) كل نداءاته للمخزَّن كانت بصيغة updateTabCompletion('deals', true) بينما الـ action
+//      يستقبل كائناً واحداً → كانت تُرفَض بتحذير "invalid completion data" وتُهمَل.
+//   الكتابة في tabCompletion صارت مسؤولية Infos1 وحدها (من مكوّنات التبويبات عبر
+//   update:form-data)، وهذا المكوّن يقرأ فقط — فلا تتضارب المصادر.
 
 // ========== اختيار التبويب ==========
 const selectTab = (tabId) => {
@@ -201,19 +233,6 @@ const selectTab = (tabId) => {
   
   console.log(`📌 [Column2] selectTab: ${tabId}`);
   console.log(`📌 [Column2] tabCompletion from Store:`, releaseStore.tabCompletion);
-  
-  if (!isTabAccessible(tabId)) {
-    console.warn(`⚠️ [Column2] Cannot navigate to ${tabId}`);
-    
-    const tabName = tabs.find(t => t.id === activeTab.value)?.title || activeTab.value;
-    window.dispatchEvent(new CustomEvent('show-toast', {
-      detail: { 
-        message: `Bitte vervollständige zuerst "${tabName}".`,
-        type: 'warning'
-      }
-    }));
-    return;
-  }
   
   activeTab.value = tabId;
   emit('update-tab', tabId);
@@ -231,26 +250,14 @@ watch(
   { immediate: true }
 );
 
-// ========== مراقبة التغييرات في Store tabCompletion ==========
+// ========== مراقبة التغييرات في Store tabCompletion (للتشخيص فقط) ==========
 watch(
   () => releaseStore.tabCompletion,
-  (newVal, oldVal) => {
-    console.log('📌 [Column2] Store tabCompletion updated:', newVal);
-    console.log('📌 [Column2] old tabCompletion:', oldVal);
-    
-    // ✅ تأكد من أن deals دائماً true في الـ Store
-    if (newVal && newVal.deals !== true) {
-      // ✅ تحديث الـ Store مباشرة
-      releaseStore.updateTabCompletion({ deals: true });
-    }
+  (newVal) => {
+    console.log('📌 [Column2] Store tabCompletion updated:', { ...newVal });
   },
-  { deep: true, immediate: true }
+  { deep: true }
 );
-
-// ========== دورة الحياة ==========
-onMounted(() => {
-  console.log('📌 [Column2] Mounted, tabCompletion from Store:', releaseStore.tabCompletion);
-});
 
 // ========== تصدير الدوال ==========
 defineExpose({
@@ -333,6 +340,11 @@ defineExpose({
 @media (max-width:1599px) {
   .title{
     font-size: 15px !important;
+  }
+
+  .tab-buttons .btn-tab{
+  padding: 15px 12px 15px 20px;
+
   }
 }
 
@@ -514,7 +526,12 @@ defineExpose({
 }
 
 .tab-buttons.completed .btn-tab .title {
-  // color: #FFF;
+  color: #FFF;
+}
+
+/* ✅ التبويب المكتمل (وغير النشط): تحويل الأيقونة إلى الأبيض مثل التبويب النشط */
+.tab-buttons.completed .icons {
+  filter: brightness(0) invert(1);
 }
 
 .tab-buttons.completed .checkmark-tab .checkmark-icon {
@@ -531,7 +548,7 @@ defineExpose({
 }
 
 .tab-buttons.disabled:hover .btn-tab .icons {
-  filter: none;
+  // filter: none;
 }
 
 .tab-buttons.disabled .lock-tab .lock-icon {

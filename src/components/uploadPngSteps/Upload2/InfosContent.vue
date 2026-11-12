@@ -4,11 +4,11 @@
       <!-- Titel -->
       <div class="form-field">
         <div class="title">Titel</div>
-        <div class="section-input" :class="{ 'is-hovered': isHoveredTitle, 'has-checkmark': formData.titleValid }"
+        <div class="section-input" :class="{ 'is-hovered': isHoveredTitle, 'has-checkmark': formData.titleValid}"
           @mouseenter="isHoveredTitle = true" @mouseleave="isHoveredTitle = false">
           <input 
             type="text" 
-            class="input-field" 
+            class="input-field" :class="{ 'is-correction': isSongCorrected('title') }" 
             v-model="displayTitle" 
             placeholder="Song Titel"
             @input="onTitleInput"
@@ -34,11 +34,10 @@
         </div>
         <div class="section-input" :class="{ 
           'is-hovered': isHoveredSubtitle, 
-          'has-checkmark': formData.subtitleValid 
-        }" @mouseenter="isHoveredSubtitle = true" @mouseleave="isHoveredSubtitle = false">
+          'has-checkmark': formData.subtitleValid}" @mouseenter="isHoveredSubtitle = true" @mouseleave="isHoveredSubtitle = false">
           <input 
             type="text" 
-            class="input-field" 
+            class="input-field" :class="{ 'is-correction': isSongCorrected('subtitle') }" 
             v-model="formData.subtitle" 
             placeholder="Song Untertitel"
             :disabled="!formData.subtitleEnabled"
@@ -58,29 +57,29 @@
       <!-- Song Typ -->
       <div class="form-field">
         <div class="title">Song Typ</div>
-        <div class="section-input" :class="{ 'is-hovered': isHoveredSongTyp, 'has-checkmark': formData.songTypValid }"
+        <div class="section-input" :class="{ 'is-hovered': isHoveredSongTyp, 'has-checkmark': formData.songTypeValid}"
           @mouseenter="isHoveredSongTyp = true" @mouseleave="isHoveredSongTyp = false">
-          <div class="custom-select" @click="toggleDropdown('songTyp')">
-            <div class="select-trigger" :class="{ 'selected': formData.songTypValid }">
-              {{ getSongTypLabel(formData.songTyp) || 'Bitte wählen' }}
+          <div class="custom-select" @click="toggleDropdown('songType')">
+            <div class="select-trigger" :class="{ 'is-correction': isSongCorrected('song_type'), 'selected': formData.songTypeValid }">
+              {{ getSongTypLabel(formData.songType) || 'Bitte wählen' }}
             </div>
             <transition name="dropdown-fade">
-              <div class="dropdown" v-show="isSongTypDropdownOpen">
-                <div class="option" @click.stop="selectOption('songTyp', 'original')">Original</div>
-                <div class="option" @click.stop="selectOption('songTyp', 'original_instrumental')">Original Instrumental</div>
-                <div class="option" @click.stop="selectOption('songTyp', 'medley')">Medley</div>
-                <div class="option" @click.stop="selectOption('songTyp', 'acapella')">Acapella</div>
-                <div class="option" @click.stop="selectOption('songTyp', 'live_version')">Live Version</div>
+              <div class="dropdown" v-show="isSongTypDropdownOpen" @click.stop>
+                <div class="option" @click.stop="selectOption('songType', 'original')">Original</div>
+                <div class="option" @click.stop="selectOption('songType', 'original_instrumental')">Original Instrumental</div>
+                <div class="option" @click.stop="selectOption('songType', 'medley')">Medley</div>
+                <div class="option" @click.stop="selectOption('songType', 'acapella')">Acapella</div>
+                <div class="option" @click.stop="selectOption('songType', 'live_version')">Live Version</div>
               </div>
             </transition>
           </div>
-          <div v-if="formData.songTypValid" class="checkmark">
+          <div v-if="formData.songTypeValid" class="checkmark">
             <img src="/icon/y.png" class="icon-y" alt="checkmark icon" />
           </div>
           <div v-else class="checkmark">
             <img src="/icon/icon-select.svg" class="icon-select" alt="select icon" />
           </div>
-          <div class="spacer" @click="openVideoPopup('songTyp')">
+          <div class="spacer" @click="openVideoPopup('songType')">
             <div class="play" :class="{ visible: isHoveredSongTyp }">
               <img :src="iconPlay" class="icon" alt="play icon" />
             </div>
@@ -92,14 +91,14 @@
       <div class="form-field">
         <div class="title">Explicit Lyrics</div>
         <div class="section-input"
-          :class="{ 'is-hovered': isHoveredExplicitLyrics, 'has-checkmark': formData.explicitLyricsValid }"
+          :class="{ 'is-hovered': isHoveredExplicitLyrics, 'has-checkmark': formData.explicitLyricsValid, 'disabled': isInstrumental}"
           @mouseenter="isHoveredExplicitLyrics = true" @mouseleave="isHoveredExplicitLyrics = false">
-          <div class="custom-select" @click="toggleDropdown('explicitLyrics')">
-            <div class="select-trigger" :class="{ 'selected': formData.explicitLyricsValid }">
+          <div class="custom-select" @click="!isInstrumental && toggleDropdown('explicitLyrics')">
+            <div class="select-trigger" :class="{ 'is-correction': isSongCorrected('explicit_lyrics'), 'selected': formData.explicitLyricsValid }">
               {{ getExplicitLyricsLabel(formData.explicitLyrics) || 'Harte Texte' }}
             </div>
             <transition name="dropdown-fade">
-              <div class="dropdown" v-show="isExplicitLyricsDropdownOpen">
+              <div class="dropdown" v-show="isExplicitLyricsDropdownOpen" @click.stop>
                 <div class="option" @click.stop="selectOption('explicitLyrics', 'Yes')">Ja</div>
                 <div class="option" @click.stop="selectOption('explicitLyrics', 'No')">Nein</div>
               </div>
@@ -130,13 +129,12 @@
         <div class="section-input" 
           :class="{ 
             'is-hovered': isHoveredIsrc, 
-            'has-checkmark': formData.isrcEnabled && formData.isrcValid 
-          }"
+            'has-checkmark': formData.isrcEnabled && formData.isrcValid}"
           @mouseenter="isHoveredIsrc = true" 
           @mouseleave="isHoveredIsrc = false">
           <input 
             type="text" 
-            class="input-field" 
+            class="input-field" :class="{ 'is-correction': isSongCorrected('isrc') }" 
             v-model="formData.isrc" 
             placeholder="ISRC "
             :disabled="!formData.isrcEnabled" 
@@ -147,6 +145,10 @@
             @click.stop
             maxlength="12"
           />
+
+          <div v-if="formData.isrcError" class="checkmark">
+            <img src="/icon/warning.svg" class="icon-y" alt="checkmark icon" />
+          </div>
           <div v-if="formData.isrcEnabled && formData.isrcValid && !formData.isrcError" class="checkmark">
             <img src="/icon/y.png" class="icon-y" alt="checkmark icon" />
           </div>
@@ -162,28 +164,28 @@
       <div class="form-field">
         <div class="title">Sprache Titel</div>
         <div class="section-input"
-          :class="{ 'is-hovered': isHoveredTitleLanguage, 'has-checkmark': formData.titleLanguageValid }"
+          :class="{ 'is-hovered': isHoveredTitleLanguage, 'has-checkmark': formData.titleLanguageValid}"
           @mouseenter="isHoveredTitleLanguage = true" @mouseleave="isHoveredTitleLanguage = false">
           <div class="custom-select" @click="toggleDropdown('titleLanguage')">
-            <div class="select-trigger" :class="{ 'selected': formData.titleLanguageValid }">
+            <div class="select-trigger" :class="{ 'is-correction': isSongCorrected('title_language'), 'selected': formData.titleLanguageValid }">
               <input 
                 type="text" 
                 class="search-input-trigger" 
                 v-model="titleLanguageSearch" 
                 :placeholder="formData.titleLanguageValid ? getLanguageDisplayName(formData.titleLanguage) : 'Sprache suchen...'"
                 @click.stop
-                @input="filterTitleLanguages"
-                @focus="isTitleLanguageDropdownOpen = true"
+                @input="handleTitleLanguageInput"
+                @focus="handleTitleLanguageFocus"
                 @blur="closeTitleLanguageDropdown"
               />
             </div>
             <transition name="dropdown-fade">
-              <div class="dropdown" v-show="isTitleLanguageDropdownOpen">
+              <div class="dropdown" v-show="isTitleLanguageDropdownOpen" @mousedown.prevent @click.stop>
                 <div 
                   class="option" 
                   v-for="lang in filteredTitleLanguages" 
                   :key="lang.value"
-                  @click.stop="selectOption('titleLanguage', lang.value)"
+                  @mousedown="selectOption('titleLanguage', lang.value)"
                 >
                   {{ lang.name }}
                 </div>
@@ -211,28 +213,29 @@
       <div class="form-field">
         <div class="title">Sprache Text</div>
         <div class="section-input"
-          :class="{ 'is-hovered': isHoveredTextLanguage, 'has-checkmark': formData.textLanguageValid }"
+          :class="{ 'is-hovered': isHoveredTextLanguage, 'has-checkmark': formData.textLanguageValid, 'disabled': isInstrumental}"
           @mouseenter="isHoveredTextLanguage = true" @mouseleave="isHoveredTextLanguage = false">
-          <div class="custom-select" @click="toggleDropdown('textLanguage')">
-            <div class="select-trigger" :class="{ 'selected': formData.textLanguageValid }">
-              <input 
-                type="text" 
-                class="search-input-trigger" 
-                v-model="textLanguageSearch" 
+          <div class="custom-select" @click="!isInstrumental && toggleDropdown('textLanguage')">
+            <div class="select-trigger" :class="{ 'is-correction': isSongCorrected('lyrics_language'), 'selected': formData.textLanguageValid }">
+              <input
+                type="text"
+                class="search-input-trigger"
+                v-model="textLanguageSearch"
                 :placeholder="formData.textLanguageValid ? getLanguageDisplayName(formData.textLanguage) : 'Sprache suchen...'"
+                :disabled="isInstrumental"
                 @click.stop
-                @input="filterTextLanguages"
-                @focus="isTextLanguageDropdownOpen = true"
+                @input="handleTextLanguageInput"
+                @focus="handleTextLanguageFocus"
                 @blur="closeTextLanguageDropdown"
               />
             </div>
             <transition name="dropdown-fade">
-              <div class="dropdown" v-show="isTextLanguageDropdownOpen">
+              <div class="dropdown" v-show="isTextLanguageDropdownOpen" @mousedown.prevent @click.stop>
                 <div 
                   class="option" 
                   v-for="lang in filteredTextLanguages" 
                   :key="lang.value"
-                  @click.stop="selectOption('textLanguage', lang.value)"
+                  @mousedown="selectOption('textLanguage', lang.value)"
                 >
                   {{ lang.name }}
                 </div>
@@ -262,19 +265,24 @@
         <!-- Wav File Upload -->
         <div class="form-field" :class="{ 'hidden': isLyricsExpanded }">
           <div class="title">Wav File Upload*</div>
-      <div class="box" 
+        
+      <div class="box"
      @mouseenter="handleBoxMouseEnter"
      @mouseleave="handleBoxMouseLeave"
      @dragover.prevent="handleDragOver"
      @dragenter.prevent="handleDragEnter"
      @dragleave.prevent="handleDragLeave"
      @drop.prevent="handleFileDrop"
-     :class="{ 'drag-over': isDragOver }">
+     :class="{ 'drag-over': isDragOver, 'is-correction': isSongCorrected('song_file') }">
   <div 
     v-if="!formData.fileUploaded" 
     class="upload-file" 
     ref="uploadFileRef"
   >
+
+    <transition name="audio-error-fade">
+            <div v-if="audioFormatError" class="audio-format-error">{{ audioFormatError }}</div>
+          </transition>
     <div class="upload-content">
       <div v-if="!isUploading" class="text">Song Upload per Drag & Drop</div>
       <div v-if="!isUploading" class="text-link-block">
@@ -300,22 +308,42 @@
   </div>
 
   <div v-if="formData.fileUploaded && !isLyricsExpanded" class="song-form">
-    <!-- محتوى song-form كما هو -->
-    <div class="waveform-container">
+    <!-- Audio Loading Indicator -->
+    <div v-if="isAudioLoading" class="audio-loading-indicator">
+      <div class="audio-loading-spinner"></div>
+    </div>
+    <!-- Waveform Container -->
+    <div 
+      v-show="!isAudioLoading" 
+      class="waveform-container" 
+      :class="{ 'is-correction': isSongCorrected('preview_start') || isSongCorrected('preview_file') }"
+      :style="{ 
+        visibility: isAudioLoading ? 'hidden' : 'visible',
+        opacity: isAudioLoading ? 0 : 1
+      }"
+    >
       <button class="play-pause-btn" @click="togglePlayPause">
         <img :src="isPlaying ? iconPause : iconPlay" class="play-pause-icon" alt="play/pause" />
       </button>
       <div class="timer">{{ formatTime(currentTime) }}</div>
       <div id="waveform" style="width: 100%; height: 62px; position: relative;"></div>
-      <div v-if="formData.previewEnabled" class="view-time-overlay" :style="viewTimeOverlayStyle">
-        <svg class="play-pause-icon-red" width="16" height="16" viewBox="0 0 16 16" fill="none" @click="playPreview">
-          <path d="M3 2L13 8L3 14V2Z" fill="#DD1155" />
-        </svg>
-        <span>00:30</span>
-      </div>
+      
+      <!-- Preview Overlay with Play Button -->
+     <div v-if="formData.previewEnabled" class="view-time-overlay" :style="viewTimeOverlayStyle">
+  <button class="preview-play-btn" @click.stop="playPreview">
+    <svg v-if="!isPreviewPlaying" xmlns="http://www.w3.org/2000/svg" width="14" height="16" viewBox="0 0 14 16" fill="none">
+      <path d="M12.75 6.26541C13.75 6.84276 13.75 8.28614 12.75 8.86349L2.25 14.9257C1.25 15.503 2.10845e-06 14.7813 2.15892e-06 13.6266L2.6889e-06 1.50228C2.73937e-06 0.347575 1.25 -0.374114 2.25 0.203236L12.75 6.26541Z" fill="#DD1155"/>
+    </svg>
+    <img v-else :src="iconPause" class="preview-play-icon" alt="pause" />
+  </button>
+  <span>{{ previewRangeLabel }}</span>
+</div>
+      
       <div class="time-music">{{ formatTime(totalDuration) }}</div>
     </div>
 
+    <!-- اسم الملفّ وسؤال الـ 30 ثانية مجموعة واحدة بفاصل 32px كما في التصميم. -->
+    <div class="file-preview-group">
     <div v-if="formData.fileUploaded && !isLyricsExpanded" class="uploaded-file-info">
       <div class="file-details">
         <div class="file-name">
@@ -340,10 +368,11 @@
     </div>
 
     <div class="description-song">
-      <span>Willst du eine Vorhörzeit von 30 sec einstellen?</span>
-      <div class="switch" :class="{ active: formData.previewEnabled }" @click="togglePreviewTime">
+      <span>Willst du eine Vorhörzeit von 30 SEK einstellen?</span>
+      <div class="switch" :class="{ active: formData.previewEnabled, 'is-correction': isSongCorrected('preview_enabled') }" @click="togglePreviewTime">
         <div class="switch-circle"></div>
       </div>
+    </div>
     </div>
   </div>
 </div>
@@ -352,21 +381,24 @@
         <!-- Song Lyrics -->
         <div class="Form-field-song-text">
           <div class="top-line">
-            <div class="title">Song Lyrics</div>
-            <div class="switch" :class="{ active: formData.lyricsEnabled }" @click="toggleLyrics">
+            <div class="title" style="line-height: .7; text-transform: uppercase; font-weight: 300; font-size: 14px; font-family: 'Heebo';font-style: normal; letter-spacing: 0.7px;">Song Lyrics</div>
+            <div class="switch" :class="{ active: formData.lyricsEnabled, 'disabled': isInstrumental, 'is-correction': isSongCorrected('song_lyrics') }"
+                 @click="!isInstrumental && toggleLyrics()">
               <div class="switch-circle"></div>
             </div>
           </div>
-          <div v-if="formData.lyricsEnabled" class="song-text" :class="{ 'expanded': isLyricsExpanded }">
-            <textarea v-model="formData.song_lyrics" class="textarea" placeholder="Songtext eingeben..."
-              @input="validateLyrics"></textarea>
-            <div class="fade-song" :class="{ 'hidden': isLyricsExpanded }"></div>
-            <div class="icons">
-              <div class="icon" @click="toggleLyricsExpansion">
-                <img :src="isLyricsExpanded ? '/icon/upload2/zoom-out.svg' : '/icon/upload2/zoom-out.svg'" class="zoom" alt="zoom" />
-              </div>
-              <img v-if="formData.song_lyrics && formData.song_lyrics.trim().length > 0" src="/icon/y.png" class="checkmark" alt="valid" />
-            </div>
+          <!-- حقل معلومات بحت: Spotify أوقف رفع الكلمات مباشرة، فلم يعد
+               هناك ما يكتبه المستخدم. لا textarea ولا تحقّق ولا علامة صحّ،
+               ولا يُرسل song_lyrics إلى الـ API. -->
+          <div v-if="formData.lyricsEnabled" class="song-text">
+            <p class="lyrics-info">
+              Spotify und weitere Stores bieten leider nicht mehr die Möglichkeit, Songtexte
+              direkt mit den Songs hochzuladen. Wir arbeiten derzeit an einer Lösung für dieses
+              Problem. Damit Deine Lyrics angezeigt werden, nutze aktuell bitte
+              <a href="https://www.musixmatch.com" target="_blank" rel="noopener noreferrer">musixmatch.com</a>.
+              <br />
+              Weitere Infos dazu findest Du rechts oben im Tutorial Video.
+            </p>
           </div>
         </div>
       </div>
@@ -375,7 +407,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { ref, reactive, computed, onMounted, onUnmounted, onDeactivated, nextTick, watch } from 'vue';
+import { useCorrections } from '@/composables/useCorrections';
 import { debounce } from '@/utils/debounce';
 import CircleProgress from 'vue3-circle-progress';
 import WaveSurfer from 'wavesurfer.js';
@@ -384,7 +417,6 @@ import iconPlay from '@/assets/icons/play.png';
 import iconPause from '@/assets/icons/pause.png';
 import apiRequest from '@/lib/apiRequest';
 import { useReleaseStore } from '@/stores/release';
-import { storage_url } from '@/constants';
 
 const releaseStore = useReleaseStore();
 
@@ -403,6 +435,9 @@ const props = defineProps({
   }
 });
 
+// حقول مطلوب تصحيحها (Korrektur) → بوردر أحمر.
+const { isSongCorrected } = useCorrections(() => props.currentSong?.uuid);
+
 const emit = defineEmits([
   'openVideoPopup',
   'update:isSubtitleSelected',
@@ -415,12 +450,13 @@ const emit = defineEmits([
 
 // ========== حالة حفظ البيانات ==========
 const isSaving = ref(false);
+const isSavingLock = ref(false);
 const saveQueue = ref([]);
-
+// عند وصول تعديل جديد أثناء وجود حفظ قيد التنفيذ، نُعلّم أنه يجب إعادة الحفظ بعد الانتهاء
+const pendingAutoSave = ref(false);
 
 const isHoveredBox = ref(false);
 let boxHoverTimeout = null;
-
 
 // ========== Title Debounce ==========
 const titleDebounceTimer = ref(null);
@@ -431,6 +467,12 @@ const languages = ref([]);
 const titleLanguageSearch = ref('');
 const textLanguageSearch = ref('');
 const languagesLoaded = ref(false);
+
+// ========== متغير للتحكم في التحميل الأولي ==========
+let isInitialLoad = true;
+
+// ========== Preview Play State ==========
+const isPreviewPlaying = ref(false);
 
 const getLanguageDisplayName = (value) => {
   if (!value) return '';
@@ -476,6 +518,7 @@ const fetchLanguages = async () => {
     languages.value = response.data || [];
     languagesLoaded.value = true;
     await updateLanguageSearchFields();
+    console.log('✅ Languages loaded:', languages.value.length);
   } catch (error) {
     console.error('❌ Failed to load languages:', error);
     languages.value = [
@@ -507,10 +550,23 @@ const updateLanguageSearchFields = () => {
   }
 };
 
+// ========== مراقبة اللغات ==========
+watch(languages, (newVal) => {
+  if (newVal && newVal.length > 0) {
+    if (formData.titleLanguage) {
+      titleLanguageSearch.value = getLanguageDisplayName(formData.titleLanguage) || '';
+    }
+    if (formData.textLanguage) {
+      textLanguageSearch.value = getLanguageDisplayName(formData.textLanguage) || '';
+    }
+  }
+}, { immediate: true });
+
 // ========== معالجة قائمة الانتظار ==========
 const processSaveQueue = () => {
   if (saveQueue.value.length === 0) {
     isSaving.value = false;
+    isSavingLock.value = false;
     console.log('✅ InfosContent: جميع التغييرات تم حفظها');
     return;
   }
@@ -520,6 +576,7 @@ const processSaveQueue = () => {
   saveQueue.value = [];
   
   isSaving.value = true;
+  isSavingLock.value = true;
   emit('save-song', latestSave);
 };
 
@@ -533,6 +590,7 @@ const handleSaveComplete = (event) => {
   }
   
   isSaving.value = false;
+  isSavingLock.value = false;
   
   setTimeout(() => {
     if (saveQueue.value.length > 0) {
@@ -541,7 +599,7 @@ const handleSaveComplete = (event) => {
     } else {
       console.log('✅ InfosContent: قائمة الانتظار فارغة');
     }
-  }, 200);
+  }, 300);
 };
 
 // ========== إغلاق القوائم ==========
@@ -556,7 +614,6 @@ const handleClickOutside = (event) => {
   });
   
   if (!clickedInside) {
-    isSongTypeDropdownOpen.value = false;
     isExplicitLyricsDropdownOpen.value = false;
     isTitleLanguageDropdownOpen.value = false;
     isTextLanguageDropdownOpen.value = false;
@@ -564,17 +621,85 @@ const handleClickOutside = (event) => {
   }
 };
 
+// ========== معالجة التركيز على حقول اللغة ==========
+const handleTitleLanguageFocus = () => {
+  if (isSavingLock.value) return;
+  
+  if (languages.value.length > 0 || languagesLoaded.value) {
+    isTitleLanguageDropdownOpen.value = true;
+  } else {
+    fetchLanguages().then(() => {
+      isTitleLanguageDropdownOpen.value = true;
+      if (formData.titleLanguage) {
+        titleLanguageSearch.value = getLanguageDisplayName(formData.titleLanguage) || '';
+      }
+    });
+  }
+};
+
+const handleTextLanguageFocus = () => {
+  if (isSavingLock.value) return;
+  
+  if (languages.value.length > 0 || languagesLoaded.value) {
+    isTextLanguageDropdownOpen.value = true;
+  } else {
+    fetchLanguages().then(() => {
+      isTextLanguageDropdownOpen.value = true;
+      if (formData.textLanguage) {
+        textLanguageSearch.value = getLanguageDisplayName(formData.textLanguage) || '';
+      }
+    });
+  }
+};
+
+// ========== معالجة الإدخال في حقول اللغة ==========
+const handleTitleLanguageInput = () => {
+  if (isSavingLock.value) return;
+  
+  if (!titleLanguageSearch.value || titleLanguageSearch.value.trim() === '') {
+    formData.titleLanguage = '';
+    formData.titleLanguageValid = false;
+    isTitleLanguageDropdownOpen.value = true;
+    return;
+  }
+  
+  isTitleLanguageDropdownOpen.value = true;
+};
+
+const handleTextLanguageInput = () => {
+  if (isSavingLock.value) return;
+  
+  if (!textLanguageSearch.value || textLanguageSearch.value.trim() === '') {
+    formData.textLanguage = '';
+    formData.textLanguageValid = false;
+    isTextLanguageDropdownOpen.value = true;
+    return;
+  }
+  
+  isTextLanguageDropdownOpen.value = true;
+};
+
+// ========== دوال الإغلاق ==========
 const closeTitleLanguageDropdown = () => {
   setTimeout(() => {
+    if (!titleLanguageSearch.value?.trim() && !formData.titleLanguage) {
+      isTitleLanguageDropdownOpen.value = true;
+      return;
+    }
     isTitleLanguageDropdownOpen.value = false;
-  }, 300);
+  }, 200);
 };
 
 const closeTextLanguageDropdown = () => {
   setTimeout(() => {
+    if (!textLanguageSearch.value?.trim() && !formData.textLanguage) {
+      isTextLanguageDropdownOpen.value = true;
+      return;
+    }
     isTextLanguageDropdownOpen.value = false;
-  }, 300);
+  }, 200);
 };
+
 // ========== Box Hover Handlers ==========
 const handleBoxMouseEnter = () => {
   if (boxHoverTimeout) {
@@ -588,7 +713,6 @@ const handleBoxMouseLeave = (event) => {
   const relatedTarget = event.relatedTarget;
   const box = event.currentTarget;
   
-  // التحقق إذا كان الماوس انتقل إلى عنصر داخل الـ box
   if (box && box.contains(relatedTarget)) {
     return;
   }
@@ -607,6 +731,7 @@ const handleBoxMouseLeave = (event) => {
     boxHoverTimeout = null;
   }, 50);
 };
+
 // ========== فتح فيديو Vimeo ==========
 const openVideoPopup = (field) => {
   console.log('🎬 [InfosContent] فتح فيديو Vimeo للحقل:', field);
@@ -629,10 +754,8 @@ const formData = reactive({
   subtitleEnabled: !!props.currentSong?.subtitle || false,
   subtitle: props.currentSong?.subtitle || '',
   subtitleValid: !!props.currentSong?.subtitle,
-  songType: props.currentSong?.song_type || '',
-  songTypeValid: !!props.currentSong?.song_type,
-  songTyp: props.currentSong?.song_typ || '',
-  songTypValid: true,
+  songType: props.currentSong?.song_type || props.currentSong?.song_typ || '',
+  songTypeValid: !!(props.currentSong?.song_type || props.currentSong?.song_typ),
   explicitLyrics: props.currentSong?.explicit_lyrics || '',
   explicitLyricsValid: !!props.currentSong?.explicit_lyrics,
   isrcEnabled: !!props.currentSong?.isrc,
@@ -648,10 +771,9 @@ const formData = reactive({
   fileUuid: props.currentSong?.uuid || null,
   releaseUuid: props.currentSong?.release_uuid || null,
   lyricsEnabled: !!props.currentSong?.song_lyrics,
-  song_lyrics: props.currentSong?.song_lyrics || '',
-  lyricsValid: !!props.currentSong?.song_lyrics,
+  song_lyrics: '',
   previewEnabled: props.currentSong?.preview_enabled || false,
-  // ✅ إضافة deals و pre-release
+  previewStartTime: props.currentSong?.preview_start ?? props.currentSong?.preview_start_time ?? 0,
   deals: {
     isSplittingActive: props.currentSong?.is_splitting_active || false,
     shares: props.currentSong?.shares || getDefaultShares(),
@@ -664,6 +786,10 @@ const formData = reactive({
     isReleaseDateSelected: !!props.currentSong?.release_date,
   }
 });
+
+// ✅ نوع instrumental = لا نصوص. عندها نُعطّل ونُفرّغ: Explicit / Sprache Text / Lyrics
+//    (وفي URHEBER يُعطَّل Textdichter).
+const isInstrumental = computed(() => String(formData.songType || '').includes('instrumental'));
 
 const getSongTypLabel = (value) => {
   const labels = {
@@ -723,6 +849,21 @@ const emitSaveTitle = (titleValue) => {
   emit('save-song', payload);
 };
 
+// ✅ يُرسل العنوان المؤجّل (debounce 2s) فوراً قبل الخروج/تبديل التبويب — وإلا فُقِد
+//    العنوان الذي كتبه المستخدم للتوّ (كان onUnmounted يمسح المؤقّت دون إرسال، فيبقى
+//    "01 Song Titel" على الخادم). نُرسل فقط عنواناً صالحاً كي لا نمسح بقيمة فارغة.
+const flushPendingTitleSave = () => {
+  if (!titleDebounceTimer.value) return;
+  clearTimeout(titleDebounceTimer.value);
+  titleDebounceTimer.value = null;
+  const parts = (formData.fullTitle || '').split(' ');
+  const hasNumber = parts.length > 0 && /^\d{2}$/.test(parts[0]);
+  const clean = (hasNumber ? parts.slice(1).join(' ') : (formData.fullTitle || '')).trim();
+  if (formData.titleValid && clean && clean !== 'Song Titel') {
+    emitSaveTitle(clean);
+  }
+};
+
 // ========== دالة معالجة الإدخال مع debounce ==========
 const onTitleInput = () => {
   if (titleDebounceTimer.value) {
@@ -774,6 +915,17 @@ const fileInput = ref(null);
 const isUploading = ref(false);
 const uploadProgress = ref(0);
 const uploadError = ref(null);
+// ✅ نص خطأ توحيد صيغة الصوت (يظهر بالأحمر 3 ثوانٍ ثم يختفي) عند ردّ 422 من رفع ملف صوتي.
+const audioFormatError = ref('');
+let audioFormatErrorTimer = null;
+const showAudioFormatError = (msg) => {
+  audioFormatError.value = msg;
+  if (audioFormatErrorTimer) clearTimeout(audioFormatErrorTimer);
+  audioFormatErrorTimer = setTimeout(() => {
+    audioFormatError.value = '';
+    audioFormatErrorTimer = null;
+  }, 4000);
+};
 const uploadedFile = ref(null);
 const uploadedFileInfo = ref(null);
 let uploadCancelled = false;
@@ -782,17 +934,69 @@ let uploadCancelled = false;
 const isDragOver = ref(false);
 
 // ========== WaveSurfer ==========
+// اللون الأساسي للموجة (قريب للأبيض) واللون الأحمر للتقدّم.
+const PREVIEW_BASE_COLOR = '#C2C6CE';
+const PREVIEW_RED_COLOR = '#DD1155';
+
+// ✅ عند تشغيل المعاينة نريد أن يتحوّل جزء الموجة من لحظة البداية فقط إلى الأحمر، ويبقى
+//    ما قبلها بلونه الأساسي. نحقّق ذلك بتدرّج أفقي لـ progressColor: أساسي حتى نسبة
+//    (start/duration) ثم أحمر بعدها. لأن التقدّم يُقصّ إلى [0, المؤشّر]، يظهر [0,start]
+//    أساسياً و[start, المؤشّر] أحمر.
+// نجد عرض الرسم الفعلي للموجة: أوسع canvas داخل #waveform (بما في ذلك داخل أي shadow root)
+// لأن wavesurfer يرسم بعرض offsetWidth × devicePixelRatio. عرض التدرّج يجب أن يطابقه تماماً
+// وإلا انزاح موضع تحوّل اللون الأحمر عن حافة الـ region.
+const findWaveCanvasWidth = () => {
+  const container = document.querySelector('#waveform');
+  if (!container) return null;
+  let maxW = 0;
+  const scan = (root) => {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll('canvas').forEach((c) => { if (c.width > maxW) maxW = c.width; });
+    root.querySelectorAll('*').forEach((el) => { if (el.shadowRoot) scan(el.shadowRoot); });
+  };
+  scan(container);
+  if (container.shadowRoot) scan(container.shadowRoot);
+  return maxW || null;
+};
+
+const buildPreviewGradient = () => {
+  const duration = waveSurfer.value?.getDuration?.() || totalDuration.value || 0;
+  const start = formData.previewStartTime || 0;
+  const ratio = duration > 0 ? Math.min(Math.max(start / duration, 0), 0.9995) : 0;
+
+  const container = document.querySelector('#waveform');
+  const width = findWaveCanvasWidth()
+    || Math.round((container?.offsetWidth || 1000) * (window.devicePixelRatio || 1));
+
+  const ctx = document.createElement('canvas').getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, Math.max(1, width), 0);
+  gradient.addColorStop(0, PREVIEW_BASE_COLOR);
+  // تحوّل حادّ عند نسبة البداية تماماً (نفس حافة الـ region).
+  gradient.addColorStop(ratio, PREVIEW_BASE_COLOR);
+  gradient.addColorStop(Math.min(ratio + 0.0001, 1), PREVIEW_RED_COLOR);
+  gradient.addColorStop(1, PREVIEW_RED_COLOR);
+  return gradient;
+};
+
+// إعادة progressColor إلى الأحمر العادي (للتشغيل العادي الذي يُلوّن من الثانية 0).
+const resetProgressColor = () => {
+  if (waveSurfer.value) {
+    waveSurfer.value.setOptions({ progressColor: PREVIEW_RED_COLOR });
+  }
+};
+
 const waveSurfer = ref(null);
+const regionsPlugin = ref(null);
+const isWaveReady = ref(false);
 const isPlaying = ref(false);
 const currentTime = ref(0);
 const totalDuration = ref(0);
 const isLyricsExpanded = ref(false);
 let region = ref(null);
-let isAudioLoading = false;
+const isAudioLoading = ref(false);
 let audioLoaded = false;
 
 // ========== Dropdown states ==========
-const isSongTypeDropdownOpen = ref(false);
 const isExplicitLyricsDropdownOpen = ref(false);
 const isTitleLanguageDropdownOpen = ref(false);
 const isTextLanguageDropdownOpen = ref(false);
@@ -870,6 +1074,7 @@ const handleMouseLeave = (event) => {
 
 // ========== دالة saveSubtitle مع debounce ==========
 const saveSubtitle = debounce((value) => {
+  if (isSavingLock.value) return;
   if (!props.currentSong?.uuid) {
     console.warn('No UUID → save subtitle stopped');
     return;
@@ -890,22 +1095,47 @@ const saveSubtitle = debounce((value) => {
 
 // ========== Computed ==========
 const viewTimeOverlayStyle = computed(() => {
-  if (!waveSurfer.value || !waveSurfer.value.isReady) return {};
+  if (!waveSurfer.value || !isWaveReady.value) return {};
   const duration = waveSurfer.value.getDuration();
   const container = document.querySelector('#waveform');
   if (!container) return {};
   const width = container.offsetWidth;
-  const previewTime = Math.min(30, duration);
-  const leftPosition = (previewTime / duration) * width - 49;
+  if (!duration) return {};
+  // ✅ الشارة absolute نسبةً إلى .waveform-container، لكن #waveform لا يبدأ من حافتها
+  //    اليسرى — قبله زر التشغيل والمؤقّت والحشو. لذا نضيف إزاحة #waveform داخل الحاوية
+  //    (offsetLeft) وإلا انزاحت الشارة يساراً ولم تقع في منتصف الـ region.
+  const offsetLeft = container.offsetLeft;
+  // ✅ نعتمد على formData.previewStartTime (تفاعلي) بدل region.value.start (كائن
+  //    wavesurfer غير تفاعلي) كي يتحرّك زر المعاينة/الشارة لحظياً مع سحب المنطقة.
+  const start = formData.previewStartTime || 0;
+  // الـ region يمتد 30 ثانية (مقصوصاً بنهاية المقطع). نضع الشارة في *منتصف* الـ region
+  //   دائماً — لا عند نهايته — كي تبقى ثابتة بالوسط أينما كان الـ region.
+  const regionEnd = Math.min(start + 30, duration);
+  const regionCenter = (start + regionEnd) / 2;
+  const badgeWidth = 98;
+  let leftPosition = offsetLeft + (regionCenter / duration) * width - badgeWidth / 2;
+  // نُقيّدها داخل حدود الموجة كي لا تخرج عند طرفَي المقطع.
+  leftPosition = Math.max(offsetLeft, Math.min(leftPosition, offsetLeft + width - badgeWidth));
   return {
     left: `${leftPosition}px`,
-    width: '98px',
+    width: `${badgeWidth}px`,
     padding: '4px 8px',
     borderRadius: '20px',
     background: '#1B1C20',
     position: 'absolute',
-    bottom: '-22px'
+    bottom: '-30px',
+    whiteSpace: 'nowrap',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   };
+});
+
+const previewRangeLabel = computed(() => {
+  const duration = totalDuration.value || (waveSurfer.value?.getDuration?.() || 0);
+  const start = formData.previewStartTime || 0;
+  const end = duration ? Math.min(start + 30, duration) : start + 30;
+  return `${formatTime(start)}`;
 });
 
 const formatTime = (seconds) => {
@@ -925,6 +1155,8 @@ const showToast = (message, type = 'error') => {
 
 // ========== Toggle Functions ==========
 const toggleSubtitle = () => {
+  if (isSavingLock.value) return;
+  
   formData.subtitleEnabled = !formData.subtitleEnabled;
   
   if (!formData.subtitleEnabled) {
@@ -960,6 +1192,8 @@ const toggleSubtitle = () => {
 };
 
 const toggleIsrc = () => {
+  if (isSavingLock.value) return;
+  
   formData.isrcEnabled = !formData.isrcEnabled;
   console.log('🔍 [toggleIsrc] isrcEnabled now:', formData.isrcEnabled);
   
@@ -980,11 +1214,11 @@ const toggleIsrc = () => {
 };
 
 const toggleLyrics = () => {
+  if (isSavingLock.value) return;
+  
   formData.lyricsEnabled = !formData.lyricsEnabled;
   if (!formData.lyricsEnabled) {
     isLyricsExpanded.value = false;
-    formData.song_lyrics = '';
-    formData.lyricsValid = false;
     autoSave();
   }
 };
@@ -994,8 +1228,10 @@ const toggleLyricsExpansion = () => {
 };
 
 const togglePreviewTime = () => {
+  if (isSavingLock.value) return;
+  
   formData.previewEnabled = !formData.previewEnabled;
-  if (waveSurfer.value && waveSurfer.value.isReady) {
+  if (waveSurfer.value && isWaveReady.value) {
     if (formData.previewEnabled) {
       addPreviewRegion();
     } else {
@@ -1017,10 +1253,6 @@ const validateSubtitle = () => {
   const value = formData.subtitle?.trim() || '';
   formData.subtitleValid = formData.subtitleEnabled && value.length > 0;
   emit('update:isSubtitleSelected', formData.subtitleValid);
-};
-
-const validateLyrics = () => {
-  formData.lyricsValid = formData.song_lyrics.trim().length > 0;
 };
 
 // ========== ISRC Validation ==========
@@ -1116,6 +1348,13 @@ const validateIsrcFinal = () => {
 
 // ========== دالة autoSave ==========
 const autoSave = async () => {
+  if (isSavingLock.value) {
+    // حفظ قيد التنفيذ: نؤجل هذا الطلب ليُعاد بناؤه من آخر قيم formData بعد الانتهاء
+    console.log('⏳ جارٍ الحفظ، سيُعاد الحفظ تلقائياً بعد الانتهاء');
+    pendingAutoSave.value = true;
+    return;
+  }
+
   if (!props.currentSong?.uuid) {
     console.warn('No UUID → auto-save stopped');
     return;
@@ -1149,14 +1388,16 @@ const autoSave = async () => {
   const fields = {
     title: titleValue,
     subtitle: formData.subtitleEnabled ? formData.subtitle : null,
-    song_type: formData.songType,
-    song_typ: formData.songTyp || null,
+    song_type: formData.songType || null,
     explicit_lyrics: formData.explicitLyrics || null,
     isrc: isrcValue,
     title_language: formData.titleLanguage || null,
     lyrics_language: formData.textLanguage || null,
     song_lyrics: formData.lyricsEnabled ? formData.song_lyrics?.trim() || null : null,
-    preview_enabled: formData.previewEnabled
+    preview_enabled: formData.previewEnabled,
+    // ✅ اسم الحقل على الخادم هو preview_start (وليس preview_start_time). عند تفعيل
+    //    المعاينة نُرسل قيمة البداية (افتراضياً 0)، وعند الإيقاف نُرسل null.
+    preview_start: formData.previewEnabled ? (formData.previewStartTime || 0) : null
   };
 
   Object.entries(fields).forEach(([key, newValue]) => {
@@ -1176,6 +1417,8 @@ const autoSave = async () => {
   }
 
   console.log('📤 إرسال حفظ تلقائي:', payload);
+  
+  isSavingLock.value = true;
   
   try {
     await emit('save-song', payload);
@@ -1208,6 +1451,13 @@ const autoSave = async () => {
       }
     } else if (error.response?.data?.message) {
       showToast(error.response.data.message, 'error');
+    }
+  } finally {
+    isSavingLock.value = false;
+    // إذا وصلت تعديلات أثناء الحفظ، أعِد الحفظ الآن من أحدث القيم
+    if (pendingAutoSave.value) {
+      pendingAutoSave.value = false;
+      setTimeout(() => autoSave(), 0);
     }
   }
 };
@@ -1289,6 +1539,66 @@ watch(() => formData.textLanguage, (newVal) => {
   }
 }, { immediate: true });
 
+watch(titleLanguageSearch, (newVal, oldVal) => {
+  if (isInitialLoad) {
+    if (newVal && newVal.trim() && !formData.titleLanguage) {
+      console.log('📌 Initial load detected for titleLanguageSearch, not opening dropdown');
+    }
+    return;
+  }
+  
+  if (!newVal || !newVal.trim()) {
+    if (formData.titleLanguageValid) {
+      formData.titleLanguage = '';
+      formData.titleLanguageValid = false;
+      autoSave();
+    }
+    isTitleLanguageDropdownOpen.value = true;
+    return;
+  }
+  
+  if (newVal && newVal.trim()) {
+    const currentLanguage = formData.titleLanguage ? getLanguageDisplayName(formData.titleLanguage) : '';
+    if (newVal.trim() === currentLanguage && formData.titleLanguageValid) {
+      return;
+    }
+    
+    if (!isTitleLanguageDropdownOpen.value) {
+      isTitleLanguageDropdownOpen.value = true;
+    }
+  }
+});
+
+watch(textLanguageSearch, (newVal, oldVal) => {
+  if (isInitialLoad) {
+    if (newVal && newVal.trim() && !formData.textLanguage) {
+      console.log('📌 Initial load detected for textLanguageSearch, not opening dropdown');
+    }
+    return;
+  }
+  
+  if (!newVal || !newVal.trim()) {
+    if (formData.textLanguageValid) {
+      formData.textLanguage = '';
+      formData.textLanguageValid = false;
+      autoSave();
+    }
+    isTextLanguageDropdownOpen.value = true;
+    return;
+  }
+  
+  if (newVal && newVal.trim()) {
+    const currentLanguage = formData.textLanguage ? getLanguageDisplayName(formData.textLanguage) : '';
+    if (newVal.trim() === currentLanguage && formData.textLanguageValid) {
+      return;
+    }
+    
+    if (!isTextLanguageDropdownOpen.value) {
+      isTextLanguageDropdownOpen.value = true;
+    }
+  }
+});
+
 watch(() => formData.subtitle, (newVal, oldVal) => {
   if (newVal !== oldVal) {
     console.log('🔄 subtitle changed:', { old: oldVal, new: newVal });
@@ -1340,11 +1650,40 @@ watch(() => formData.fullTitle, (newVal, oldVal) => {
   }
 }, { immediate: true });
 
-watch(() => props.currentSong, (newSong) => {
+watch(() => props.currentSong, (newSong, oldSong) => {
   if (!newSong) return;
-  
+
+  // إعادة التهيئة فقط عند تحميل أغنية مختلفة فعلياً (تغيّر الـ uuid).
+  // تحديثات نفس الأغنية (مثل استجابة الحفظ) يجب ألا تمسح القيمة التي اختارها المستخدم للتو.
+  if (oldSong && newSong.uuid && oldSong.uuid && newSong.uuid === oldSong.uuid) {
+    // ✅ لكن إن أعاد الخادم عنواناً حقيقياً ولم يكن العنوان المعروض محلياً صالحاً
+    //    (fullTitle افتراضي/فارغ)، نُثبّته — فقد كان العنوان يعود في الاستجابة دون أن يظهر.
+    const raw = newSong.title || '';
+    const localValid = formData.titleValid &&
+                       formData.fullTitle &&
+                       !formData.fullTitle.endsWith('Song Titel');
+    if (raw && !localValid) {
+      const releaseTitle = releaseStore.metasData?.title || '';
+      const parts = raw.split(' ');
+      let num = '01';
+      let clean = raw;
+      if (parts.length > 0 && /^\d{2}$/.test(parts[0])) {
+        num = parts[0];
+        clean = parts.slice(1).join(' ');
+      }
+      if (clean && clean !== 'Song Titel' && clean.trim() !== '' && clean !== releaseTitle) {
+        formData.fullTitle = `${num} ${clean}`;
+        formData.titleValid = true;
+        releaseStore.setCurrentSongNumber(num);
+        releaseStore.setCurrentSongTitle(clean);
+        console.log('🔤 [InfosContent] عنوان أُعيد من الخادم فطُبِّق محلياً:', clean);
+      }
+    }
+    return;
+  }
+
   console.log('🔄 InfosContent: currentSong changed, updating formData');
-  
+
   const subtitleValue = newSong.subtitle || '';
   
   let cleanTitle = newSong.title || '';
@@ -1396,11 +1735,8 @@ watch(() => props.currentSong, (newSong) => {
   formData.subtitle = subtitleValue;
   formData.subtitleValid = !!subtitleValue;
   
-  formData.songType = newSong.song_type || '';
-  formData.songTypeValid = !!newSong.song_type;
-  
-  formData.songTyp = newSong.song_typ || '';
-  formData.songTypValid = true;
+  formData.songType = newSong.song_type || newSong.song_typ || '';
+  formData.songTypeValid = !!(newSong.song_type || newSong.song_typ);
   
   formData.explicitLyrics = newSong.explicit_lyrics || '';
   formData.explicitLyricsValid = !!newSong.explicit_lyrics;
@@ -1415,17 +1751,15 @@ watch(() => props.currentSong, (newSong) => {
   formData.fileUuid = newSong.uuid || null;
   formData.releaseUuid = newSong.release_uuid || null;
   formData.lyricsEnabled = !!newSong.song_lyrics;
-  formData.song_lyrics = newSong.song_lyrics || '';
-  formData.lyricsValid = !!newSong.song_lyrics;
+  formData.song_lyrics = '';
   formData.previewEnabled = newSong.preview_enabled || false;
-  
-  // ✅ تحديث deals
+  formData.previewStartTime = newSong.preview_start ?? newSong.preview_start_time ?? 0;
+
   formData.deals = {
     isSplittingActive: newSong.is_splitting_active || false,
     shares: newSong.shares || getDefaultShares(),
   };
   
-  // ✅ تحديث pre-release
   formData['pre-release'] = {
     isPreReleaseActive: newSong.is_pre_release_active || false,
     isFullReleaseActive: newSong.is_full_release_active || false,
@@ -1460,12 +1794,12 @@ watch(() => props.currentSong, (newSong) => {
   const newSongFile = newSong.song_file;
   const oldSongFile = props.currentSong?.song_file;
   
-  if (newSongFile === oldSongFile && waveSurfer.value && waveSurfer.value.isReady) {
+  if (newSongFile === oldSongFile && waveSurfer.value && isWaveReady.value) {
     console.log('⚠️ نفس الملف موجود بالفعل، تخطي التحميل');
     return;
   }
   
-  if (newSongFile && newSongFile !== oldSongFile && !audioLoaded && !isAudioLoading) {
+  if (newSongFile && newSongFile !== oldSongFile && !audioLoaded && !isAudioLoading.value) {
     let fileName = newSongFile;
     if (fileName.includes('/')) {
       const parts = fileName.split('/');
@@ -1473,7 +1807,7 @@ watch(() => props.currentSong, (newSong) => {
     }
     
     audioLoaded = false;
-    isAudioLoading = false;
+    isAudioLoading.value = false;
     
     if (waveSurfer.value) {
       waveSurfer.value.destroy();
@@ -1542,8 +1876,8 @@ const uploadFileToServer = async (file) => {
       formDataObj.append('subtitle', formData.subtitle);
     }
     
-    if (formData.songTyp) {
-      formDataObj.append('song_typ', formData.songTyp);
+    if (formData.songType) {
+      formDataObj.append('song_type', formData.songType);
     }
     
     if (formData.explicitLyrics) {
@@ -1568,6 +1902,7 @@ const uploadFileToServer = async (file) => {
     
     if (formData.previewEnabled) {
       formDataObj.append('preview_enabled', '1');
+      formDataObj.append('preview_start', String(formData.previewStartTime || 0));
     }
 
     const response = await apiRequest.post(
@@ -1575,7 +1910,7 @@ const uploadFileToServer = async (file) => {
       formDataObj,
       {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 120000,
+        timeout: 500000,
         onUploadProgress: (progressEvent) => {
           if (progressEvent.total) {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -1615,34 +1950,31 @@ const uploadFileToServer = async (file) => {
       if (formData.subtitleEnabled && formData.subtitle) {
         updatedSong.subtitle = formData.subtitle;
       }
-      if (formData.songTyp) {
-        updatedSong.song_typ = formData.songTyp;
+      if (formData.songType) {
+        updatedSong.song_type = formData.songType;
       }
       
       Object.assign(props.currentSong, updatedSong);
     }
 
     audioLoaded = false;
-    isAudioLoading = false;
-    
+    isAudioLoading.value = true;
+
     if (waveSurfer.value) {
       waveSurfer.value.destroy();
       waveSurfer.value = null;
     }
-    
+
+    const localBlobUrl = URL.createObjectURL(file);
     nextTick(() => {
-      setTimeout(() => {
-        if (!waveSurfer.value) {
-          loadAudioViaProxy(fileName, file.name);
-        }
-      }, 500);
+      initializeWaveSurferWithBlob(localBlobUrl, file.name);
     });
     
     const completeData = {
       song_file: fileName,
       title: formData.fullTitle.replace(/^\d{2}\s/, '').trim(),
       subtitle: formData.subtitleEnabled ? formData.subtitle : null,
-      song_typ: formData.songTyp || null,
+      song_type: formData.songType || null,
       explicit_lyrics: formData.explicitLyrics || null,
       isrc: formData.isrcEnabled ? formData.isrc : null,
       title_language: formData.titleLanguage || null,
@@ -1662,6 +1994,10 @@ const uploadFileToServer = async (file) => {
   } catch (error) {
     console.error('❌ File upload failed:', error);
     uploadError.value = error.response?.data?.message || error.message || 'Upload fehlgeschlagen';
+    // ✅ عند 422 (صيغة صوت غير متطابقة) نُظهر نصاً أحمر 3 ثوانٍ ثم يختفي.
+    if (error.response?.status === 422) {
+      showAudioFormatError('Bitte achte darauf, dass alle Deine Audioformate identisch sind - auch kHz und Bitrate.');
+    }
     formData.fileUploaded = false;
     uploadedFile.value = null;
     isUploading.value = false;
@@ -1673,7 +2009,6 @@ const uploadFileToServer = async (file) => {
 // ========== Drag and Drop Handlers ==========
 const handleDragOver = (event) => {
   event.preventDefault();
-  // ✅ منع انتشار الحدث إلى العناصر الأب
   event.stopPropagation();
 };
 
@@ -1687,7 +2022,6 @@ const handleDragLeave = (event) => {
   event.preventDefault();
   event.stopPropagation();
   
-  // ✅ التحقق من أن الماوس غادر الـ box بالفعل وليس عنصراً داخلياً
   const box = event.currentTarget;
   const relatedTarget = event.relatedTarget;
   
@@ -1697,7 +2031,6 @@ const handleDragLeave = (event) => {
   
   isDragOver.value = false;
 };
-
 
 const handleFileDrop = async (event) => {
   event.preventDefault();
@@ -1718,7 +2051,7 @@ const handleFileDrop = async (event) => {
 
 // ========== تحميل الصوت ==========
 const loadAudioViaProxy = (filePath, fileName, retryCount = 0) => {
-  if (isAudioLoading) {
+  if (isAudioLoading.value) {
     console.log('⚠️ Audio loading already in progress, skipping');
     return;
   }
@@ -1728,25 +2061,21 @@ const loadAudioViaProxy = (filePath, fileName, retryCount = 0) => {
     return;
   }
   
-  if (waveSurfer.value && waveSurfer.value.isReady) {
+  if (waveSurfer.value && isWaveReady.value) {
     console.log('⚠️ WaveSurfer already exists and ready, skipping load');
     return;
   }
   
   console.log('🔧 [loadAudioViaProxy] Input path:', filePath);
   
-  // ✅ استخراج اسم الملف فقط من المسار مع الحفاظ على البادئة
   let fileNameOnly = filePath;
   if (fileNameOnly.includes('/')) {
     const parts = fileNameOnly.split('/');
     fileNameOnly = parts[parts.length - 1];
   }
   
-  // ✅ ✅ ✅ لا نزيل بادئة songs_ لأنها جزء من اسم الملف
-  // فقط نزيل storage_ و audio_ إذا وجدت
   fileNameOnly = fileNameOnly.replace(/^(storage_|audio_)/, '');
   
-  // ✅ التأكد من أن الملف له امتداد .wav
   if (!fileNameOnly.endsWith('.wav')) {
     fileNameOnly = `${fileNameOnly}.wav`;
   }
@@ -1760,37 +2089,39 @@ const loadAudioViaProxy = (filePath, fileName, retryCount = 0) => {
     return;
   }
   
-  isAudioLoading = true;
+  isAudioLoading.value = true;
+
+  const directUrl = `https://zoundr-flow-api.davinda.dev/storage/audio/${encodeURIComponent(fileNameOnly)}`;
+  console.log('🔗 Loading audio directly:', directUrl);
   
-  // ✅ ✅ ✅ المسار الصحيح: /storage/audio/ + اسم الملف الكامل (مع songs_)
-  const proxyUrl = `/storage/audio/${encodeURIComponent(fileNameOnly)}`;
-  
-  console.log('🔗 Loading audio via proxy:', proxyUrl);
-  
-  // ✅ استخدام apiRequest مع baseURL: '' لاستخدام المسار النسبي
-  apiRequest.get(proxyUrl, {
-    responseType: 'arraybuffer',
+  fetch(directUrl, {
+    method: 'GET',
     headers: {
       'Accept': 'audio/wav, audio/*',
     },
-    timeout: 120000,
-    baseURL: '',
   })
   .then(response => {
     console.log('📡 Response status:', response.status);
-    console.log('📡 Content-Type:', response.headers['content-type']);
     
-    if (!response.data || response.data.byteLength === 0) {
-      throw new Error('Empty file received');
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
     
-    const contentType = response.headers['content-type'];
+    const contentType = response.headers.get('content-type');
+    console.log('📡 Content-Type:', contentType);
+    
     if (contentType && !contentType.includes('audio')) {
       console.error('❌ Response is not audio, it\'s:', contentType);
       throw new Error(`Server returned ${contentType} instead of audio`);
     }
     
-    const arrayBuffer = response.data;
+    return response.arrayBuffer();
+  })
+  .then(arrayBuffer => {
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      throw new Error('Empty file received');
+    }
+    
     console.log('✅ Audio loaded, size:', arrayBuffer.byteLength, 'bytes');
     
     const view = new Uint8Array(arrayBuffer);
@@ -1801,8 +2132,7 @@ const loadAudioViaProxy = (filePath, fileName, retryCount = 0) => {
                   view[10] === 0x56 && view[11] === 0x45;
     
     if (!isWav) {
-      console.error('❌ Not a valid WAV file! First 12 bytes:', 
-        Array.from(view.slice(0, 12)).map(b => b.toString(16)).join(' '));
+      console.error('❌ Not a valid WAV file!');
       throw new Error('Invalid WAV file format');
     }
     
@@ -1811,11 +2141,11 @@ const loadAudioViaProxy = (filePath, fileName, retryCount = 0) => {
     console.log('📦 Blob URL created:', blobUrl);
     
     initializeWaveSurferWithBlob(blobUrl, fileName);
-    isAudioLoading = false;
+    isAudioLoading.value = false;
   })
   .catch(error => {
     console.error('❌ Failed to load audio:', error);
-    isAudioLoading = false;
+    isAudioLoading.value = false;
     
     if (retryCount < 3) {
       console.log(`🔄 Retrying... (${retryCount + 1}/3)`);
@@ -1828,6 +2158,7 @@ const loadAudioViaProxy = (filePath, fileName, retryCount = 0) => {
     }
   });
 };
+
 // ========== تهيئة WaveSurfer ==========
 const initializeWaveSurferWithBlob = (blobUrl, fileName) => {
   if (waveSurfer.value) {
@@ -1863,16 +2194,23 @@ const initWaveSurfer = (blobUrl, fileName) => {
     waveSurfer.value = null;
   }
 
+  container.innerHTML = '';
+
   if (!blobUrl) {
     console.error('❌ No blob URL provided');
     return;
   }
 
+  isWaveReady.value = false;
+
   try {
+    const regions = RegionsPlugin.create();
+    regionsPlugin.value = regions;
+
     waveSurfer.value = WaveSurfer.create({
       container: '#waveform',
-      waveColor: '#808080',
-      progressColor: '#DD1155',
+      waveColor: PREVIEW_BASE_COLOR,
+      progressColor: PREVIEW_RED_COLOR,
       cursorColor: '#FFFFFF',
       barWidth: 2,
       barGap: 1,
@@ -1880,7 +2218,10 @@ const initWaveSurfer = (blobUrl, fileName) => {
       height: 62,
       responsive: true,
       normalize: true,
-      plugins: [RegionsPlugin.create()],
+      // ✅ يجعل مؤشّر التشغيل (cursor) يتبع الماوس لحظياً أثناء السحب بدل أن يقفز
+      //    إلى موضع الإفلات فقط (السلوك الافتراضي هو seek عند رفع الإصبع).
+      dragToSeek: true,
+      plugins: [regions],
       backend: 'WebAudio',
       audioContext: new (window.AudioContext || window.webkitAudioContext)(),
       decodeAudioData: true
@@ -1893,27 +2234,46 @@ const initWaveSurfer = (blobUrl, fileName) => {
 
     waveSurfer.value.on('ready', () => {
       totalDuration.value = waveSurfer.value.getDuration();
+      isWaveReady.value = true;
       if (formData.previewEnabled) addPreviewRegion();
       console.log('✅ WaveSurfer ready, duration:', totalDuration.value);
       uploadError.value = null;
       audioLoaded = true;
-      isAudioLoading = false;
+      isAudioLoading.value = false;
     });
 
     waveSurfer.value.on('audioprocess', (time) => {
       currentTime.value = time;
-      if (formData.previewEnabled && time >= 30) {
-        waveSurfer.value.pause();
-        isPlaying.value = false;
-        currentTime.value = 30;
+      // إيقاف احتياطي عند نهاية المجال أثناء معاينة الـ30 ثانية فقط
+      // (التشغيل العادي للأغنية كاملة يجب ألا يتوقف عند المجال)
+      if (isPreviewPlaying.value && region.value) {
+        const endTime = region.value.end;
+        if (time >= endTime) {
+          waveSurfer.value.pause();
+          isPlaying.value = false;
+          isPreviewPlaying.value = false;
+          currentTime.value = endTime;
+        }
       }
     });
 
-    waveSurfer.value.on('play', () => { isPlaying.value = true; });
-    waveSurfer.value.on('pause', () => { isPlaying.value = false; });
+    waveSurfer.value.on('play', () => { 
+      isPlaying.value = true; 
+    });
+    
+    waveSurfer.value.on('pause', () => { 
+      isPlaying.value = false;
+      isPreviewPlaying.value = false;
+    });
+    
     waveSurfer.value.on('finish', () => {
       isPlaying.value = false;
+      isPreviewPlaying.value = false;
       currentTime.value = 0;
+    });
+
+    waveSurfer.value.on('seek', () => {
+      isPreviewPlaying.value = false;
     });
 
     waveSurfer.value.load(blobUrl);
@@ -1937,7 +2297,6 @@ const handleFileSelect = async (event) => {
   }
 };
 
-// ========== حذف الملف ==========
 // ========== حذف الملف ==========
 const removeFile = async () => {
   const songUuid = formData.fileUuid || props.currentSong?.uuid;
@@ -1968,99 +2327,219 @@ const removeFile = async () => {
     waveSurfer.value.destroy();
     waveSurfer.value = null;
   }
-  
+  regionsPlugin.value = null;
+  isWaveReady.value = false;
+
   isPlaying.value = false;
   currentTime.value = 0;
   totalDuration.value = 0;
   audioLoaded = false;
-  isAudioLoading = false;
-  
+  isAudioLoading.value = false;
+
   if (region.value) {
     region.value.remove();
     region.value = null;
   }
-  
+
   isLyricsExpanded.value = false;
 };
+
 // ========== WaveSurfer Functions ==========
 const togglePlayPause = () => {
-  if (waveSurfer.value) waveSurfer.value.playPause();
+  if (!waveSurfer.value) return;
+  // ✅ التشغيل العادي للأغنية كاملة يُلوّن التقدّم بالأحمر من الثانية 0 (لا تدرّج المعاينة).
+  if (!isPlaying.value) resetProgressColor();
+  waveSurfer.value.playPause();
 };
 
 const addPreviewRegion = () => {
-  if (!waveSurfer.value || !waveSurfer.value.isReady) return;
+  if (!waveSurfer.value || !isWaveReady.value || !regionsPlugin.value) return;
   if (region.value) {
     region.value.remove();
     region.value = null;
   }
   const duration = waveSurfer.value.getDuration();
-  const endTime = Math.min(30, duration);
-  region.value = waveSurfer.value.addRegion({
-    start: 0,
+  const startTime = Math.min(formData.previewStartTime || 0, Math.max(0, duration - 30));
+  const endTime = Math.min(startTime + 30, duration);
+  
+  region.value = regionsPlugin.value.addRegion({
+    start: startTime,
     end: endTime,
-    color: 'rgba(255, 255, 255, 0.5)',
-    drag: false,
-    resize: false
+    color: 'rgba(38, 40, 45, 0.80)',
+    drag: true,
+    resize: false,
+    style: {
+      background: 'linear-gradient(0deg, #1B1C20 0%, rgba(38, 40, 45, 0.30) 20.97%)',
+      borderRadius: '4px',
+    }
+  });
+
+  region.value.on('update', () => {
+    const maxStart = Math.max(0, duration - 30);
+    formData.previewStartTime = Math.min(Math.max(0, Math.round(region.value.start)), maxStart);
+  });
+
+  region.value.on('update-end', () => {
+    const maxStart = Math.max(0, duration - 30);
+    const clampedStart = Math.min(Math.max(0, Math.round(region.value.start)), maxStart);
+    const clampedEnd = Math.min(clampedStart + 30, duration);
+    if (region.value.start !== clampedStart || region.value.end !== clampedEnd) {
+      region.value.setOptions({ start: clampedStart, end: clampedEnd });
+    }
+    formData.previewStartTime = clampedStart;
+    autoSave();
   });
 };
 
 const playPreview = () => {
-  if (waveSurfer.value) {
-    waveSurfer.value.setTime(0);
-    waveSurfer.value.play();
-    isPlaying.value = true;
+  if (!waveSurfer.value) return;
+
+  // إذا كان معاينة التشغيل قيد العمل → أوقفها (زر Toggle)
+  if (isPreviewPlaying.value) {
+    waveSurfer.value.pause();
+    isPlaying.value = false;
+    isPreviewPlaying.value = false;
+    return;
   }
+
+  // إيقاف التشغيل العادي إن كان قيد التشغيل قبل بدء المعاينة
+  if (isPlaying.value) {
+    waveSurfer.value.pause();
+    isPlaying.value = false;
+  }
+
+  const duration = waveSurfer.value.getDuration();
+  const startTime = region.value ? region.value.start : (formData.previewStartTime || 0);
+  const endTime = region.value
+    ? region.value.end
+    : Math.min(startTime + 30, duration);
+
+  // ✅ نطبّق تدرّج الألوان: يبقى ما قبل لحظة البدء بلونه الأساسي، ويتحوّل من لحظة البدء
+  //    إلى الأحمر أثناء التقدّم.
+  waveSurfer.value.setOptions({ progressColor: buildPreviewGradient() });
+
+  // play(start, end) في wavesurfer v7 يبدأ من start ويتوقف تلقائياً عند end
+  waveSurfer.value.setTime(startTime);
+  waveSurfer.value.play(startTime, endTime);
+  isPlaying.value = true;
+  isPreviewPlaying.value = true;
 };
 
-// ========== Dropdown Functions ==========
-const toggleDropdown = (field) => {
-  if (field === 'songType' && isSongTypeDropdownOpen.value) {
-    isSongTypeDropdownOpen.value = false;
-    return;
-  }
-  if (field === 'explicitLyrics' && isExplicitLyricsDropdownOpen.value) {
-    isExplicitLyricsDropdownOpen.value = false;
-    return;
-  }
-  if (field === 'titleLanguage' && isTitleLanguageDropdownOpen.value) {
-    isTitleLanguageDropdownOpen.value = false;
-    return;
-  }
-  if (field === 'textLanguage' && isTextLanguageDropdownOpen.value) {
-    isTextLanguageDropdownOpen.value = false;
-    return;
-  }
-  if (field === 'songTyp' && isSongTypDropdownOpen.value) {
-    isSongTypDropdownOpen.value = false;
-    return;
-  }
-  
-  isSongTypeDropdownOpen.value = false;
+// ========== دالة إغلاق جميع القوائم ==========
+const closeAllDropdowns = () => {
   isExplicitLyricsDropdownOpen.value = false;
   isTitleLanguageDropdownOpen.value = false;
   isTextLanguageDropdownOpen.value = false;
   isSongTypDropdownOpen.value = false;
+};
+
+// ========== Dropdown Functions ==========
+const toggleDropdown = (field) => {
+  // فتح/إغلاق القائمة يجب أن يعمل دائماً حتى أثناء الحفظ
+  if (field === 'titleLanguage' && formData.titleLanguage) {
+    if (isTitleLanguageDropdownOpen.value) {
+      isTitleLanguageDropdownOpen.value = false;
+      return;
+    }
+    isTitleLanguageDropdownOpen.value = true;
+    return;
+  }
   
+  if (field === 'textLanguage' && formData.textLanguage) {
+    if (isTextLanguageDropdownOpen.value) {
+      isTextLanguageDropdownOpen.value = false;
+      return;
+    }
+    isTextLanguageDropdownOpen.value = true;
+    return;
+  }
+
+  if (field === 'explicitLyrics' && isExplicitLyricsDropdownOpen.value) {
+    isExplicitLyricsDropdownOpen.value = false;
+    return;
+  }
+  if (field === 'songType' && isSongTypDropdownOpen.value) {
+    isSongTypDropdownOpen.value = false;
+    return;
+  }
+
+  closeAllDropdowns();
+
   if (field === 'songType') {
-    isSongTypeDropdownOpen.value = true;
+    isSongTypDropdownOpen.value = true;
   } else if (field === 'explicitLyrics') {
     isExplicitLyricsDropdownOpen.value = true;
   } else if (field === 'titleLanguage') {
-    isTitleLanguageDropdownOpen.value = true;
-    titleLanguageSearch.value = getLanguageDisplayName(formData.titleLanguage) || '';
+    if (formData.titleLanguage) {
+      titleLanguageSearch.value = getLanguageDisplayName(formData.titleLanguage) || '';
+    }
+    if (languages.value.length === 0 && !languagesLoaded.value) {
+      fetchLanguages().then(() => {
+        isTitleLanguageDropdownOpen.value = true;
+      });
+    } else {
+      isTitleLanguageDropdownOpen.value = true;
+    }
   } else if (field === 'textLanguage') {
-    isTextLanguageDropdownOpen.value = true;
-    textLanguageSearch.value = getLanguageDisplayName(formData.textLanguage) || '';
-  } else if (field === 'songTyp') {
-    isSongTypDropdownOpen.value = true;
+    if (formData.textLanguage) {
+      textLanguageSearch.value = getLanguageDisplayName(formData.textLanguage) || '';
+    }
+    if (languages.value.length === 0 && !languagesLoaded.value) {
+      fetchLanguages().then(() => {
+        isTextLanguageDropdownOpen.value = true;
+      });
+    } else {
+      isTextLanguageDropdownOpen.value = true;
+    }
   }
 };
 
 const selectOption = (field, value) => {
+  // لا نمنع الاختيار أثناء الحفظ: نحدّث القيمة فوراً في الواجهة، وautoSave يؤجّل الإرسال إن لزم
+  console.log(`📌 [InfosContent] selectOption: ${field} = ${value}`);
+  
+  if (field === 'titleLanguage' && formData.titleLanguage === value) {
+    isTitleLanguageDropdownOpen.value = false;
+    document.activeElement?.blur();
+    return;
+  }
+  
+  if (field === 'textLanguage' && formData.textLanguage === value) {
+    isTextLanguageDropdownOpen.value = false;
+    document.activeElement?.blur();
+    return;
+  }
+  
+  if (field === 'songType' && formData.songType === value) {
+    isSongTypDropdownOpen.value = false;
+    return;
+  }
+  
+  if (field === 'explicitLyrics' && formData.explicitLyrics === value) {
+    isExplicitLyricsDropdownOpen.value = false;
+    return;
+  }
+  
+  closeAllDropdowns();
+  
   if (field === 'songType') {
     formData.songType = value;
     formData.songTypeValid = value.trim() !== '';
-    isSongTypeDropdownOpen.value = false;
+    isSongTypDropdownOpen.value = false;
+
+    // ✅ instrumental: لا نصوص — نُفرّغ Explicit / Sprache Text / Lyrics (وتبقى معطّلة).
+    if (value.includes('instrumental')) {
+      formData.explicitLyrics = '';
+      formData.explicitLyricsValid = false;
+      formData.textLanguage = '';
+      formData.textLanguageValid = false;
+      textLanguageSearch.value = '';
+      formData.lyricsEnabled = false;
+      formData.song_lyrics = '';
+      isExplicitLyricsDropdownOpen.value = false;
+      isTextLanguageDropdownOpen.value = false;
+    }
+
     autoSave();
   } else if (field === 'explicitLyrics') {
     formData.explicitLyrics = value;
@@ -2072,60 +2551,45 @@ const selectOption = (field, value) => {
     formData.titleLanguageValid = value.trim() !== '';
     titleLanguageSearch.value = getLanguageDisplayName(value);
     isTitleLanguageDropdownOpen.value = false;
+    document.activeElement?.blur();
     autoSave();
   } else if (field === 'textLanguage') {
     formData.textLanguage = value;
     formData.textLanguageValid = value.trim() !== '';
     textLanguageSearch.value = getLanguageDisplayName(value);
     isTextLanguageDropdownOpen.value = false;
-    autoSave();
-  } else if (field === 'songTyp') {
-    formData.songTyp = value;
-    formData.songTypValid = true;
-    isSongTypDropdownOpen.value = false;
+    document.activeElement?.blur();
     autoSave();
   }
-  
-  isSongTypeDropdownOpen.value = false;
-  isExplicitLyricsDropdownOpen.value = false;
-  isTitleLanguageDropdownOpen.value = false;
-  isTextLanguageDropdownOpen.value = false;
-  isSongTypDropdownOpen.value = false;
+
+  setTimeout(() => {
+    isTitleLanguageDropdownOpen.value = false;
+    isTextLanguageDropdownOpen.value = false;
+    isSongTypDropdownOpen.value = false;
+    isExplicitLyricsDropdownOpen.value = false;
+  }, 50);
 };
 
 // ========== Tab Completion ==========
 const tabCompletion = computed(() => {
-  const infosComplete = 
-    formData.titleValid &&
-    formData.explicitLyricsValid &&
-    formData.titleLanguageValid &&
-    formData.textLanguageValid;
+  // Song Lyrics صار حقل معلومات فقط — لا يدخل في الاكتمال إطلاقاً.
+  const previewOk = !formData.previewEnabled || formData.fileUploaded;
 
-  const urheberComplete = 
-    (formData.urheber?.komponist?.length > 0 && formData.urheber.komponist.some(v => v && v.trim() !== '')) ||
-    (formData.urheber?.textdichter?.length > 0 && formData.urheber.textdichter.some(v => v && v.trim() !== ''));
-  
-  const mitwirkendeComplete = 
-    (formData.mitwirkende?.artist?.length > 0 && formData.mitwirkende.artist.some(v => v && v.trim() !== '')) ||
-    (formData.mitwirkende?.produzent?.length > 0 && formData.mitwirkende.produzent.some(v => v && v.trim() !== ''));
-  
-  // ✅ deals دائماً true (Coming Soon)
-  const dealsComplete = true;
-  
-  // ✅ pre-release دائماً true (لأنه غير مفعل)
-  const preReleaseComplete = true;
+  // ✅ عند instrumental لا نصوص → Explicit و Sprache Text ليسا مطلوبَين للاكتمال.
+  const infosComplete =
+    formData.titleValid &&
+    (isInstrumental.value || formData.explicitLyricsValid) &&
+    formData.titleLanguageValid &&
+    (isInstrumental.value || formData.textLanguageValid) &&
+    formData.fileUploaded &&
+    previewOk;
 
   return {
-    infos: infosComplete || false,
-    urheber: urheberComplete || false,
-    mitwirkende: mitwirkendeComplete || false,
-    deals: dealsComplete,
-    'pre-release': preReleaseComplete
+    infos: !!infosComplete
   };
 });
-// ========== Tab Completion ==========
+
 const isTabComplete = (tabId) => {
-  // ✅ استخدام computed tabCompletion للحصول على القيم
   const completion = tabCompletion.value;
   const result = completion[tabId] || false;
   console.log(`📌 [InfosContent] isTabComplete called for ${tabId}:`, result);
@@ -2137,17 +2601,10 @@ watch(
   () => formData,
   () => {
     console.log('🔄 [InfosContent] formData changed, emitting tab completion...');
-    const completion = tabCompletion.value;
-    // ✅ تأكد من أن deals و pre-release دائماً true
-    const finalCompletion = {
-      ...completion,
-      deals: true,
-      'pre-release': true
-    };
-    console.log('📤 [InfosContent] Emitting tab completion from watch:', finalCompletion);
+    console.log('📤 [InfosContent] Emitting infos completion:', tabCompletion.value);
     emit('update:form-data', {
       tab: activeTabLocal.value || 'infos',
-      data: { ...finalCompletion }
+      data: { infos: tabCompletion.value.infos }
     });
   },
   { deep: true, immediate: true }
@@ -2164,7 +2621,7 @@ onMounted(async () => {
   updateLanguageSearchFields();
   
   const songFile = props.currentSong?.song_file;
-  if (songFile && props.currentSong?.uuid && !audioLoaded && !isAudioLoading) {
+  if (songFile && props.currentSong?.uuid && !audioLoaded && !isAudioLoading.value) {
     if (!waveSurfer.value) {
       let filePath = songFile;
       let fileName = filePath;
@@ -2197,19 +2654,26 @@ onMounted(async () => {
   if (formData.isrcEnabled && formData.isrc) {
     validateIsrcFinal();
   }
+  
+  await nextTick();
+  isInitialLoad = false;
+  console.log('✅ Initial load completed, dropdown auto-open enabled');
+});
+
+// عند تبديل التبويب داخل keep-alive (Infos1) لا يعمل onUnmounted، فنُفرّغ هنا أيضاً.
+onDeactivated(() => {
+  flushPendingTitleSave();
 });
 
 onUnmounted(() => {
+  // ✅ نُرسل أي عنوان مؤجّل قبل التدمير (بدل مسحه) كي لا يُفقَد.
+  flushPendingTitleSave();
+
   document.removeEventListener('click', handleClickOutside);
   window.removeEventListener('save-song-complete', handleSaveComplete);
-  
+
   if (saveSubtitle.cancel) {
     saveSubtitle.cancel();
-  }
-  
-  if (titleDebounceTimer.value) {
-    clearTimeout(titleDebounceTimer.value);
-    titleDebounceTimer.value = null;
   }
   
   if (waveSurfer.value) {
@@ -2244,7 +2708,6 @@ defineExpose({
 </script>
 
 <style lang="scss" scoped>
-/* نفس الـ style الموجود */
 .custom-select{
   width: 100%;
 }
@@ -2290,7 +2753,7 @@ defineExpose({
 }
 
 .section-input.has-checkmark .select-trigger {
-  padding-right: 94px;
+  padding-right: 37px;
 }
 
 .dropdown-fade-enter-active,
@@ -2374,7 +2837,7 @@ defineExpose({
 .Form-field-song-text .song-text {
   display: flex;
   height: 100%;
-  padding: 16px 12px;
+  padding: 16px;
   align-items: flex-start;
   gap: 10px;
   align-self: stretch;
@@ -2399,14 +2862,18 @@ defineExpose({
   position: relative;
   cursor: pointer;
   transition: all 0.3s ease;
-  
-  &:hover {
-    transform: scale(1.05);
-  }
 }
 
 .switch.active {
   background: var(--Strawberry);
+}
+
+/* ✅ حالة التعطيل عند نوع instrumental (Explicit / Sprache Text / Lyrics) */
+.switch.disabled,
+.section-input.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: not-allowed;
 }
 
 .switch .switch-circle {
@@ -2469,6 +2936,9 @@ defineExpose({
 }
 
 .section2 .Form .box {
+  /* ارتفاع صندوق الرفع. حالة ما بعد الرفع تلتزم به أيضاً (min-height على
+     .song-form)، فلا يتحرّك ما تحته ويبقى Song Lyrics على سطر Explicit Lyrics. */
+  --upload-box-h: 238px;
   display: flex;
   justify-content: center;
   align-items: start;
@@ -2482,7 +2952,7 @@ defineExpose({
 .box .upload-file {
   display: flex;
   width: 100%;
-  height: 238px;
+  height: var(--upload-box-h);
   flex-direction: column;
   justify-content: center;
   align-items: center;
@@ -2511,7 +2981,6 @@ defineExpose({
   cursor: pointer;
 }
 
-// ✅ DRAG & OVER على كامل الـ BOX
 .box {
   position: relative;
   transition: all 0.3s ease;
@@ -2519,7 +2988,6 @@ defineExpose({
   
   &.drag-over {
     .upload-file {
-      // border-color: var(--Strawberry, #D15) !important;
       background: var(--secondary) !important;
       border-radius: 20px;
       transition: all 0.3s ease;
@@ -2527,10 +2995,7 @@ defineExpose({
       .text-link-block span {
         text-decoration: underline;
       }
-    
     }
-    
-    // box-shadow: 0 0 0 2px var(--Strawberry, #D15);
   }
   
   &:hover {
@@ -2562,10 +3027,67 @@ defineExpose({
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 32px;
+  /* الموجة ← مجموعة (اسم الملفّ + سؤال الـ 30 ثانية) */
+  gap: 56px;
   align-self: stretch;
   width: 100%;
+  /* نفس ارتفاع صندوق الرفع: الرفع لا يزيح ما تحته. */
+  min-height: var(--upload-box-h);
   overflow: visible !important;
+  position: relative;
+}
+
+/* مجموعة اسم الملفّ وسؤال الـ 30 ثانية — قياسات التصميم. */
+.song-form .file-preview-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 32px;
+  align-self: stretch;
+}
+
+.audio-loading-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 62px;
+  min-height: 62px;
+}
+
+.audio-loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #DD1155;
+  border-radius: 50%;
+  animation: audio-spin 0.8s linear infinite;
+}
+
+@keyframes audio-spin {
+  to { transform: rotate(360deg); }
+}
+
+.waveform-container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 5px;
+  position: relative;
+  overflow: visible !important;
+  height: 62px;
+  min-height: 62px;
+  transition: opacity 0.3s ease;
+}
+
+#waveform {
+  width: 100%;
+  height: 62px;
+  cursor: pointer;
+  min-height: 62px;
 }
 
 .song-form .description-song {
@@ -2679,7 +3201,6 @@ defineExpose({
     aspect-ratio: 9/10;
     transition: filter 0.3s ease;
   }
-
 }
 
 .box .upload-file .play.visible {
@@ -2761,6 +3282,26 @@ defineExpose({
   height: 100%;
 }
 
+/* نصّ المعلومات الثابت بدل الـ textarea. */
+.song-text .lyrics-info {
+  margin: 0;
+  flex: 1 0 0;
+  color: var(--Main-Colors-White, #FFF);
+  font-family: Heebo;
+  font-size: 20px;
+  font-style: normal;
+  line-height: 1.4;
+  letter-spacing: 0.5px;
+  // opacity: 0.7;
+  position: relative;
+  top: -3px;
+}
+
+.song-text .lyrics-info a {
+  color: var(--Main-Colors-Strawberry, #D15);
+  text-decoration: underline;
+}
+
 .song-text .textarea {
   flex: 1 0 0;
   color: var(--Main-Colors-White, #FFF);
@@ -2803,10 +3344,10 @@ defineExpose({
 
 .form-field .top-line {
   display: flex;
-  height: 20px;
-  padding-right: 37px;
+  height: 10px;
+  padding-right: 30px;
   justify-content: space-between;
-  align-items: center;
+  align-items: self-end;
   align-self: stretch;
 }
 
@@ -2816,7 +3357,7 @@ defineExpose({
   font-size: 14px;
   font-style: normal;
   font-weight: 300;
-  line-height: 1;
+  line-height: .7;
   letter-spacing: 0.7px;
   text-transform: uppercase;
 }
@@ -2830,32 +3371,21 @@ defineExpose({
   width: 92%;
   position: relative;
 
-  &.is-hovered,
-  &:hover {
-    .spacer {
-      display: flex !important;
-      opacity: 1;
-    }
-
-    .input-field,
-    .select-trigger {
-      border-radius: 5px 0 0 5px;
-    }
-  }
-
   .spacer {
-    display: none;
+    display: flex;
     opacity: 0;
-    transition: opacity 0.3s ease;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease, background 0.3s ease, transform 0.3s ease;
     width: 34px;
     height: 46px;
     padding: 9px 10px;
     align-items: center;
-    border-radius: 5px;
-    position: relative;
-    cursor: pointer;
+    border-radius: 0 5px 5px 0;
     position: absolute;
     right: -43px;
+    background: var(--primary);
+    cursor: pointer;
+    transform: scale(0.95);
 
     &:hover {
       .play .icon {
@@ -2886,7 +3416,20 @@ defineExpose({
     }
   }
 
- 
+  &.is-hovered,
+  &:hover {
+    .spacer {
+      opacity: 1;
+      visibility: visible;
+      background: var(--secondary);
+      transform: scale(1);
+    }
+
+    .input-field,
+    .select-trigger {
+      border-radius: 5px 0 0 5px;
+    }
+  }
 }
 
 .form-field.toggleable:not(.active) .section-input {
@@ -2948,11 +3491,7 @@ defineExpose({
   position: relative;
   right: 12px;
 }
-// ============================================
-// ✅ DRAG & DROP - تطبيق drag-over على كامل الـ box
-// ============================================
 
-// ✅ DRAG & DROP - إظهار spacer عند drag-over
 .box {
   position: relative;
   transition: all 0.3s ease;
@@ -2971,7 +3510,6 @@ defineExpose({
       }
     }
     
-    // ✅ ✅ ✅ إظهار زر التشغيل (play) عند drag-over
     .upload-file .play {
       opacity: 1 !important;
       pointer-events: auto !important;
@@ -2981,7 +3519,6 @@ defineExpose({
         filter: brightness(0) invert(1);
       }
     }
-   
   }
   
   &:hover {
@@ -2992,9 +3529,6 @@ defineExpose({
   }
 }
 
-// ✅ إزالة الـ drag-over القديم من .upload-file
-// احذف أو علق على هذا الكود:
-// .box .upload-file.drag-over { ... }
 @keyframes fadeInError {
   from {
     opacity: 0;
@@ -3111,24 +3645,6 @@ defineExpose({
   font-family: Heebo;
 }
 
-.waveform-container {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 10px;
-  border-radius: 5px;
-  position: relative;
-  overflow: visible !important;
-}
-
-#waveform {
-  width: 100%;
-  height: 62px;
-  cursor: pointer;
-}
-
 .timer {
   position: absolute;
   left: 75px;
@@ -3207,16 +3723,14 @@ defineExpose({
 
 .view-time-overlay {
   display: flex;
-  width: 98px;
-  padding: 4px 8px;
-  justify-content: center;
   align-items: center;
-  gap: 10px;
-  position: absolute;
-  left: 90px;
-  bottom: -22px;
+  gap: 8px;
+  padding: 4px 8px;
   border-radius: 20px;
-  background: var(--Main-Colors-Slate-Dark, #1B1C20);
+  background: #1B1C20;
+  position: absolute;
+  bottom: -30px;
+  white-space: nowrap;
 }
 
 .view-time-overlay span{
@@ -3227,6 +3741,31 @@ defineExpose({
   font-weight: 300;
   line-height: normal;
   letter-spacing: 0.7px;
+}
+
+.preview-play-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+ 
+  background: var(--primary);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+
+ 
+
+  
+}
+
+.preview-play-icon {
+  width: 12px;
+  height: 12px;
+  object-fit: contain;
+  // filter: brightness(0) invert(1);
 }
 
 .play-pause-icon-red {
@@ -3253,6 +3792,10 @@ defineExpose({
     min-width: 300px;
   }
 
+  
+  .form-field .top-line{
+    padding-right: 28px;
+  }
   .box .upload-file .play{
     height: 215px;
   }
@@ -3268,8 +3811,13 @@ defineExpose({
     font-size: 12px;
   }
 
-  .box .upload-file{
-    height: 213px;
+  .section2 .Form .box {
+    --upload-box-h: 213px;
+  }
+
+  /* الارتفاع المتاح أقلّ، فتقلّ المسافة قبل المجموعة بنسبتها. */
+  .box .song-form {
+    gap: 40px;
   }
 }
 
@@ -3283,5 +3831,28 @@ defineExpose({
   .Form{
     min-width: 520px;
   }
+
+  .form-field .top-line{
+    padding-right: 42px;
+  }
+}
+
+/* ✅ نص خطأ صيغة الصوت (أحمر، يظهر 3 ثوانٍ) */
+.audio-format-error {
+  color: #DD1155;
+  font-family: Heebo;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.3;
+  margin: 4px 0 6px;
+}
+
+.audio-error-fade-enter-active,
+.audio-error-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.audio-error-fade-enter-from,
+.audio-error-fade-leave-to {
+  opacity: 0;
 }
 </style>

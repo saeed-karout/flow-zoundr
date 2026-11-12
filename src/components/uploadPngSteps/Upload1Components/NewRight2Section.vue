@@ -16,11 +16,11 @@
                 <div class="rows">
                    <div class="summary-item">
                         <span class="label">Release Preis:</span>
-                        <span class="value">{{ formatPrice(releasePrice) }} EUR</span>
+                        <span class="value">{{ formatPrice(effectiveReleasePrice) }} EUR</span>
                     </div>
                     <div class="summary-item">
                         <span class="label">Song Preis:</span>
-                        <span class="value">{{ formatPrice(songPrice) }} EUR</span>
+                        <span class="value">{{ formatPrice(effectiveSongPrice) }} EUR</span>
                     </div>
                 </div>
                 <div class="rows">
@@ -30,7 +30,7 @@
                     </div>
                     <div class="summary-item">
                         <span class="label">Subgenre:</span>
-                        <span class="value">{{ truncateText(subGenre, 20) || 'undefined' }}</span>
+                        <span class="value">{{ truncateText(subGenre, 20) || 'Nicht verfügbar' }}</span>
                     </div>
                 </div>
             </div>
@@ -42,10 +42,10 @@
                 <div class="form8">
                     <div class="title">Label Name</div>
                     <div class="section-input"
-                        :class="{ 'is-hovered': isHoveredForm8, 'has-checkmark': isForm8Selected }"
+                        :class="{ 'is-hovered': isHoveredForm8, 'has-checkmark': isForm8Selected}"
                         @mouseenter="$emit('update:isHoveredForm8', true)"
                         @mouseleave="$emit('update:isHoveredForm8', false)">
-                        <input type="text" class="input-field" v-model="localLabelName" placeholder="Label Name"
+                        <input type="text" class="input-field" :class="{ 'is-correction': isCorrected('label') }" v-model="localLabelName" placeholder="Label Name"
                             @input="updateLabelNameSelected" />
                         <div v-if="isForm8Selected" class="checkmark">
                             <img src="../../../assets/icons/y.png" class="icon-y" alt="checkmark icon" />
@@ -60,12 +60,12 @@
                 <div class="form9">
                     <div class="title">Produktionsjahr</div>
                     <div class="section-input"
-                        :class="{ 'is-hovered': isHoveredForm9, 'has-checkmark': isForm9Selected }"
+                        :class="{ 'is-hovered': isHoveredForm9, 'has-checkmark': isForm9Selected}"
                         @mouseenter="$emit('update:isHoveredForm9', true)"
                         @mouseleave="$emit('update:isHoveredForm9', false)">
                         <input 
                             type="text" 
-                            class="input-field" 
+                            class="input-field" :class="{ 'is-correction': isCorrected('production_year') }" 
                             v-model="localProductionYear" 
                             placeholder="Produktionsjahr"
                             maxlength="4"
@@ -90,12 +90,12 @@
                 <div class="form10">
                     <div class="title">Wie lautet deine C-Line?</div>
                     <div class="section-input"
-                        :class="{ 'is-hovered': isHoveredForm10, 'has-checkmark': isForm10Selected }"
+                        :class="{ 'is-hovered': isHoveredForm10, 'has-checkmark': isForm10Selected}"
                         @mouseenter="$emit('update:isHoveredForm10', true)"
                         @mouseleave="$emit('update:isHoveredForm10', false)">
                         <input 
                             type="text" 
-                            class="input-field-small" 
+                            class="input-field-small" :class="{ 'is-correction': isCorrected('c_line_name') || isCorrected('c_line_year') }" 
                             v-model="localCLineYear" 
                             placeholder="Jahr"
                             maxlength="4"
@@ -127,12 +127,12 @@
                 <div class="form11">
                     <div class="title">Wie lautet deine P-Line?</div>
                     <div class="section-input"
-                        :class="{ 'is-hovered': isHoveredForm11, 'has-checkmark': isForm11Selected }"
+                        :class="{ 'is-hovered': isHoveredForm11, 'has-checkmark': isForm11Selected}"
                         @mouseenter="$emit('update:isHoveredForm11', true)"
                         @mouseleave="$emit('update:isHoveredForm11', false)">
                         <input 
                             type="text" 
-                            class="input-field-small" 
+                            class="input-field-small" :class="{ 'is-correction': isCorrected('p_line_name') || isCorrected('p_line_year') }" 
                             v-model="localPLineYear" 
                             placeholder="Jahr"
                             maxlength="4"
@@ -205,7 +205,17 @@
 
 <script setup>
 import { computed, watch, ref, onMounted, nextTick } from 'vue';
+import { useCorrections } from '@/composables/useCorrections';
 import iconPlay from '@/assets/icons/play.png';
+import { useReleaseStore } from '@/stores/release';
+
+// حقول مطلوب تصحيحها (Korrektur) → بوردر أحمر على الحقل المعني.
+const { isCorrected } = useCorrections();
+
+const releaseStore = useReleaseStore();
+
+const isMeaningfulPrice = (v) =>
+    v !== null && v !== undefined && v !== '' && !Number.isNaN(Number(v));
 
 const props = defineProps({
     artistInputs: { type: Array, required: true },
@@ -306,6 +316,26 @@ const formatPrice = (value) => {
     if (isNaN(num)) return '0,00';
     return num.toFixed(2).replace('.', ',');
 };
+
+// ✅ القيمة الفعّالة للسعر: من الـ prop أولاً، وإلا من الـ store (draftRelease من الخادم
+//    ثم metasData) — فيظهر السعر المخزَّن بدل 0,00 عند فراغ الـ prop بعد التنقّل.
+const effectiveReleasePrice = computed(() => {
+    if (isMeaningfulPrice(props.releasePrice)) return props.releasePrice;
+    const d = releaseStore.draftRelease?.release_price;
+    if (isMeaningfulPrice(d)) return d;
+    const m = releaseStore.metasData?.releasePrice;
+    if (isMeaningfulPrice(m)) return m;
+    return props.releasePrice;
+});
+
+const effectiveSongPrice = computed(() => {
+    if (isMeaningfulPrice(props.songPrice)) return props.songPrice;
+    const d = releaseStore.draftRelease?.price_per_song;
+    if (isMeaningfulPrice(d)) return d;
+    const m = releaseStore.metasData?.songPrice;
+    if (isMeaningfulPrice(m)) return m;
+    return props.songPrice;
+});
 
 const localPLineYear = computed({
     get: () => props.pLineYear,
@@ -588,6 +618,17 @@ watch(() => props.isLeaving, (newVal) => {
     }
 }
 
+@keyframes fadeInDown {
+    0% {
+        opacity: 0;
+        transform: translateY(50px) scale(0.95);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
 .new-right2 .info {
     display: flex;
     flex-direction: column;
@@ -715,12 +756,15 @@ watch(() => props.isLeaving, (newVal) => {
     gap: 32px;
     flex: 1 0 0;
     opacity: 0;
-    transition: opacity 0.5s ease, padding 0.3s cubic-bezier(0.4, 0, 0.2, 1), gap 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: translateY(-30px);
+    transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1), gap 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     width: 100%;
 }
 
 .metas.visible {
     opacity: 1;
+    transform: translateY(0);
+    animation: fadeInDown 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 .metas .row1 {

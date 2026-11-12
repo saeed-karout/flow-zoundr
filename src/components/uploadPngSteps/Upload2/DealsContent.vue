@@ -147,7 +147,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
+import { useReleaseStore } from '@/stores/release';
 
 const props = defineProps({
   currentSong: {
@@ -167,8 +168,11 @@ const props = defineProps({
 const emit = defineEmits([
   'update:form-data',
   'save-song',
-  'update-tab-completion'  // ✅ إضافة emit لـ tab completion
+  'update-tab-completion'
 ]);
+
+// ========== Store ==========
+const releaseStore = useReleaseStore();
 
 // ========== ✅ بيانات ثابتة للتصميم ==========
 const featureContributors = ref([
@@ -195,8 +199,6 @@ const mainArtistPercentage = 100;
 
 // ========== ✅ tabCompletion = دائماً true ==========
 const tabCompletion = computed(() => {
-  // ✅ هذه الصفحة معطلة (Coming Soon) ولا ترسل API
-  // لذلك دائماً complete = true
   const isComplete = true;
   console.log('📌 [DealsContent] tabCompletion (always true):', { deals: isComplete });
   return {
@@ -207,23 +209,22 @@ const tabCompletion = computed(() => {
 // ========== ✅ دالة التحقق من اكتمال التاب ==========
 const isTabComplete = (tabId) => {
   if (tabId === 'deals') {
-    // ✅ دائماً true لأن الصفحة معطلة
     console.log('📌 [DealsContent] isTabComplete: true (always)');
     return true;
   }
-  return true; // جميع التابات الأخرى أيضاً true
+  return true;
 };
 
 // ========== ✅ إرسال تحديث الاكتمال ==========
 const emitTabCompletion = () => {
   console.log('📌 [DealsContent] Emitting tab completion (always true)');
   
-  // ✅ إرسال التحديث إلى المكون الأب
+  // ✅ 1. إرسال إلى المكون الأب عبر emit
   emit('update-tab-completion', {
     deals: true
   });
   
-  // ✅ إرسال تحديث form-data أيضاً
+  // ✅ 2. إرسال تحديث form-data
   emit('update:form-data', {
     tab: 'deals',
     data: { 
@@ -232,24 +233,40 @@ const emitTabCompletion = () => {
       shares: []
     }
   });
+  
+  // ✅ 3. لا نكتب في المخزَّن مباشرةً. الكتابة تمرّ عبر update:form-data أعلاه إلى Infos1
+  //    (الكاتب الوحيد في tabCompletion). كان هنا نداء بصيغة خاطئة
+  //    updateTabCompletion('deals', true) — الـ action يستقبل كائناً — فكان يُرفَض أصلاً،
+  //    وتعدّد الكُتّاب هو سبب تضارب علامات الاكتمال بين التبويبات.
+
+  // ✅ 4. إرسال عبر حدث مخصص (Custom Event) كحل إضافي
+  const event = new CustomEvent('tab-completion-update', {
+    detail: {
+      tab: 'deals',
+      data: { deals: true }
+    }
+  });
+  window.dispatchEvent(event);
+  console.log('📌 [DealsContent] Dispatched custom event: tab-completion-update');
 };
 
 // ========== ✅ دورة الحياة ==========
 onMounted(() => {
   console.log('🚀 DealsContent: Mounted (Coming Soon - always complete)');
   
-  // ✅ إرسال الاكتمال فور التحميل
+  // ✅ إرسال الاكتمال فور التحميل مع تأخير بسيط
   setTimeout(() => {
     emitTabCompletion();
-  }, 300);
+  }, 200);
 });
 
 // ========== ✅ مراقبة التغييرات ==========
 watch(
   () => props.activeTab,
-  (newTab) => {
+  (newTab, oldTab) => {
+    console.log(`📌 [DealsContent] Active tab changed: ${oldTab} -> ${newTab}`);
     if (newTab === 'deals') {
-      console.log('📌 [DealsContent] Active tab changed to deals, emitting completion');
+      console.log('📌 [DealsContent] Active tab is deals, emitting completion');
       setTimeout(() => {
         emitTabCompletion();
       }, 200);
@@ -257,6 +274,10 @@ watch(
   },
   { immediate: true }
 );
+
+// ملاحظة: أُزيل هنا مراقب كان يُعيد deals إلى true كلّما صار غير ذلك. لم يكن يعمل (نداء
+//   بصيغة خاطئة يرفضه المخزَّن)، ولو عمل لفرض اكتمال Deals دائماً وتجاوز علم الخادم
+//   deals_step_completed. اكتمال Deals يضبطه Infos1 عند فتح التبويب فعلياً ويحفظه على الخادم.
 
 // ========== ✅ تصدير الدوال ==========
 defineExpose({
@@ -489,6 +510,12 @@ defineExpose({
   margin: 0;
 }
 
+/* فايرفوكس لا يملك تلك العناصر الزائفة — يخفي أسهمه appearance: textfield. */
+.input-percentage input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 .input-percentage input[type='number'] {
   -moz-appearance: textfield;
 }
@@ -534,7 +561,6 @@ defineExpose({
   filter: none !important;
   -webkit-filter: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
 .coming-soon-box {
@@ -555,7 +581,6 @@ defineExpose({
   filter: none !important;
   -webkit-filter: none !important;
   backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
   opacity: 1 !important;
 }
 

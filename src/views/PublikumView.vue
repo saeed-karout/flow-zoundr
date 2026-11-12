@@ -4,14 +4,16 @@
       <!-- Box 1: Total Audience -->
       <div class="Box-1">
         <div class="text-1">{{ audienceData.title }}</div>
-        <img :src="audienceData.icon" class="icon-team" alt="Team Icon">
-        <div class="number">{{ formatNumber(audienceData.total) }}</div>
+        <template v-if="hasAudience">
+          <img :src="audienceData.icon" class="icon-team" alt="Team Icon">
+          <div class="number">{{ formatNumber(audienceData.total) }}</div>
+        </template>
       </div>
 
       <!-- Box 2: Male Audience -->
       <div class="Box-2">
         <div class="text-1">{{ maleData.title }}</div>
-        <div class="bars">
+        <div v-if="hasMaleData" class="bars">
           <div
             v-for="bar in maleData.bars"
             :key="bar.ageRange"
@@ -40,7 +42,7 @@
             </div>
           </div>
         </div>
-        <div class="numbers-2">
+        <div v-if="hasMaleData" class="numbers-2">
           <div class="left">{{ hoveredBar.percentage !== null && hoveredBar.type === 'male' ? hoveredBar.percentage : maleData.percentage }}%</div>
           <div class="right">{{ formatNumber(hoveredBar.count !== null && hoveredBar.type === 'male' ? hoveredBar.count : maleData.count) }}</div>
         </div>
@@ -49,7 +51,7 @@
       <!-- Box 3: Female Audience -->
       <div class="Box-3">
         <div class="text-1">{{ femaleData.title }}</div>
-        <div class="bars">
+        <div v-if="hasFemaleData" class="bars">
           <div
             v-for="bar in femaleData.bars"
             :key="bar.ageRange"
@@ -78,7 +80,7 @@
             </div>
           </div>
         </div>
-        <div class="numbers-2">
+        <div v-if="hasFemaleData" class="numbers-2">
           <div class="left">{{ hoveredBar.percentage !== null && hoveredBar.type === 'female' ? hoveredBar.percentage : femaleData.percentage }}%</div>
           <div class="right">{{ formatNumber(hoveredBar.count !== null && hoveredBar.type === 'female' ? hoveredBar.count : femaleData.count) }}</div>
         </div>
@@ -117,6 +119,7 @@
         <div class="text-1">{{ skipRateData.title }}</div>
         <div class="skip-rate-container">
           <svg 
+            v-if="hasSkipRate"
             class="skip-rate-svg" 
             viewBox="0 0 323 140" 
             preserveAspectRatio="none"
@@ -142,7 +145,7 @@
             />
           </svg>
           
-          <div class="skip-rate-labels">
+          <div v-if="hasSkipRate" class="skip-rate-labels">
             <div 
               v-for="(label, index) in skipRateData.labels" 
               :key="index"
@@ -180,27 +183,39 @@
         <div class="box-countries" @click="toggleCountriesPage">
           <div class="text-1">{{ countriesData.title }}</div>
           <div class="countries">
-            <div v-for="country in displayedCountries" :key="country.name" class="row-country">
-              <div class="icon">
-                <img 
-                  :src="getCountryFlagUrl(country.name)"
-                  class="country-flag"
-                  :alt="country.name"
-                  @error="handleFlagError"
-                >
-              </div>
-              <div v-if="activePage === 0" class="number">
-                {{ formatNumber(country.count) }}
-              </div>
-              <div v-else class="progress-bar-container">
-                <div class="progress-bar">
-                  <div class="line-red" :style="{ width: `${country.percentage}%` }"></div>
+            <transition-group 
+              name="country-slide" 
+              tag="div" 
+              class="countries-transition"
+              mode="out-in"
+            >
+              <div 
+                v-for="(country, idx) in displayedCountries" 
+                :key="country.name"
+                class="row-country"
+                :style="{ transitionDelay: `${idx * 60}ms` }"
+              >
+                <div class="icon">
+                  <img 
+                    :src="getCountryFlagUrl(country.name)"
+                    class="country-flag"
+                    :alt="country.name"
+                    @error="handleFlagError"
+                  >
                 </div>
-                <div class="num">{{ country.percentage }}%</div>
+                <div v-if="activePage === 0" class="number">
+                  {{ formatNumber(country.count) }}
+                </div>
+                <div v-else class="progress-bar-container">
+                  <div class="progress-bar">
+                    <div class="line-red" :style="{ width: `${country.percentage}%` }"></div>
+                  </div>
+                  <div class="num">{{ country.percentage }}%</div>
+                </div>
               </div>
-            </div>
+            </transition-group>
           </div>
-          <div class="slide-nav">
+          <div v-if="hasCountries" class="slide-nav">
             <div
               v-for="(dot, index) in countriesData.dots"
               :key="index"
@@ -219,7 +234,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import apiRequest from '@/lib/apiRequest';
 import LeafletMap from '@/components/Trends/LeafletMap.vue';
 
@@ -231,12 +246,14 @@ const props = defineProps({
   }
 });
 
-// ========== Reactive Data ==========
+// ========== Refs ==========
+const mapRef = ref(null);
 const gradientId = `grad-${Date.now()}-${Math.random()}`;
 const mapCenter = ref([30, 20]);
 const mapZoom = ref(2);
 let fetchTimeout = null;
 
+// ========== Data ==========
 const audienceData = ref({
   title: 'Publikum',
   icon: '/icon/Team.svg',
@@ -331,6 +348,27 @@ const skipRateData = ref({
   values: [0, 0, 0, 0, 0],
 });
 
+// ========== هل وصلت بيانات فعلاً؟ ==========
+// عند غياب البيانات كانت الصناديق تعرض هيكلاً فارغاً: أيقونة و0، وسلالم
+// الأعمار بلا أعمدة، ومحور 0–100% مع خطّ أحمر مسطّح. نُخفيها ونُبقي العنوان.
+const hasAudience = computed(() => Number(audienceData.value.total) > 0);
+
+const hasBarsData = (data) =>
+  Number(data.count) > 0 || data.bars.some((bar) => Number(bar.percentage) > 0);
+
+const hasMaleData = computed(() => hasBarsData(maleData.value));
+const hasFemaleData = computed(() => hasBarsData(femaleData.value));
+
+// نقاط التنقّل بين صفحات الدول لا معنى لها بلا دول.
+const hasCountries = computed(() =>
+  countriesData.value.pages.some((page) => Array.isArray(page) && page.length > 0)
+);
+
+const hasSkipRate = computed(() =>
+  Array.isArray(skipRateData.value.values) &&
+  skipRateData.value.values.some((value) => Number(value) > 0)
+);
+
 const countriesData = ref({
   title: 'Länder',
   pages: [[]],
@@ -345,10 +383,13 @@ const svgWidth = 323;
 const svgHeight = 140;
 const padding = { left: 15, right: 15, top: 10, bottom: 20 };
 
-// ========== تحويل بيانات الدول للخريطة ==========
+// ========== Computed ==========
 const countriesDataForMap = computed(() => {
+  console.log('🗺️ [countriesDataForMap] بدء التحويل...');
+  
   const allCountries = [];
-  countriesData.value.pages.forEach(page => {
+  countriesData.value.pages.forEach((page, pageIndex) => {
+    console.log(`🗺️ [countriesDataForMap] الصفحة ${pageIndex}:`, page);
     page.forEach(country => {
       allCountries.push({
         name: country.name,
@@ -357,59 +398,42 @@ const countriesDataForMap = computed(() => {
     });
   });
   
-  if (allCountries.length === 0) return {};
+  console.log('🗺️ [countriesDataForMap] allCountries:', allCountries);
   
-  const sortedCountries = [...allCountries].sort((a, b) => b.count - a.count);
+  if (allCountries.length === 0) {
+    console.warn('🗺️ [countriesDataForMap] لا توجد دول!');
+    return {};
+  }
+  
+  const uniqueCountries = [];
+  const seenNames = new Set();
+  for (const country of allCountries) {
+    if (!seenNames.has(country.name)) {
+      seenNames.add(country.name);
+      uniqueCountries.push(country);
+    }
+  }
+  
+  console.log('🗺️ [countriesDataForMap] uniqueCountries:', uniqueCountries);
+  
+  const sortedCountries = [...uniqueCountries].sort((a, b) => b.count - a.count);
+  console.log('🗺️ [countriesDataForMap] sortedCountries:', sortedCountries);
   
   const result = {};
   sortedCountries.forEach((country, index) => {
     result[country.name] = {
+      name: country.name,
       count: country.count,
       rank: index + 1
     };
   });
+
+  console.log('🗺️ [countriesDataForMap] النتيجة النهائية:', result);
+  console.log('🗺️ [countriesDataForMap] عدد الدول:', Object.keys(result).length);
   
   return result;
 });
 
-// ========== دوال الخريطة ==========
-const handleMapClick = (latlng) => {
-  console.log('تم النقر على الخريطة:', latlng);
-};
-
-const handleZoomChange = (zoom) => {
-  console.log('مستوى التكبير:', zoom);
-};
-
-// ========== دوال الأعلام ==========
-const getCountryCode = (countryName) => {
-  const codeMap = {
-    'United States': 'us', 'Germany': 'de', 'Brazil': 'br', 'United Kingdom': 'gb',
-    'Canada': 'ca', 'Spain': 'es', 'France': 'fr', 'Japan': 'jp', 'Netherlands': 'nl',
-    'Australia': 'au', 'Switzerland': 'ch', 'Austria': 'at', 'Italy': 'it', 'Sweden': 'se',
-    'Norway': 'no', 'Denmark': 'dk', 'Finland': 'fi', 'Poland': 'pl', 'Russia': 'ru',
-    'China': 'cn', 'India': 'in', 'South Korea': 'kr', 'Mexico': 'mx', 'South Africa': 'za',
-    'Argentina': 'ar', 'Chile': 'cl', 'Colombia': 'co', 'Peru': 'pe', 'Venezuela': 've',
-    'Egypt': 'eg', 'Turkey': 'tr', 'Saudi Arabia': 'sa', 'United Arab Emirates': 'ae',
-    'Israel': 'il', 'Greece': 'gr', 'Portugal': 'pt', 'Belgium': 'be', 'Ireland': 'ie',
-    'New Zealand': 'nz', 'Czech Republic': 'cz', 'Hungary': 'hu', 'Romania': 'ro',
-    'Ukraine': 'ua', 'Thailand': 'th', 'Vietnam': 'vn', 'Malaysia': 'my', 'Singapore': 'sg',
-    'Indonesia': 'id', 'Philippines': 'ph', 'Pakistan': 'pk', 'Bangladesh': 'bd',
-    'Nigeria': 'ng', 'Kenya': 'ke', 'Morocco': 'ma'
-  };
-  return codeMap[countryName] || 'un';
-};
-
-const getCountryFlagUrl = (countryName) => {
-  const code = getCountryCode(countryName);
-  return `https://cdn.jsdelivr.net/npm/circle-flags@1.0.0/flags/${code}.svg`;
-};
-
-const handleFlagError = (event) => {
-  event.target.src = 'https://cdn.jsdelivr.net/npm/circle-flags@1.0.0/flags/un.svg';
-};
-
-// ========== الرسوم البيانية ==========
 const chartPoints = computed(() => {
   const values = skipRateData.value.values;
   const labels = skipRateData.value.labels;
@@ -452,15 +476,26 @@ const areaPath = computed(() => {
 });
 
 const displayedCountries = computed(() => {
+  console.log('📊 [displayedCountries] بدء الحساب...');
+  console.log('📊 [displayedCountries] activePage:', activePage.value);
+  console.log('📊 [displayedCountries] countriesData.pages:', countriesData.value.pages);
+  
   const countries = countriesData.value.pages[activePage.value] || [];
+  console.log('📊 [displayedCountries] countries:', countries);
+  
   const maxCount = Math.max(...countries.map(c => c.count), 1);
-  return countries.map(c => ({
+  console.log('📊 [displayedCountries] maxCount:', maxCount);
+  
+  const result = countries.map(c => ({
     ...c,
     percentage: Number(((c.count / maxCount) * 100).toFixed(2)),
   }));
+  
+  console.log('📊 [displayedCountries] النتيجة:', result);
+  return result;
 });
 
-// ========== Utility Functions ==========
+// ========== Methods ==========
 const formatNumber = (num) => {
   if (!num && num !== 0) return '0';
   return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -492,6 +527,74 @@ const resetHoverData = (type) => {
   }
 };
 
+// ========== Country Flags ==========
+const getCountryCode = (countryName) => {
+  const codeMap = {
+    'United States': 'us', 'Germany': 'de', 'Brazil': 'br', 'United Kingdom': 'gb',
+    'Canada': 'ca', 'Spain': 'es', 'France': 'fr', 'Japan': 'jp', 'Netherlands': 'nl',
+    'Australia': 'au', 'Switzerland': 'ch', 'Austria': 'at', 'Italy': 'it', 'Sweden': 'se',
+    'Norway': 'no', 'Denmark': 'dk', 'Finland': 'fi', 'Poland': 'pl', 'Russia': 'ru',
+    'China': 'cn', 'India': 'in', 'South Korea': 'kr', 'Mexico': 'mx', 'South Africa': 'za',
+    'Argentina': 'ar', 'Chile': 'cl', 'Colombia': 'co', 'Peru': 'pe', 'Venezuela': 've',
+    'Egypt': 'eg', 'Turkey': 'tr', 'Saudi Arabia': 'sa', 'United Arab Emirates': 'ae',
+    'Israel': 'il', 'Greece': 'gr', 'Portugal': 'pt', 'Belgium': 'be', 'Ireland': 'ie',
+    'New Zealand': 'nz', 'Czech Republic': 'cz', 'Hungary': 'hu', 'Romania': 'ro',
+    'Ukraine': 'ua', 'Thailand': 'th', 'Vietnam': 'vn', 'Malaysia': 'my', 'Singapore': 'sg',
+    'Indonesia': 'id', 'Philippines': 'ph', 'Pakistan': 'pk', 'Bangladesh': 'bd',
+    'Nigeria': 'ng', 'Kenya': 'ke', 'Morocco': 'ma'
+  };
+  return codeMap[countryName] || 'un';
+};
+
+const getCountryFlagUrl = (countryName) => {
+  const code = getCountryCode(countryName);
+  return `https://cdn.jsdelivr.net/npm/circle-flags@1.0.0/flags/${code}.svg`;
+};
+
+const handleFlagError = (event) => {
+  event.target.src = 'https://cdn.jsdelivr.net/npm/circle-flags@1.0.0/flags/un.svg';
+};
+
+// ========== Map Handlers ==========
+const handleMapClick = (latlng) => {
+  console.log('تم النقر على الخريطة:', latlng);
+};
+
+const handleZoomChange = (zoom) => {
+  console.log('مستوى التكبير:', zoom);
+};
+
+// ========== Update Map ==========
+const updateMap = () => {
+  console.log('🗺️ [updateMap] بدء تحديث الخريطة...');
+  
+  if (!mapRef.value) {
+    console.warn('🗺️ [updateMap] mapRef غير موجود');
+    return;
+  }
+  
+  const map = mapRef.value.map;
+  if (map) {
+    console.log('🗺️ [updateMap] تحديث حجم الخريطة...');
+    setTimeout(() => {
+      map.invalidateSize();
+      console.log('🗺️ [updateMap] تم تحديث حجم الخريطة');
+    }, 300);
+  }
+  
+  setTimeout(() => {
+    if (mapRef.value.geoLayer) {
+      console.log('🗺️ [updateMap] تحديث ألوان الخريطة...');
+      mapRef.value.updateMapColors();
+      
+      if (typeof mapRef.value.updateTooltips === 'function') {
+        console.log('🗺️ [updateMap] تحديث التولتيبات...');
+        mapRef.value.updateTooltips();
+      }
+    }
+  }, 400);
+};
+
 // ========== API Functions ==========
 const fetchAudienceData = async () => {
   const dateType = getDateType();
@@ -520,8 +623,12 @@ const fetchAudienceData = async () => {
     const response = await apiRequest.get(`/audience?${query.toString()}`);
     const data = response.data?.data || response.data;
     
+    console.log('📊 API Response Data:', data);
+    
     if (data) {
       updateDataFromResponse(data);
+    } else {
+      console.warn('⚠️ لا توجد بيانات من API');
     }
   } catch (error) {
     console.error('❌ Error fetching audience data:', error);
@@ -529,11 +636,16 @@ const fetchAudienceData = async () => {
 };
 
 const updateDataFromResponse = (data) => {
+  console.log('🔄 [updateDataFromResponse] بدء تحديث البيانات...');
+  console.log('🔄 [updateDataFromResponse] البيانات المستلمة:', data);
+  
   // Total Audience
   audienceData.value.total = data.total_audience || 0;
+  console.log('✅ Total Audience:', audienceData.value.total);
   
   // Gender Age Data
   if (data.gender_age) {
+    console.log('✅ Gender Age Data موجودة');
     const male = data.gender_age.male || {};
     const female = data.gender_age.female || {};
     
@@ -546,6 +658,8 @@ const updateDataFromResponse = (data) => {
     
     maleData.value.percentage = grandTotal > 0 ? Math.round((maleTotal / grandTotal) * 100) : 0;
     femaleData.value.percentage = grandTotal > 0 ? Math.round((femaleTotal / grandTotal) * 100) : 0;
+    
+    console.log('✅ Male Total:', maleTotal, 'Female Total:', femaleTotal);
     
     const maxMaleValue = Math.max(...Object.values(male).filter(v => typeof v === 'number' && v !== male.total), 1);
     const maxFemaleValue = Math.max(...Object.values(female).filter(v => typeof v === 'number' && v !== female.total), 1);
@@ -569,10 +683,16 @@ const updateDataFromResponse = (data) => {
       { ageRange: '45-64', percentage: maxFemaleValue > 0 ? Math.round((female['45-64'] || 0) / maxFemaleValue * 100) : 0 },
       { ageRange: '65+', percentage: maxFemaleValue > 0 ? Math.round((female['+65'] || 0) / maxFemaleValue * 100) : 0 },
     ];
+    
+    console.log('✅ Male Bars:', maleData.value.bars);
+    console.log('✅ Female Bars:', femaleData.value.bars);
+  } else {
+    console.warn('⚠️ لا توجد بيانات Gender Age');
   }
   
   // Skip Rate
   if (data.skip_rate) {
+    console.log('✅ Skip Rate Data موجودة');
     if (data.skip_rate.rates && data.skip_rate.values) {
       skipRateData.value.labels = data.skip_rate.rates;
       skipRateData.value.values = data.skip_rate.values;
@@ -580,25 +700,42 @@ const updateDataFromResponse = (data) => {
       skipRateData.value.labels = data.skip_rate[0];
       skipRateData.value.values = data.skip_rate[1];
     }
+    console.log('✅ Skip Rate Labels:', skipRateData.value.labels);
+    console.log('✅ Skip Rate Values:', skipRateData.value.values);
+  } else {
+    console.warn('⚠️ لا توجد بيانات Skip Rate');
   }
   
-  // Countries
+  // ========== Countries ==========
   if (data.countries && Array.isArray(data.countries)) {
-    const pageSize = 5;
-    const pages = [];
-    for (let i = 0; i < data.countries.length; i += pageSize) {
-      pages.push(data.countries.slice(i, i + pageSize).map(country => ({
-        name: country.name,
-        count: country.count
-      })));
-    }
+    console.log('✅ Countries Data موجودة:', data.countries);
     
-    countriesData.value.pages = pages.length > 0 ? pages : [[]];
+    const topFiveCountries = data.countries.slice(0, 5).map(country => ({
+      name: country.name,
+      count: country.count
+    }));
+    
+    console.log('✅ Top 5 Countries:', topFiveCountries);
+    
+    const pages = [
+      topFiveCountries,
+      topFiveCountries
+    ];
+    
+    countriesData.value.pages = pages;
     countriesData.value.dots = pages.map((_, idx) => ({ active: idx === 0 }));
+    
+    console.log('✅ countriesData.pages:', countriesData.value.pages);
+    console.log('✅ countriesData.dots:', countriesData.value.dots);
+    
+    activePage.value = 0;
+  } else {
+    console.warn('⚠️ لا توجد بيانات Countries');
   }
   
   // Devices
   if (data.devices) {
+    console.log('✅ Devices Data موجودة:', data.devices);
     const devices = data.devices;
     const totalDevices = Object.values(devices).reduce((sum, val) => sum + val, 0);
     
@@ -606,8 +743,10 @@ const updateDataFromResponse = (data) => {
       title: key.charAt(0).toUpperCase() + key.slice(1).replace('_', ' '),
       percentage: totalDevices > 0 ? Math.round((value / totalDevices) * 100) : 0
     }));
+    
+    console.log('✅ Playback Devices:', playbackData.value.devices);
   } else {
-    // Fallback data
+    console.warn('⚠️ لا توجد بيانات Devices');
     playbackData.value.devices = [
       { title: 'Mobile', percentage: 45 },
       { title: 'Laptop', percentage: 25 },
@@ -619,6 +758,7 @@ const updateDataFromResponse = (data) => {
   
   // Sources
   if (data.sources) {
+    console.log('✅ Sources Data موجودة:', data.sources);
     const sources = data.sources;
     const totalSources = Object.values(sources).reduce((sum, val) => sum + val, 0);
     
@@ -626,8 +766,10 @@ const updateDataFromResponse = (data) => {
       title: key.charAt(0).toUpperCase() + key.slice(1),
       percentage: totalSources > 0 ? Math.round((value / totalSources) * 100) : 0
     }));
+    
+    console.log('✅ Sources:', sourceData.value.sources);
   } else {
-    // Fallback data
+    console.warn('⚠️ لا توجد بيانات Sources');
     sourceData.value.sources = [
       { title: 'Artist', percentage: 35 },
       { title: 'Search', percentage: 25 },
@@ -636,6 +778,13 @@ const updateDataFromResponse = (data) => {
       { title: 'Others', percentage: 8 },
     ];
   }
+  
+  console.log('🔄 [updateDataFromResponse] اكتمل تحديث البيانات');
+  
+  // ✅ تحديث الخريطة بعد تحميل البيانات
+  nextTick(() => {
+    updateMap();
+  });
 };
 
 // ========== Debounce ==========
@@ -649,20 +798,47 @@ const debouncedFetch = () => {
   }, 300);
 };
 
-// ========== Lifecycle ==========
+// ========== Watchers ==========
 watch(
   () => props.filters,
-  () => {
+  (newFilters) => {
+    console.log('🔄 [PublikumView] filters changed:', newFilters);
     const dateType = getDateType();
 
     if (dateType === 'custom' && (!props.filters?.startDate || !props.filters?.endDate)) {
+      console.warn('⚠️ تاريخ مخصص بدون تواريخ بداية ونهاية');
       return;
     }
 
     debouncedFetch();
   },
-  { deep: true, immediate: true }
+  { deep: true }
 );
+
+// ✅ مراقبة تغيير countriesDataForMap وتحديث الخريطة
+watch(
+  () => countriesDataForMap.value,
+  (newData, oldData) => {
+    console.log('🗺️ [watch] countriesDataForMap تغير');
+    console.log('🗺️ [watch] عدد الدول الجديد:', Object.keys(newData).length);
+    console.log('🗺️ [watch] عدد الدول القديم:', Object.keys(oldData || {}).length);
+    
+    if (Object.keys(newData).length > 0) {
+      console.log('🗺️ [watch] تحديث الخريطة بالبيانات الجديدة...');
+      nextTick(() => {
+        updateMap();
+      });
+    }
+  },
+  { deep: true }
+);
+
+// ========== Lifecycle ==========
+onMounted(() => {
+  console.log('🚀 [PublikumView] تم تحميل المكون');
+  console.log('🚀 [PublikumView] props.filters:', props.filters);
+  fetchAudienceData();
+});
 
 onUnmounted(() => {
   if (fetchTimeout) clearTimeout(fetchTimeout);
@@ -670,7 +846,6 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss" scoped>
-/* جميع الأنماط كما هي دون تغيير */
 .leaflet-pane > svg path.leaflet-interactive {
   outline: none !important;
 }
@@ -913,7 +1088,6 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   align-self: stretch;
-  // flex: 1;
   min-height: 20px;
 }
 
@@ -1071,6 +1245,16 @@ onUnmounted(() => {
   align-items: flex-start;
   gap: 4px;
   align-self: stretch;
+  overflow: hidden;
+}
+
+.countries-transition {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  align-self: stretch;
+  width: 100%;
 }
 
 .row-country {
@@ -1079,6 +1263,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   align-self: stretch;
+  will-change: transform, opacity;
 }
 
 .row-country .icon {
@@ -1110,6 +1295,7 @@ onUnmounted(() => {
   line-height: 0.6;
   letter-spacing: 0.9px;
   text-transform: uppercase;
+  transition: all 0.3s ease;
 }
 
 .row-country .progress-bar-container {
@@ -1135,7 +1321,7 @@ onUnmounted(() => {
   border-radius: 4px;
   max-height: 4px;
   background: var(--Strawberry);
-  transition: width 0.3s ease;
+  transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .row-country .progress-bar-container .num {
@@ -1169,14 +1355,66 @@ onUnmounted(() => {
 }
 
 .slide-dot .red {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   flex-shrink: 0;
   fill: var(--Strawberry);
   border-radius: 50%;
   background: var(--Strawberry);
 }
 
+/* ========== ANIMATIONS FOR COUNTRY TRANSITIONS ========== */
+.country-slide-leave-active {
+  position: absolute;
+  width: 100%;
+}
+
+.country-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-30px) scale(0.95);
+}
+
+.country-slide-enter-active {
+  transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.country-slide-enter-from {
+  opacity: 0;
+  transform: translateY(30px) scale(0.95);
+}
+
+.country-slide-enter-to {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.country-slide-leave-active {
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.country-slide-leave-from {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.country-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-30px) scale(0.95);
+}
+
+.country-slide-move {
+  transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.number {
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.line-red {
+  transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ========== RESPONSIVE ========== */
 @media (max-width:1780px) {
   .Box-2 .bars .bar .p .age-start,
   .Box-3 .bars .bar .p .age-start {
@@ -1195,10 +1433,12 @@ onUnmounted(() => {
   .row-bar { gap: 4px; }
   .numbers-2 { align-items: end; }
   .numbers-2 .right { font-size: 14px; }
+  .last-Box .skip-rate-svg{ min-height: 110px; }
 }
 
 @media (min-width:1600px) and (max-width:2074px) {
   .number { font-size: 28px; }
+  .last-Box .skip-rate-svg{ min-height: 110px; }
 }
 
 @media (min-width:2075px) and (max-width:2560px) {

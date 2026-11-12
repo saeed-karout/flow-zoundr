@@ -2,7 +2,7 @@
   <div class="upload">
    
     <!-- 🔥 نفس حجم Parent.vue تماماً -->
-    <div class="image-upload-wrapper">
+    <div class="image-upload-wrapper" :class="{ 'is-correction': isCorrected('cover') }">
       <ImageUpload 
         :uploadedImage="localUploadedImage"
         :server-cover-url="serverCoverUrl"
@@ -72,11 +72,15 @@
 
 <script setup>
 import { ref, watch, nextTick, onMounted, computed } from 'vue';
+import { useCorrections } from '@/composables/useCorrections';
 import { useRoute, useRouter } from 'vue-router';
 import ImageUpload from '@/components/uploadPngSteps/Upload1Components/ImageUpload.vue';
 import apiRequest from '@/lib/apiRequest';
 import { useReleaseStore } from '@/stores/release';
 import { storage_url } from '@/constants';
+
+// حقول مطلوب تصحيحها (Korrektur) ← بوردر أحمر.
+const { isCorrected } = useCorrections();
 
 const route = useRoute();
 const router = useRouter();
@@ -93,7 +97,7 @@ const props = defineProps({
 });
 
 // في UploadComponent.vue - في defineEmits
-const emit = defineEmits(['next', 'release-created', 'cover-updated', 'skip-upload', 'go-back', 'cover-restored']);
+const emit = defineEmits(['next', 'release-created', 'cover-updated', 'skip-upload', 'go-back', 'cover-restored', 'cover-upload-failed']);
 
 const uploadedImage = ref(null);
 const pendingCoverFile = ref(null);
@@ -579,6 +583,7 @@ const updateCoverImage = async (file) => {
   } catch (err) {
     console.error('❌ فشل تحديث الصورة:', err);
     handleUploadError(err);
+    emit('cover-upload-failed', { message: err.response?.data?.message || err.message || 'upload failed' });
     isUploading.value = false;
   }
 };
@@ -839,47 +844,13 @@ defineExpose({
   opacity: 1;
 }
 
-/* ===== 🔥 ImageUpload Wrapper - موحد مع ImageUpload ===== */
-.image-upload-wrapper {
-  flex: 0 0 auto;
-  width: clamp(310px, 25vw, 437px);
-  max-width: 437px;
-  height: clamp(310px, 25vw, 437px);
-  max-height: 437px;
-  aspect-ratio: 1/1;
-}
+/* قياسات .image-upload-wrapper في src/assets/main.scss — مشتركة مع
+   الخطوة 2 / Metas (Upload1Components/Parent.vue). */
 
-/* 🔥 جعل ImageUpload يأخذ 100% من الـ wrapper */
-.image-upload-wrapper :deep(.cards-upload-file) {
-  width: 100% !important;
-  height: 100% !important;
-  min-width: unset !important;
-  max-width: unset !important;
-  min-height: unset !important;
-  max-height: unset !important;
-  aspect-ratio: 1/1;
-}
-
-/* ===== Responsive للـ ImageUpload Wrapper ===== */
-@media (min-width: 1440px) and (max-width: 1599px) {
-  .image-upload-wrapper {
-    width: clamp(310px, calc(310px + (362 - 310) * ((100vw - 1440px) / (1599 - 1440))), 362px);
-    height: clamp(310px, calc(310px + (362 - 310) * ((100vw - 1440px) / (1599 - 1440))), 362px);
-  }
-}
-
-@media (min-width: 1600px) and (max-width: 2074px) {
-  .image-upload-wrapper {
-    width: clamp(362px, calc(362px + (437 - 362) * ((100vw - 1600px) / (2074 - 1600))), 437px);
-    height: clamp(362px, calc(362px + (437 - 362) * ((100vw - 1600px) / (2074 - 1600))), 437px);
-  }
-}
-
-@media (min-width: 2075px) {
-  .image-upload-wrapper {
-    width: 437px;
-    height: 437px;
-  }
+/* بطاقة الغلاف (.cards-upload-file) بانحناء 20px، فيأخذ بوردر التصحيح
+   الانحناء نفسه بدل 5px العامّة وإلا بدا مربّعاً حول بطاقة مدوّرة. */
+.image-upload-wrapper.is-correction {
+  border-radius: 20px;
 }
 
 /* ===== باقي الأنماط ===== */

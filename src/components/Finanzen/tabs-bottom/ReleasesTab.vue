@@ -25,7 +25,7 @@
             <div class="image-overlay">
               <div class="info">
                 <div class="title">
-                  <div class="sub-title">Release</div>
+                  <div class="sub-title">Artist Music</div>
                   <span>{{ release.name || 'Untitled' }}</span>
                 </div>
                 <div class="numbers">
@@ -99,7 +99,7 @@ const getPercentage = (revenue) => {
   width: 100%;
   max-width: 100%;
   height: 100%;
-  min-height: 0;
+  min-height: 281px;
 }
 
 .section {
@@ -128,8 +128,6 @@ const getPercentage = (revenue) => {
   line-height: 0.6;
   letter-spacing: 0.9px;
   text-transform: uppercase;
-  padding-top: 3px;
-  z-index: 111;
   flex-shrink: 0;
 }
 
@@ -153,6 +151,7 @@ const getPercentage = (revenue) => {
   gap: 20px;
   flex-wrap: nowrap;
   height: 100%;
+  align-items: stretch;
 }
 
 .music-title {
@@ -257,39 +256,55 @@ const getPercentage = (revenue) => {
 }
 
 .title .sub-title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  color: var(--Main-Colors-White, #FFF);
+  /* سطر واحد مع ... — nowrap أوثق من -webkit-line-clamp
+     الذي لا يقصّ في Chromium دون overflow: hidden. */
+  display: block;
+  align-self: stretch;
+  max-width: 95%;
+  white-space: nowrap;
+
   text-overflow: ellipsis;
-  font-family: Heebo;
-  font-size: 14px;
-  font-style: normal;
-  font-weight: 700;
-  line-height: 0.6;
-  text-transform: uppercase;
+
+color: var(--Main-Colors-White, #FFF);
+leading-trim: both;
+text-edge: cap;
+font-family: Heebo;
+font-size: 14px;
+font-style: normal;
+font-weight: 700;
+line-height: 0.70;
+text-transform: uppercase;
   opacity: 0.3;
   transition: opacity 0.3s ease;
 }
 
 .title span {
+  /* line-height: 0.8 يجعل صندوق السطر 14.4px بينما صندوق المحرف 18px،
+     فيفيض 1.8px فوق وتحت ويقصّه overflow: hidden. نوسّع صندوق القصّ
+     بـ padding ونلغي أثره بـ margin سالب مساوٍ: المقاس الخارجي لا يتغيّر،
+     والـ gap في flexbox يُقاس بين الصناديق الخارجية — فالمسافات ثابتة تماماً. */
+  padding-block: 6px;
+  margin-block: -6px;
+  /* سطر واحد مع ... — nowrap أوثق من -webkit-line-clamp
+     الذي لا يقصّ في Chromium دون overflow: hidden. */
   display: block;
-  overflow: hidden;
+  align-self: stretch;
+  max-width: 90%;
   white-space: nowrap;
+  overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--Main-Colors-White, #FFF);
-  // text-overflow: ellipsis;
+  
+color: var(--Main-Colors-White, #FFF);
+leading-trim: both;
+text-edge: cap;
 font-family: Heebo;
-  font-size: 18px;
-  font-style: normal;
-  font-weight: 700;
-  line-height: .8;
-  text-transform: uppercase;
-  padding-top: 2px;
+font-size: 18px;
+font-style: normal;
+font-weight: 700;
+line-height: 0.8;
+text-transform: uppercase;
   opacity: 0.7;
   transition: opacity 0.3s ease;
- 
-   max-width: 90%; /* التحكم في العرض */
-  word-break: break-word; 
 }
 
 .numbers {
@@ -300,15 +315,29 @@ font-family: Heebo;
 }
 
 .info .p {
-  align-self: stretch;  
-  color: var(--Main-Colors-White, #FFF);
-  font-family: Heebo;
-  font-size: 14px;
-  font-style: normal;
-  font-weight: 300;
-  line-height: 0.6;
+  /* سطر واحد مع قصّ بـ ... للنص الطويل.
+     الـ line-height أصغر من 1 فيفيض المحرف خارج صندوق المحتوى،
+     وـ overflow: hidden وحده كان سيقصّ أعلى الحروف وأسفلها؛
+     لذلك نوسّع صندوق القصّ بـ padding ونلغي أثره بـ margin سالب
+     — فلا يتغيّر المقاس النهائي ولا الـ gap بين العناصر. */
+  display: block;
+  align-self: stretch;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  // padding-top: 8px;
+  // padding-bottom: 6px;
+ color: var(--Main-Colors-White, #FFF);
+leading-trim: both;
+text-edge: cap;
+font-family: Heebo;
+font-size: 14px;
+font-style: normal;
+font-weight: 300;
+line-height: 1;
+align-self: stretch;
   opacity: 0.7;
-  padding-top: 2px;
   transition: opacity 0.3s ease;
 }
 
@@ -359,28 +388,4 @@ font-family: Heebo;
 }
 
 /* Responsive */
-@media (min-width: 1440px) and (max-width: 1599px) {
-  .music-title {
-    width: 160px;
-    min-width: 160px;
-    height: 160px;
-    min-height: 160px;
-  }
-
-  .title .sub-title {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1;
-    font-size: 14px;
-  }
-
-  .info .p {
-    font-size: 12px;
-  }
-
-  .title span {
-    font-size: 17px;
-    line-height: .9;
-  }
-}
 </style>

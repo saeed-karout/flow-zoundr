@@ -74,7 +74,7 @@ export default {
 
 .tab-btn .Button-tab {
     display: flex;
-    padding: 26px 31.5px;
+    padding: 26px 37.5px;
     justify-content: center;
     align-items: center;
     gap: 10px;

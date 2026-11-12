@@ -6,10 +6,10 @@
         <div class="form1">
             <div class="title">Von Wem ist diese Single?</div>
             <div v-for="(input, index) in artistInputs" :key="index" class="section-input"
-                :class="{ 'is-hovered': input.isHovered, 'has-checkmark': input.isSelected }"
+                :class="{ 'is-hovered': input.isHovered, 'has-checkmark': input.isSelected}"
                 @mouseenter="input.isHovered = true; $emit('update:artistInputs', artistInputs)"
                 @mouseleave="input.isHovered = false; $emit('update:artistInputs', artistInputs)">
-                <input type="text" class="input-field" v-model="input.searchQuery" placeholder="Künstler eintippen"
+                <input type="text" class="input-field" :class="{ 'is-correction': isCorrected('artists') }" v-model="input.searchQuery" placeholder="Künstler eintippen"
                     @focus="$emit('update:showSearchResults', index); $emit('updateSearchResults', index, input.searchQuery); input.isFocused = true"
                     @blur="handleBlur(index)" @input="handleInput(index, input.searchQuery)" />
                 
@@ -115,9 +115,9 @@
         <!-- باقي الفورمات كما هي -->
         <div class="form2">
             <div class="title">Wie lautet der Titel?</div>
-            <div class="section-input" :class="{ 'is-hovered': isHoveredForm2, 'has-checkmark': isForm2Selected }"
+            <div class="section-input" :class="{ 'is-hovered': isHoveredForm2, 'has-checkmark': isForm2Selected}"
                 @mouseenter="$emit('update:isHoveredForm2', true)" @mouseleave="$emit('update:isHoveredForm2', false)">
-                <input type="text" class="input-field" v-model="localSearchQuery2" placeholder="Releasetitel"
+                <input type="text" class="input-field" :class="{ 'is-correction': isCorrected('title') }" v-model="localSearchQuery2" placeholder="Releasetitel"
                     @input="$emit('update:isForm2Selected', localSearchQuery2.trim() !== '')" />
                 <div v-if="isForm2Selected" class="checkmark">
                     <img src="../../../assets/icons/y.png" class="icon-y" alt="checkmark icon" />
@@ -139,9 +139,8 @@
             </div>
             <div class="section-input" :class="{
                 'is-hovered': isHoveredForm3,
-                'has-checkmark': isForm3Selected
-            }" @mouseenter="$emit('update:isHoveredForm3', true)" @mouseleave="$emit('update:isHoveredForm3', false)">
-                <input type="text" class="input-field" v-model="localSearchQuery3" placeholder="Release Untertitel"
+                'has-checkmark': isForm3Selected}" @mouseenter="$emit('update:isHoveredForm3', true)" @mouseleave="$emit('update:isHoveredForm3', false)">
+                <input type="text" class="input-field" :class="{ 'is-correction': isCorrected('subtitle') }" v-model="localSearchQuery3" placeholder="Release Untertitel"
                     :disabled="!isForm3Active"
                     @input="handleForm3Input" />
                 <div v-if="isForm3Selected" class="checkmark">
@@ -159,10 +158,10 @@
         <div class="form4">
             <div class="title">Release Date</div>
             <div class="section-input"
-                :class="{ 'is-hovered': isHoveredForm4, 'is-focused': isInputFocused, 'has-checkmark': isForm4Selected }"
+                :class="{ 'is-hovered': isHoveredForm4, 'is-focused': isInputFocused, 'has-checkmark': isForm4Selected}"
                 @mouseenter="$emit('update:isHoveredForm4', true)"
                 @mouseleave="$emit('update:isHoveredForm4', false); if (!isInputFocused) $emit('update:isCalendarVisible', false)">
-                <input type="text" class="input-field" :value="formattedSelectedDate" readonly
+                <input type="text" class="input-field" :class="{ 'is-correction': isCorrected('release_date') }" :value="formattedSelectedDate" readonly
                     @focus="$emit('update:isInputFocused', true); $emit('update:isCalendarVisible', true)"
                     :placeholder="formattedRecommendedDate || '21.07.26'" />
                 <div v-if="isForm4Selected" class="checkmark">
@@ -184,8 +183,12 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue';
+import { useCorrections } from '@/composables/useCorrections';
 import CalendarPicker from '@/components/CalendarPicker.vue';
 import iconPlay from '@/assets/icons/play.png'
+
+// حقول مطلوب تصحيحها (Korrektur) → بوردر أحمر.
+const { isCorrected } = useCorrections();
 
 const props = defineProps({
     artistInputs: { type: Array, required: true },

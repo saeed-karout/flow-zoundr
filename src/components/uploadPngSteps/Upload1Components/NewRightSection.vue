@@ -5,8 +5,8 @@
     }">
         <!-- 🔥 عرض الـ loading مع ارتفاع ثابت -->
         <div v-if="isLoading" class="loading-spinner">
-            <div class="spinner"></div>
-            <span class="loading-text">Lade Daten...</span>
+            <!-- <div class="spinner"></div>
+            <span class="loading-text">Lade Daten...</span> -->
         </div>
         
         <!-- 🔥 عرض المحتوى مع v-show بدلاً من v-if -->
@@ -25,28 +25,24 @@
                         <div class="form5">
                             <div class="title">Preis deines Releases?</div>
                             <div class="section-input"
-                                :class="{ 
-                                    'is-hovered': isHoveredReleasePrice || isReleasePriceDropdownOpen, 
-                                    'has-checkmark': isReleasePriceSelected 
-                                }"
+                                :class="{
+                                    'is-hovered': isHoveredReleasePrice || isReleasePriceDropdownOpen,
+                                    'has-checkmark': showReleasePriceSelected}"
                                 @mouseenter="setHoverState('releasePrice', true)"
                                 @mouseleave="setHoverState('releasePrice', false)">
                                 <div class="custom-select" @click="toggleDropdown('releasePrice')">
-                                    <div class="select-trigger" :class="{ 'selected': isReleasePriceSelected }">
+                                    <div class="select-trigger" :class="{ 'is-correction': isCorrected('release_price'), 'selected': showReleasePriceSelected }">
                                         {{ displayReleasePrice || 'Preis auswählen' }}
                                     </div>
                                     <div class="dropdown" 
                                         v-show="isReleasePriceDropdownOpen"
                                         @mouseenter="setHoverState('releasePrice', true)"
                                         @mouseleave="setHoverState('releasePrice', false)">
-                                        <div class="option" @click.stop="selectOption('releasePrice', '9,99 EUR')">9,99 EUR</div>
-                                        <div class="option" @click.stop="selectOption('releasePrice', '12,99 EUR')">12,99 EUR</div>
-                                        <div class="option" @click.stop="selectOption('releasePrice', '15,99 EUR')">15,99 EUR</div>
-                                        <div class="option" @click.stop="selectOption('releasePrice', '17,99 EUR')">17,99 EUR</div>
-                                        <div class="option" @click.stop="selectOption('releasePrice', '21,99 EUR')">21,99 EUR</div>
+                                        <div class="option" v-for="opt in releasePriceOptions" :key="'rp-' + opt"
+                                            @click.stop="selectOption('releasePrice', opt)">{{ opt }}</div>
                                     </div>
                                 </div>
-                                <div v-if="isReleasePriceSelected" class="checkmark">
+                                <div v-if="showReleasePriceSelected" class="checkmark">
                                     <img src="../../../assets/icons/y.png" class="icon-y" alt="checkmark icon" />
                                 </div>
                                 <div v-else class="checkmark">
@@ -66,26 +62,24 @@
                         <div class="form5">
                             <div class="title">Preis pro Song?</div>
                             <div class="section-input"
-                                :class="{ 
-                                    'is-hovered': isHoveredSongPrice || isSongPriceDropdownOpen, 
-                                    'has-checkmark': isSongPriceSelected 
-                                }"
+                                :class="{
+                                    'is-hovered': isHoveredSongPrice || isSongPriceDropdownOpen,
+                                    'has-checkmark': showSongPriceSelected}"
                                 @mouseenter="setHoverState('songPrice', true)"
                                 @mouseleave="setHoverState('songPrice', false)">
                                 <div class="custom-select" @click="toggleDropdown('songPrice')">
-                                    <div class="select-trigger" :class="{ 'selected': isSongPriceSelected }">
+                                    <div class="select-trigger" :class="{ 'is-correction': isCorrected('price_per_song'), 'selected': showSongPriceSelected }">
                                         {{ displaySongPrice || 'Preis auswählen' }}
                                     </div>
                                     <div class="dropdown" 
                                         v-show="isSongPriceDropdownOpen"
                                         @mouseenter="setHoverState('songPrice', true)"
                                         @mouseleave="setHoverState('songPrice', false)">
-                                        <div class="option" @click.stop="selectOption('songPrice', '1,99 EUR')">1,99 EUR</div>
-                                        <div class="option" @click.stop="selectOption('songPrice', '2,99 EUR')">2,99 EUR</div>
-                                        <div class="option" @click.stop="selectOption('songPrice', '3,99 EUR')">3,99 EUR</div>
+                                        <div class="option" v-for="opt in songPriceOptions" :key="'sp-' + opt"
+                                            @click.stop="selectOption('songPrice', opt)">{{ opt }}</div>
                                     </div>
                                 </div>
-                                <div v-if="isSongPriceSelected" class="checkmark">
+                                <div v-if="showSongPriceSelected" class="checkmark">
                                     <img src="../../../assets/icons/y.png" class="icon-y" alt="checkmark icon" />
                                 </div>
                                 <div v-else class="checkmark">
@@ -109,12 +103,11 @@
                             <div class="section-input"
                                 :class="{ 
                                     'is-hovered': isHoveredMainGenre || isMainGenreDropdownOpen, 
-                                    'has-checkmark': isMainGenreSelected 
-                                }"
+                                    'has-checkmark': isMainGenreSelected}"
                                 @mouseenter="setHoverState('mainGenre', true)"
                                 @mouseleave="setHoverState('mainGenre', false)">
                                 <div class="custom-select" @click="toggleDropdown('mainGenre')">
-                                    <div class="select-trigger" :class="{ 'selected': isMainGenreSelected }">
+                                    <div class="select-trigger" :class="{ 'is-correction': isCorrected('main_genre'), 'selected': isMainGenreSelected }">
                                         <input 
                                             type="text" 
                                             class="search-input-trigger" 
@@ -166,8 +159,7 @@
                                 :class="{ 
                                     'is-hovered': isHoveredSubGenre || isSubGenreDropdownOpen, 
                                     'has-checkmark': isSubGenreSelected,
-                                    'no-subgenres': !hasSubGenres && isSubGenreEnabled
-                                }"
+                                    'no-subgenres': !hasSubGenres && isSubGenreEnabled}"
                                 @mouseenter="setHoverState('subGenre', true)"
                                 @mouseleave="setHoverState('subGenre', false)">
                                 
@@ -177,7 +169,7 @@
                                 
                                 <div v-else class="custom-select" @click="toggleDropdown('subGenre', isSubGenreEnabled)">
                                     <div class="select-trigger" 
-                                        :class="{ 'selected': isSubGenreSelected, 'disabled': !isSubGenreEnabled }">
+                                        :class="{ 'is-correction': isCorrected('sub_genre'), 'selected': isSubGenreSelected, 'disabled': !isSubGenreEnabled }">
                                         <input 
                                             type="text" 
                                             class="search-input-trigger" 
@@ -229,8 +221,19 @@
 
 <script setup>
 import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { useCorrections } from '@/composables/useCorrections';
 import iconPlay from '@/assets/icons/play.png';
 import apiRequest from '@/lib/apiRequest';
+import { useReleaseStore } from '@/stores/release';
+
+// حقول مطلوب تصحيحها (Korrektur) → بوردر أحمر على الحقل المعني.
+const { isCorrected } = useCorrections();
+
+const releaseStore = useReleaseStore();
+
+// قيمة "معنويّة" للسعر (رقم أو نص رقمي غير فارغ).
+const isMeaningfulPrice = (v) =>
+  v !== null && v !== undefined && v !== '' && !Number.isNaN(Number(v));
 
 // ========== Props ==========
 const props = defineProps({
@@ -297,8 +300,29 @@ const filteredSubGenres = computed(() => {
 });
 
 // ========== دوال التصفية ==========
-const filterMainGenres = () => {};
-const filterSubGenres = () => {};
+// ✅ يُستدعى فقط عند إدخال المستخدم الفعلي (@input) — لا برمجياً. عند مسح قيمة
+//    Hauptgenre بالكامل نُفرّغ النوع والنوع الفرعي (يُرسَلان فارغين للشبكة) ونفتح
+//    قائمة Hauptgenre. لا نستخدم watch عاماً لأنه يُطلَق أيضاً عند التحميل وعند فتح
+//    القائمة (toggleDropdown يمسح البحث) فيمحو النوع المحفوظ خطأً.
+const filterMainGenres = () => {
+    if (!mainGenreSearch.value || mainGenreSearch.value.trim() === '') {
+        emit('update:mainGenre', '');
+        emit('update:isMainGenreSelected', false);
+        emit('update:subGenre', '');
+        emit('update:isSubGenreSelected', false);
+        subGenreSearch.value = '';
+        subGenresList.value = [];
+        emit('update:hasSubGenres', false);
+        isMainGenreDropdownOpen.value = true;
+    }
+};
+
+const filterSubGenres = () => {
+    if (!subGenreSearch.value || subGenreSearch.value.trim() === '') {
+        emit('update:subGenre', '');
+        emit('update:isSubGenreSelected', false);
+    }
+};
 
 // حالات القوائم المنسدلة
 const isReleasePriceDropdownOpen = ref(false);
@@ -368,21 +392,79 @@ const isSubGenreEnabled = computed(() => {
     return false;
 });
 
+// ✅ القيمة الفعّالة للسعر: من الـ prop أولاً، وإن كانت فارغة (بعد التنقّل والرجوع دون
+//    إعادة تعبئة الـ ref) نرجع للسعر المحفوظ في الـ store (draftRelease من الخادم ثم
+//    metasData). هكذا يظهر السعر المخزَّن دائماً بدل placeholder رغم فراغ الـ prop.
+const effectiveReleasePrice = computed(() => {
+    if (isMeaningfulPrice(props.releasePrice)) return props.releasePrice;
+    const fromDraft = releaseStore.draftRelease?.release_price;
+    if (isMeaningfulPrice(fromDraft)) return fromDraft;
+    const fromMetas = releaseStore.metasData?.releasePrice;
+    if (isMeaningfulPrice(fromMetas)) return fromMetas;
+    return null;
+});
+
+const effectiveSongPrice = computed(() => {
+    if (isMeaningfulPrice(props.songPrice)) return props.songPrice;
+    const fromDraft = releaseStore.draftRelease?.price_per_song;
+    if (isMeaningfulPrice(fromDraft)) return fromDraft;
+    const fromMetas = releaseStore.metasData?.songPrice;
+    if (isMeaningfulPrice(fromMetas)) return fromMetas;
+    return null;
+});
+
+// ✅ نوع الـ Release يحدّد خيارات سعر الـ Release. نطبّع القيمة من عدة مصادر ونطابق كلمات.
+const releaseTypeKey = computed(() => {
+    const raw = (
+        releaseStore.draftRelease?.release_type ||
+        releaseStore.releaseType ||
+        releaseStore.releaseTypeValue ||
+        ''
+    ).toString().toLowerCase();
+    if (raw.includes('album')) return 'album';
+    if (raw.includes('extended') || raw.includes('ep')) return 'extended';
+    return 'single';
+});
+
+// ✅ خيارات سعر الـ Release حسب النوع (Single / Extended Player / Album).
+const releasePriceOptions = computed(() => {
+    if (releaseTypeKey.value === 'album') {
+        return ['5,99 EUR', '6,99 EUR', '8,99 EUR', '9,99 EUR', '12,99 EUR', '14,99 EUR'];
+    }
+    if (releaseTypeKey.value === 'extended') {
+        return ['2,99 EUR', '3,99 EUR', '4,49 EUR', '4,99 EUR', '5,99 EUR'];
+    }
+    // Single (الافتراضي)
+    return ['1,29 EUR', '1,49 EUR', '1,99 EUR', '2,99 EUR', '3,99 EUR'];
+});
+
+// ✅ خيارات سعر الأغنية (Track of ...) — نفسها لكل الأنواع.
+const songPriceOptions = computed(() => ['0,99 EUR', '1,19 EUR', '1,29 EUR']);
+
+// ✅ إظهار علامة الاختيار (وحالة selected) متى وُجد سعر فعّال — ولو كان الـ prop للاختيار
+//    false بسبب فراغ الـ ref بعد التنقّل.
+const showReleasePriceSelected = computed(() =>
+    props.isReleasePriceSelected === true || effectiveReleasePrice.value !== null);
+const showSongPriceSelected = computed(() =>
+    props.isSongPriceSelected === true || effectiveSongPrice.value !== null);
+
 // عرض القيم مع EUR
 const displayReleasePrice = computed(() => {
-    if (props.releasePrice === null || props.releasePrice === undefined) return '';
+    const v = effectiveReleasePrice.value;
+    if (v === null) return '';
     return new Intl.NumberFormat('de-DE', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
-    }).format(props.releasePrice) + ' EUR';
+    }).format(Number(v)) + ' EUR';
 });
 
 const displaySongPrice = computed(() => {
-    if (props.songPrice === null || props.songPrice === undefined) return '';
+    const v = effectiveSongPrice.value;
+    if (v === null) return '';
     return new Intl.NumberFormat('de-DE', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
-    }).format(props.songPrice) + ' EUR';
+    }).format(Number(v)) + ' EUR';
 });
 
 const localMainGenreDisplay = computed(() => {
@@ -466,18 +548,24 @@ const fetchGenres = async () => {
         const response = await apiRequest.get('/genres');
         console.log('📦 Genres API Response:', response.data);
         
-        const data = response.data;
-        
-        if (data && typeof data === 'object' && !Array.isArray(data)) {
-            genresMap.value = data;
-            genresList.value = Object.entries(data).map(([id, name]) => ({
-                id: id,
-                name: name
-            }));
+        // ✅ ندعم صيغتين: مصفوفة كائنات [{ genre_name, id }] (الصيغة الحالية) أو خريطة
+        //    { id: name } (صيغة قديمة)، مع فكّ غلاف data إن وُجد.
+        const raw = response.data?.data ?? response.data;
+
+        if (Array.isArray(raw)) {
+            genresList.value = raw
+                .filter(g => g && g.id != null)
+                .map(g => ({ id: String(g.id), name: g.genre_name || g.name || '' }));
+            genresMap.value = Object.fromEntries(genresList.value.map(g => [g.id, g.name]));
             genresList.value.sort((a, b) => a.name.localeCompare(b.name));
-            console.log(`✅ Loaded ${genresList.value.length} genres`);
+            console.log(`✅ Loaded ${genresList.value.length} genres (array)`);
+        } else if (raw && typeof raw === 'object') {
+            genresMap.value = raw;
+            genresList.value = Object.entries(raw).map(([id, name]) => ({ id, name }));
+            genresList.value.sort((a, b) => a.name.localeCompare(b.name));
+            console.log(`✅ Loaded ${genresList.value.length} genres (map)`);
         } else {
-            console.warn('⚠️ Unexpected data format from /genres:', data);
+            console.warn('⚠️ Unexpected data format from /genres:', raw);
             genresMap.value = {};
             genresList.value = [];
         }
@@ -491,6 +579,20 @@ const fetchGenres = async () => {
         isLoading.value = false;
         isDataLoaded.value = true;
         console.log('✅ Data loaded');
+
+        // ✅ نوع رئيسي محفوظ → نُعيد تحميل أنواعه الفرعية.
+        //    بدون ذلك تبقى subGenresList فارغة فتصير hasSubGenres = false،
+        //    فيعرض القالب رسالة «لا أنواع فرعية» بدل الحقل — وتختفي القيمة
+        //    المختارة مع بقاء علامة الاكتمال. كان fetchSubGenres يُستدعى من
+        //    selectMainGenre فقط، أي لا شيء يعيد بناء القائمة عند العودة للقسم.
+        if (props.mainGenre && props.mainGenre.trim() !== '') {
+            const saved = genresList.value.find(g => g.name === props.mainGenre);
+            if (saved) {
+                fetchSubGenres(saved.id, { preserveSelection: true });
+            } else {
+                console.warn('⚠️ لم يُعثر على معرّف النوع الرئيسي المحفوظ:', props.mainGenre);
+            }
+        }
         
         // 🔥 بدء الأنيميشن بعد تحميل البيانات
         nextTick(() => {
@@ -500,8 +602,10 @@ const fetchGenres = async () => {
     }
 };
 
-const fetchSubGenres = async (genreId) => {
-    console.log('🔍 fetchSubGenres called with genreId:', genreId);
+// preserveSelection: نستخدمه عند إعادة تحميل القائمة لنوع رئيسي محفوظ مسبقاً —
+//   فلا يُمسَح النوع الفرعي المختار. التفريغ مقصود فقط عند تبديل النوع الرئيسي.
+const fetchSubGenres = async (genreId, { preserveSelection = false } = {}) => {
+    console.log('🔍 fetchSubGenres called with genreId:', genreId, preserveSelection ? '(preserve)' : '');
     
     if (!genreId) {
         subGenresList.value = [];
@@ -520,7 +624,10 @@ const fetchSubGenres = async (genreId) => {
             emit('update:hasSubGenres', hasSubGenres);
             console.log(`📤 Emitting hasSubGenres: ${hasSubGenres} (${subGenresList.value.length} subgenres)`);
             
-            if (!hasSubGenres) {
+            if (preserveSelection) {
+                // إعادة تحميل للعرض فقط — لا نلمس الاختيار المحفوظ.
+                console.log('📤 Restored subgenre list, keeping selection:', props.subGenre || '(لا شيء)');
+            } else if (!hasSubGenres) {
                 console.log('📤 No subgenres found, auto-selecting...');
                 emit('update:isSubGenreSelected', true);
                 emit('update:subGenre', '');
@@ -577,27 +684,9 @@ const handleClickOutside = (event) => {
     }
 };
 
-// ========== مراقبة تغييرات mainGenreSearch (حذف القيم) ==========
-watch(mainGenreSearch, (newVal, oldVal) => {
-    if (!newVal || newVal.trim() === '') {
-        emit('update:mainGenre', '');
-        emit('update:isMainGenreSelected', false);
-        emit('update:subGenre', '');
-        emit('update:isSubGenreSelected', false);
-        subGenresList.value = [];
-        emit('update:hasSubGenres', false);
-        console.log('🗑️ Main genre cleared');
-    }
-}, { immediate: true });
-
-// ========== مراقبة تغييرات subGenreSearch (حذف القيم) ==========
-watch(subGenreSearch, (newVal) => {
-    if (!newVal || newVal.trim() === '') {
-        emit('update:subGenre', '');
-        emit('update:isSubGenreSelected', false);
-        console.log('🗑️ Subgenre cleared');
-    }
-}, { immediate: true });
+// ملاحظة: أُزيلت مراقبات mainGenreSearch/subGenreSearch العامة (immediate) لأنها كانت
+//   تُطلَق عند التحميل وعند فتح القائمة (toggleDropdown يمسح البحث) فتمحو النوع المحفوظ
+//   خطأً. صار المسح المقصود يُعالَج في filterMainGenres/filterSubGenres (@input فقط).
 
 // ========== Lifecycle ==========
 onMounted(() => {
@@ -640,7 +729,13 @@ watch(() => props.isLeaving, (newVal) => {
 
 /* 🔥 عند تفعيل الأنيميشن */
 .new-right.slide-in {
-    transform: translateY(0);
+    /* ✅ transform: none بدل translateY(0).
+       أي قيمة transform غير none — حتى translateY(0) — تُنشئ stacking context،
+       فيُحبس الدروب داون داخل .new-right ولا ينافس إلا بـ z-index الحاوية (auto)،
+       فيعلوه .button-arrow بـ z-index: 10 مهما رفعنا قيمة الدروب داون.
+       مع none يزول الحبس بعد انتهاء الحركة، والانتقال من translateY(30px)
+       إلى none يُنَفّذ طبيعياً (المتصفّح يُداخِل إلى مصفوفة الهوية). */
+    transform: none;
     opacity: 1;
 }
 
@@ -871,7 +966,6 @@ watch(() => props.isLeaving, (newVal) => {
     color: var(--Main-Colors-Dove, #6A6C6D);
     font-family: Heebo;
     font-size: 16px;
-    font-weight: 300;
     height: 46px;
     max-width: 100%;
     box-sizing: border-box;
@@ -880,7 +974,8 @@ watch(() => props.isLeaving, (newVal) => {
 
 .no-subgenres-message .message-text {
     color: var(--Main-Colors-Dove, #6A6C6D);
-    font-size: 18px;
+    font-size: 20px;
+    font-family: Heebo;
 }
 
 .custom-select {
@@ -893,13 +988,14 @@ watch(() => props.isLeaving, (newVal) => {
 }
 
 .dropdown {
+    /* ✅ أعلى من كل طبقات الصفحة (أقصاها 1000) ودون طبقة المودالات (99999). */
     position: absolute;
     top: calc(100% + 2px);
     left: 0;
     right: 0;
     background: var(--primary);
     border-radius: 5px;
-    z-index: 100;
+    z-index: 5000;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     max-height: 260px;
     overflow-y: auto;

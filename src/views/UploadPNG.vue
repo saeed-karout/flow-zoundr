@@ -2,20 +2,20 @@
   <div class="step-manager" :class="{ 'step-1-auto': currentStep === 1 }">
     
     <!-- 🔥 فيديو بوب اب -->
-    <VideoPopup 
-      :show="showVideoPopup" 
-      :videoId="videoId" 
-      @close="closeVideoPopup" 
-    />
-    
+   <VideoPopup 
+  :show="showVideoPopup" 
+  :videoId="videoId" 
+  @close="closeVideoPopup" 
+/>
     <teleport to="body">
       <PupUpStart v-if="showPupUpStart" :show="showPupUpStart" @deny="closePupUpStart" />
+       
     </teleport>
     
     <!-- 🔥 كروت اختيار نوع الإصدار - خارج أي Layout -->
     <div v-if="currentStep === 1 && showTypeSelection" class="type-selection-wrapper">
       <div class="selection-title">Was möchtest du releasen?</div>
-      <div class="cards-container-songs">
+      <div class="cards-container-songs" :class="{ 'is-correction': isCorrected('release_type') }">
         <TiltCard
           class="type-card"
           ref="card1"
@@ -92,7 +92,7 @@
         @update:currentView="handleUpdateCurrentView"
         @enter-sub-layout="enterSubLayout"
         @exit-sub-layout="exitSubLayout"
-        @change-song-type="handleChangeSongType"
+        @change-audio-quality="handleChangeAudioQuality"
         @back-to-first-section="handleBackToFirstSectionFromLayout"
         @update:form-data="handleFormDataUpdateFromChild"
         @update-tab-completion="handleTabCompletionUpdate"
@@ -159,7 +159,7 @@
           @update:currentView="handleUpdateCurrentView"
           @enter-sub-layout="enterSubLayout"
           @exit-sub-layout="exitSubLayout"
-          @change-song-type="handleChangeSongType"
+          @change-audio-quality="handleChangeAudioQuality"
           @back-to-first-section="handleBackToFirstSectionFromLayout"
         >
           <!-- UploadComponent: currentStep === 1 -->
@@ -181,6 +181,7 @@
             @next="nextStep"
             @release-created="handleReleaseCreated"
             @cover-updated="handleCoverUpdated"
+            @cover-upload-failed="handleCoverUploadFailed"
             @release-updated="handleReleaseUpdated"
             @cover-restored="handleCoverRestored"
             @update:showNewRight2="showNewRight2 = $event"
@@ -316,8 +317,11 @@
 <script setup>
 // ========== imports ==========
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, provide, reactive } from 'vue';
+import { useCorrections } from '@/composables/useCorrections';
+import { dateSortValue } from '@/utils/date';
 import { useRoute, useRouter } from 'vue-router';
 import { useReleaseStore } from '@/stores/release';
+import { computeTabCompletion } from '@/utils/songCompletion';
 import apiRequest from '@/lib/apiRequest';
 import { storage_url } from '@/constants';
 import dayjs from 'dayjs';
@@ -333,6 +337,9 @@ import PupUpStart from '@/components/modals/PupUpStart.vue';
 import TiltCard from '@/components/TiltCard.vue';
 import VideoPopup from '@/components/uploadPngSteps/Upload1Components/VideoPopup.vue';
 
+// حقول مطلوب تصحيحها (Korrektur) ← بوردر أحمر.
+const { isCorrected } = useCorrections();
+
 // ========== router & store ==========
 const route = useRoute();
 const router = useRouter();
@@ -340,7 +347,7 @@ const releaseStore = useReleaseStore();
 
 // ========== الصورة الافتراضية ==========
 const defaultBackgroundImage = ref('/img/bgCardSongs/card1.png');
-
+const fetchStartedAt = Date.now();
 // ========== props ==========
 const props = defineProps({
   currentStep: { type: Number, required: true },
@@ -370,11 +377,27 @@ const isLoadingDraft = ref(false);
 const draftRelease = ref(null);
 const serverCoverUrl = ref(null);
 const uploadedImage = ref(null);
+const lastCoverMutationAt = ref(0);
 const showPupUpStart = ref(false);
 const releaseUuidFromUrl = ref(null);
 const selectedDate = ref(null);
 const isCreatingRelease = ref(false);
 const isNavigatingBetweenSteps = ref(false);
+
+// ✅ يستخرج releaseUuid من الرابط (route params) عند غياب props.releaseUuid.
+//    كان يُستدعى في mounted لكنه غير معرّف → ReferenceError يوقف بقية mounted في
+//    مسار الإنشاء الجديد. في /create-release لا يوجد uuid فنُبقيه null.
+const extractReleaseUuidFromUrl = () => {
+  const paramUuid = route.params?.uuid || route.params?.releaseUuid || '';
+  if (paramUuid && String(paramUuid).trim() !== '') {
+    releaseUuidFromUrl.value = paramUuid;
+    releaseStore.setCurrentReleaseId(paramUuid);
+    console.log('📌 تم استخراج releaseUuid من الرابط:', paramUuid);
+  } else {
+    releaseUuidFromUrl.value = null;
+    console.log('ℹ️ لا يوجد releaseUuid في الرابط (إنشاء جديد)');
+  }
+};
 
 // ========== video state ==========
 const showVideoPopup = ref(false);
@@ -394,7 +417,7 @@ const shouldForceFullHeight = computed(() => {
   return currentStep.value === 3 && currentView.value !== 'main' && isInSubLayoutMode.value;
 });
 
-// ========== ✅ logUploadState - تعريف قبل الاستخدام ==========
+// ========== logUploadState ==========
 const logUploadState = (label, extra = {}) => {
   console.log('🧭 [UploadPNG]', label, {
     routePath: route.path,
@@ -411,6 +434,15 @@ const logUploadState = (label, extra = {}) => {
     songUuid: releaseStore.songUuid,
     ...extra
   });
+};
+
+const isFreshCoverMutation = (startedAt) => lastCoverMutationAt.value > startedAt;
+
+const commitCoverUrl = (coverUrl) => {
+  lastCoverMutationAt.value = Date.now();
+  serverCoverUrl.value = coverUrl;
+  uploadedImage.value = coverUrl;
+  releaseStore.setServerCoverUrl(coverUrl);
 };
 
 // ========== video functions ==========
@@ -454,6 +486,7 @@ let isNavigatingFromNextStep = false;
 let manualNavigationTimeout = null;
 let isReturningFromSongEdit = false;
 let isReturningFromPreRelease = false;
+let isPreventingAutoNavigation = false;
 
 // ========== force infos view ==========
 const forceInfosView = ref(false);
@@ -474,7 +507,7 @@ const setSongDetailsTabToInfos = () => {
   }
 };
 
-// ========== ✅ handleTabCompletionUpdate ==========
+// ========== handleTabCompletionUpdate ==========
 const handleTabCompletionUpdate = (completion) => {
   console.log('📌 [UploadPNG] Tab completion updated from PreReleaseLayout:', completion);
   
@@ -671,60 +704,20 @@ const handleReleaseUpdated = (data) => {
   }
 };
 
-
-
 // ========== تحليل بيانات الأغنية وتحديث tabCompletion ==========
+// ✅ يستخدم المصدر المشترك @/utils/songCompletion — نفس منطق FirstSection.isTrackComplete
+//    و tabs.vue و Infos1، بما في ذلك تخطّي حقول النصوص عند نوع instrumental.
 const updateTabCompletionFromSong = (songData) => {
   if (!songData) return;
-  
-  console.log('📊 [UploadPNG] Updating tabCompletion from song data:', songData);
-  
-  // ✅ تحليل اكتمال كل تاب
-  const infosComplete = 
-    songData.title && 
-    songData.title !== 'Song Titel' &&
-    songData.title.trim() !== '' &&
-    songData.explicit_lyrics !== null &&
-    songData.explicit_lyrics !== undefined &&
-    songData.explicit_lyrics !== '' &&
-    songData.title_language !== null &&
-    songData.title_language !== undefined &&
-    songData.title_language !== '' &&
-    songData.lyrics_language !== null &&
-    songData.lyrics_language !== undefined &&
-    songData.lyrics_language !== '';
-  
-  const urheberComplete = 
-    (songData.authors?.composer && songData.authors.composer.length > 0 && songData.authors.composer.some(v => v?.trim())) ||
-    (songData.authors?.lyricist && songData.authors.lyricist.length > 0 && songData.authors.lyricist.some(v => v?.trim()));
-  
-  const mitwirkendeComplete = 
-    (songData.contributors?.artist && songData.contributors.artist.length > 0 && songData.contributors.artist.some(v => v?.name?.trim())) ||
-    (songData.contributors?.producer && songData.contributors.producer.length > 0 && songData.contributors.producer.some(v => v?.name?.trim()));
-  
-  // ✅ deals دائماً true
-  const dealsComplete = true;
-  
-  // ✅ pre-release دائماً true (لأنه غير مفعل)
-  const preReleaseComplete = true;
-  
-  // ✅ تأكد من أن القيم boolean
-  const completion = {
-    infos: infosComplete === true ? true : false,
-    urheber: urheberComplete === true ? true : false,
-    mitwirkende: mitwirkendeComplete === true ? true : false,
-    deals: true,
-    'pre-release': true
-  };
-  
+
+  const completion = computeTabCompletion(songData);
+  if (!completion) return;
+
   console.log('📤 [UploadPNG] Updating Store tabCompletion:', completion);
-  
-  // ✅ تحديث Store مباشرة
   releaseStore.updateTabCompletion(completion);
-  
+
   return completion;
 };
-
 
 // ========== setCurrentView ==========
 const setCurrentView = (view) => {
@@ -755,10 +748,21 @@ const isRealImage = (url) => {
   return false;
 };
 
-// ========== handleChangeSongType ==========
-const handleChangeSongType = () => {
-  console.log('📢 [UploadPNG] استقبال حدث change-song-type');
-  
+// ========== handleChangeAudioQuality ==========
+const handleChangeAudioQuality = () => {
+  console.log('📢 [UploadPNG] استقبال حدث change-audio-quality');
+
+  if (releaseStore.hasUploadedAudio) {
+    console.warn('⚠️ [UploadPNG] لا يمكن تغيير نوع الصوت بعد رفع ملف صوتي');
+    window.dispatchEvent(new CustomEvent('show-toast', {
+      detail: {
+        message: 'Der Audiotyp kann nicht mehr geändert werden, nachdem eine Audiodatei hochgeladen wurde.',
+        type: 'warning'
+      }
+    }));
+    return;
+  }
+
   currentView.value = 'main';
   topLineImage.value = null;
   showNewRight2.value = false;
@@ -771,7 +775,7 @@ const handleChangeSongType = () => {
   
   releaseStore.clearSongUuid();
   
-  window.dispatchEvent(new CustomEvent('change-song-type'));
+  window.dispatchEvent(new CustomEvent('change-audio-quality'));
   
   console.log('✅ [UploadPNG] تم العودة إلى شاشة الكروت (main)');
 };
@@ -1120,6 +1124,7 @@ const handleGoBackToTypeSelection = () => {
   console.log('✅ تم العودة إلى اختيار نوع الـ Release');
 };
 
+// ========== fetchRelease ==========
 const fetchRelease = async () => {
   if (shouldSkipCreation.value || route.query.skip === 'true' || route.query.new === 'true') {
     console.log('⏭️ وضع التخطي نشط - تم إلغاء جلب المسودة');
@@ -1158,27 +1163,25 @@ const fetchRelease = async () => {
       
       if (release) {
         draftRelease.value = release;
+        // حقول التصحيح تصل مع الـ release نفسه، فتُحفظ هنا لا عند النقر من الكتالوغ
+        // فقط — وإلا اختفت البوردرات الحمراء بعد إعادة تحميل صفحة التعديل.
+        releaseStore.setCorrections(release);
         releaseStore.setReleaseType(release.release_type);
         releaseStore.setCurrentReleaseId(release.uuid);
         
-        // ✅ تحديث tabCompletion من الأغاني
         if (release.songs && release.songs.length > 0) {
-          // ✅ إذا كان هناك songUuid محدد، استخدمه
           const targetSongUuid = props.songUuid || releaseStore.songUuid || route.params.songUuid || route.query.song;
           
           if (targetSongUuid) {
-            // ✅ ابحث عن الأغنية المحددة
             const targetSong = release.songs.find(s => s.uuid === targetSongUuid);
             if (targetSong) {
               console.log('🎵 [UploadPNG] تحديث tabCompletion من الأغنية المحددة:', targetSong.uuid);
               updateTabCompletionFromSong(targetSong);
             } else {
-              // ✅ إذا لم يتم العثور على الأغنية، استخدم أول أغنية
               console.log('🎵 [UploadPNG] تحديث tabCompletion من أول أغنية (لم يتم العثور على الأغنية المحددة)');
               updateTabCompletionFromSong(release.songs[0]);
             }
           } else {
-            // ✅ إذا لم يكن هناك songUuid، استخدم أول أغنية
             console.log('🎵 [UploadPNG] تحديث tabCompletion من أول أغنية (بدون songUuid)');
             updateTabCompletionFromSong(release.songs[0]);
           }
@@ -1212,25 +1215,28 @@ const fetchRelease = async () => {
           releaseStore.setShopsComplete(hasStores);
         }
         
-        const isPublishReady = release.status === 'draft' && 
-                               (hasTitle && hasArtists && hasReleaseDate) && 
-                               release.songs && release.songs.length > 0 && 
-                               releaseStore.isSongsComplete && 
+        // isPublishReady = خطوة Publish أصبحت قابلة للتعبئة، وليست مكتملة. اكتمال Publish
+        // يُضبط حصرياً من Upload4Component (فورم معبّأ + موافقة). لا نضبطه true هنا لمجرّد
+        // اكتمال Shops؛ نكتفي بإعادته false عند فقدان المتطلبات.
+        const isPublishReady = release.status === 'draft' &&
+                               (hasTitle && hasArtists && hasReleaseDate) &&
+                               release.songs && release.songs.length > 0 &&
+                               releaseStore.isSongsComplete &&
                                hasStores;
-        if (releaseStore.isPublishComplete !== isPublishReady) {
-          releaseStore.setPublishComplete(isPublishReady);
+        if (!isPublishReady && releaseStore.isPublishComplete) {
+          releaseStore.setPublishComplete(false);
         }
         
         if (release.title) {
           currentTitle.value = release.title;
         }
         
-        if (release.cover) {
+        const hasFreshCover = isFreshCoverMutation(fetchStartedAt);
+
+        if (release.cover && !hasFreshCover) {
           const coverPath = release.cover;
           const coverUrl = coverPath.startsWith('http') ? coverPath : `${storage_url}/${coverPath}`;
-          serverCoverUrl.value = coverUrl;
-          uploadedImage.value = coverUrl;
-          releaseStore.setServerCoverUrl(coverUrl);
+          commitCoverUrl(coverUrl);
           
           console.log('🖼️ تم تحديث serverCoverUrl من fetchRelease:', serverCoverUrl.value);
           console.log('🖼️ تم تحديث uploadedImage من fetchRelease:', uploadedImage.value);
@@ -1238,17 +1244,24 @@ const fetchRelease = async () => {
           if (releaseStore && !releaseStore._startComplete) {
             releaseStore.setStartComplete(true);
           }
-        } else {
-          serverCoverUrl.value = null;
+        } else if (!hasFreshCover) {
+          serverCoverUrl.value = defaultBackgroundImage.value;
           uploadedImage.value = null;
+        } else {
+          console.log('🖼️ [UploadPNG] Skipping stale cover from fetchRelease because a newer upload exists');
         }
         
-        if (isReturningFromPreRelease) {
-          console.log('⏭️ [UploadPNG] Returning from Pre-Release, skipping step update in fetchRelease');
-          releaseStore.determineStepFromRelease(release, false);
+        // ✅ عند العودة من تعديل الأغنية/Pre-Release (زر الرجوع): نبقى في Songs (خطوة 3)
+        //    ولا نُقدّم المستخدم تلقائياً إلى Shops حتى لو اكتملت Metas+Songs. الانتقال
+        //    إلى Shops يجب أن يكون بنقر «Weiter zu Shops». نحسب الأعلام فقط دون تغيير الخطوة.
+        if (isReturningFromSongEdit || isReturningFromPreRelease) {
+          console.log('🔙 [UploadPNG] عودة من تعديل الأغنية/Pre-Release → البقاء في Songs (3)، لا انتقال تلقائي');
+          releaseStore.determineStepFromRelease(release, false, true);
+          currentStep.value = 3;
+          releaseStore.setCurrentStep(3);
+          showTypeSelection.value = false;
         }
-
-        if (isEditSongModeLocal || hasSongUuid) {
+        else if (isEditSongModeLocal || hasSongUuid) {
           console.log('🎵 وضع تعديل الأغنية أو وجود songUuid - الحفاظ على isMetasComplete');
           releaseStore.determineStepFromRelease(release, false, true);
         }
@@ -1261,12 +1274,15 @@ const fetchRelease = async () => {
             console.log(`📌 استخدام step من query: ${stepFromQuery}`);
             currentStep.value = stepFromQuery;
             releaseStore.setCurrentStep(stepFromQuery);
-            
-            if (stepFromQuery === 2) {
-              releaseStore.determineStepFromRelease(release, false, true);
-            }
+
+            // Always compute the completion flags from the release data (without
+            // changing the step). Otherwise, when we land directly on step 5 via a
+            // query, isSongsComplete stays false and the sidebar locks Songs/Shops.
+            releaseStore.determineStepFromRelease(release, false, true);
           } else {
-            const determinedStep = releaseStore.determineStepFromRelease(release, true, true);
+            // On a fresh /edit load, land on the furthest complete step — including
+            // Publish (step 5) when everything is done — so preventPublishAutoNav = false.
+            const determinedStep = releaseStore.determineStepFromRelease(release, true, true, false, false);
             console.log(`📌 الخطوة المحددة من البيانات: ${determinedStep}`);
             currentStep.value = determinedStep;
             releaseStore.setCurrentStep(determinedStep);
@@ -1302,16 +1318,16 @@ const fetchRelease = async () => {
       
       if (release) {
         draftRelease.value = release;
+        // حقول التصحيح تصل مع الـ release نفسه، فتُحفظ هنا لا عند النقر من الكتالوغ
+        // فقط — وإلا اختفت البوردرات الحمراء بعد إعادة تحميل صفحة التعديل.
+        releaseStore.setCorrections(release);
         releaseStore.setReleaseType(release.release_type);
         releaseStore.setCurrentReleaseId(release.uuid);
         
-        // ✅ تحديث tabCompletion من الأغاني
         if (release.songs && release.songs.length > 0) {
-          // ✅ إذا كان هناك songUuid محدد، استخدمه
           const targetSongUuid = props.songUuid || releaseStore.songUuid || route.params.songUuid || route.query.song;
           
           if (targetSongUuid) {
-            // ✅ ابحث عن الأغنية المحددة
             const targetSong = release.songs.find(s => s.uuid === targetSongUuid);
             if (targetSong) {
               console.log('🎵 [UploadPNG] تحديث tabCompletion من الأغنية المحددة (من الرابط):', targetSong.uuid);
@@ -1354,32 +1370,42 @@ const fetchRelease = async () => {
           releaseStore.setShopsComplete(hasStores);
         }
         
-        const isPublishReady = release.status === 'draft' && 
-                               (hasTitle && hasArtists && hasReleaseDate) && 
-                               release.songs && release.songs.length > 0 && 
-                               releaseStore.isSongsComplete && 
+        // isPublishReady = خطوة Publish أصبحت قابلة للتعبئة، وليست مكتملة. اكتمال Publish
+        // يُضبط حصرياً من Upload4Component (فورم معبّأ + موافقة). لا نضبطه true هنا لمجرّد
+        // اكتمال Shops؛ نكتفي بإعادته false عند فقدان المتطلبات.
+        const isPublishReady = release.status === 'draft' &&
+                               (hasTitle && hasArtists && hasReleaseDate) &&
+                               release.songs && release.songs.length > 0 &&
+                               releaseStore.isSongsComplete &&
                                hasStores;
-        if (releaseStore.isPublishComplete !== isPublishReady) {
-          releaseStore.setPublishComplete(isPublishReady);
+        if (!isPublishReady && releaseStore.isPublishComplete) {
+          releaseStore.setPublishComplete(false);
         }
         
         if (release.title) {
           currentTitle.value = release.title;
         }
-        
-        const hasSongUuidLocal = !!(props.songUuid || releaseStore.songUuid || route.params.songUuid || route.query.song);
-        
-        if (release.cover) {
+
+        const hasFreshCover = isFreshCoverMutation(fetchStartedAt);
+
+        if (release.cover && !hasFreshCover) {
           const coverPath = release.cover;
           const coverUrl = coverPath.startsWith('http') ? coverPath : `${storage_url}/${coverPath}`;
-          serverCoverUrl.value = coverUrl;
-          uploadedImage.value = coverUrl;
-          releaseStore.setServerCoverUrl(coverUrl);
-        } else {
+          commitCoverUrl(coverUrl);
+          
+          console.log('🖼️ تم تحديث serverCoverUrl من fetchRelease:', serverCoverUrl.value);
+          console.log('🖼️ تم تحديث uploadedImage من fetchRelease:', uploadedImage.value);
+          
+          if (releaseStore && !releaseStore._startComplete) {
+            releaseStore.setStartComplete(true);
+          }
+        } else if (!hasFreshCover) {
           serverCoverUrl.value = defaultBackgroundImage.value;
           uploadedImage.value = null;
+        } else {
+          console.log('🖼️ [UploadPNG] Skipping stale cover from fetchRelease because a newer upload exists');
         }
-        
+
         if (isEditSongModeLocal || hasSongUuidLocal) {
           console.log('🎵 وضع تعديل الأغنية أو وجود songUuid - الحفاظ على isMetasComplete');
           releaseStore.determineStepFromRelease(release, false, true);
@@ -1391,12 +1417,15 @@ const fetchRelease = async () => {
             console.log(`📌 استخدام step من query: ${stepFromQuery}`);
             currentStep.value = stepFromQuery;
             releaseStore.setCurrentStep(stepFromQuery);
-            
-            if (stepFromQuery === 2) {
-              releaseStore.determineStepFromRelease(release, false, true);
-            }
+
+            // Always compute the completion flags from the release data (without
+            // changing the step). Otherwise, when we land directly on step 5 via a
+            // query, isSongsComplete stays false and the sidebar locks Songs/Shops.
+            releaseStore.determineStepFromRelease(release, false, true);
           } else {
-            const determinedStep = releaseStore.determineStepFromRelease(release, true, true);
+            // On a fresh /edit load, land on the furthest complete step — including
+            // Publish (step 5) when everything is done — so preventPublishAutoNav = false.
+            const determinedStep = releaseStore.determineStepFromRelease(release, true, true, false, false);
             console.log(`📌 الخطوة المحددة من البيانات: ${determinedStep}`);
             currentStep.value = determinedStep;
             releaseStore.setCurrentStep(determinedStep);
@@ -1451,20 +1480,17 @@ const fetchRelease = async () => {
 
     const latestDraft = releases
       .filter(r => r.status === 'draft')
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+      .sort((a, b) => dateSortValue(b.created_at) - dateSortValue(a.created_at))[0];
 
     if (latestDraft) {
       draftRelease.value = latestDraft;
       releaseStore.setReleaseType(latestDraft.release_type);
       releaseStore.setCurrentReleaseId(latestDraft.uuid);
       
-      // ✅ تحديث tabCompletion من الأغاني
       if (latestDraft.songs && latestDraft.songs.length > 0) {
-        // ✅ إذا كان هناك songUuid محدد، استخدمه
         const targetSongUuid = props.songUuid || releaseStore.songUuid || route.params.songUuid || route.query.song;
         
         if (targetSongUuid) {
-          // ✅ ابحث عن الأغنية المحددة
           const targetSong = latestDraft.songs.find(s => s.uuid === targetSongUuid);
           if (targetSong) {
             console.log('🎵 [UploadPNG] تحديث tabCompletion من الأغنية المحددة (آخر مسودة):', targetSong.uuid);
@@ -1516,7 +1542,8 @@ const fetchRelease = async () => {
           currentStep.value = stepFromQuery;
           releaseStore.setCurrentStep(stepFromQuery);
         } else {
-          const determinedStep = releaseStore.determineStepFromRelease(latestDraft, true, true);
+          // Land on the furthest complete step (incl. Publish) on load.
+          const determinedStep = releaseStore.determineStepFromRelease(latestDraft, true, true, false, false);
           console.log(`📌 الخطوة المحددة من البيانات: ${determinedStep}`);
           currentStep.value = determinedStep;
           releaseStore.setCurrentStep(determinedStep);
@@ -1602,7 +1629,7 @@ const selectReleaseType = (type) => {
       releaseTypeValue = 'extended player';
       break;
     case 'album':
-      releaseTypeText = 'DEIN NEUES ALBUM';
+      releaseTypeText = 'album';
       releaseTypeValue = 'album';
       break;
     default:
@@ -1678,7 +1705,20 @@ watch(currentStep, (newStep, oldStep) => {
   if (isUpdatingFromStore) return;
   
   console.log('[UploadPNG] currentStep تغير من', oldStep, 'إلى', newStep);
-  
+
+  // ✅ مغادرة Songs إلى أي خطوة أخرى → إنهاء حالة عرض تفاصيل الأغنية.
+  //    كان التصفير مقتصراً على الانتقال 3 → 2، فمسار مثل
+  //    (تعديل أغنية ← COVER ← رفع غلاف ← Metas) يمرّ 3 → 1 → 2 ويترك
+  //    currentView على 'infos'، فيظهر عمود تبويبات الأغنية فوق Metas.
+  if (oldStep === 3 && newStep !== 3) {
+    isInSubLayoutMode.value = false;
+    forceInfosView.value = false;
+    if (currentView.value !== 'main') {
+      console.log('📌 [UploadPNG] مغادرة Songs → تصفير currentView إلى main');
+      setCurrentView('main');
+    }
+  }
+
   if (oldStep === 3 && newStep === 2) {
     console.log('📌 [UploadPNG] الانتقال من Songs إلى Metas - إلغاء SubLayout');
     
@@ -1733,6 +1773,7 @@ const getComponentByStep = (step) => {
     default: return UploadComponent;
   }
 };
+
 // ========== nextStep ==========
 const nextStep = () => {
   console.log('📌 [UploadPNG] nextStep called!');
@@ -1748,6 +1789,7 @@ const nextStep = () => {
     console.log('📌 [UploadPNG] Already at last step');
   }
 };
+
 // ========== handleReleaseCreated ==========
 const handleReleaseCreated = async (data) => {
   console.log('📦 UploadPNG: استقبال حدث release-created:', data);
@@ -1762,8 +1804,7 @@ const handleReleaseCreated = async (data) => {
       if (!fullCoverUrl.startsWith('http://') && !fullCoverUrl.startsWith('https://')) {
         fullCoverUrl = `${storage_url}/${data.coverUrl}`;
       }
-      serverCoverUrl.value = fullCoverUrl;
-      uploadedImage.value = fullCoverUrl;
+      commitCoverUrl(fullCoverUrl);
       console.log('🖼️ تم تحديث serverCoverUrl من release-created:', serverCoverUrl.value);
       console.log('🖼️ تم تحديث uploadedImage من release-created:', uploadedImage.value);
       
@@ -1791,8 +1832,7 @@ const handleReleaseCreated = async (data) => {
         if (response.data.data.cover && isRealImage(response.data.data.cover)) {
           const coverPath = response.data.data.cover;
           const coverUrl = coverPath.startsWith('http') ? coverPath : `${storage_url}/${coverPath}`;
-          serverCoverUrl.value = coverUrl;
-          uploadedImage.value = coverUrl;
+            commitCoverUrl(coverUrl);
           console.log('🖼️ تم تحديث serverCoverUrl من fetchRelease:', serverCoverUrl.value);
           console.log('🖼️ تم تحديث uploadedImage من fetchRelease:', uploadedImage.value);
           
@@ -1856,9 +1896,7 @@ const handleReleaseCreated = async (data) => {
 const handleCoverUpdated = (data) => {
   console.log('🖼️ UploadPNG: استقبال حدث cover-updated:', data);
   if (data?.coverUrl && isRealImage(data.coverUrl)) {
-    serverCoverUrl.value = data.coverUrl;
-    uploadedImage.value = data.coverUrl;
-    releaseStore.setServerCoverUrl(data.coverUrl);
+    commitCoverUrl(data.coverUrl);
     console.log('🖼️ تم تحديث serverCoverUrl من cover-updated:', serverCoverUrl.value);
     console.log('🖼️ تم تحديث uploadedImage من cover-updated:', uploadedImage.value);
     
@@ -1870,6 +1908,15 @@ const handleCoverUpdated = (data) => {
     uploadedImage.value = null;
     console.log('🖼️ تم إعادة تعيين الصورة إلى الافتراضية');
   }
+};
+
+const handleCoverUploadFailed = () => {
+  console.warn('⚠️ [UploadPNG] Cover upload failed, restoring committed cover');
+  uploadedImage.value = null;
+  if (!serverCoverUrl.value || serverCoverUrl.value === '') {
+    serverCoverUrl.value = defaultBackgroundImage.value;
+  }
+  releaseStore.setServerCoverUrl(serverCoverUrl.value);
 };
 
 // ========== sub layout functions ==========
@@ -1891,6 +1938,10 @@ const handleBack = () => {
 const handleTabUpdate = (tabId) => {
   console.log('📌 [UploadPNG] Tab updated to:', tabId);
   activeTab.value = tabId;
+
+  if (releaseStore.songUuid) {
+    releaseStore.setLastSongTab(releaseStore.songUuid, tabId);
+  }
 };
 
 // ========== closePupUpStart ==========
@@ -1905,6 +1956,101 @@ const closePupUpStart = () => {
   
   removeSkipFromUrl();
 };
+
+// ============================================================
+// ✅ التحقق من وجود Releases وإظهار/إخفاء PupUpStart
+// ============================================================
+
+const checkReleasesAndShowPopup = async () => {
+  try {
+    // ✅ استدعاء API للحصول على قائمة الـ Releases
+    const response = await apiRequest.get('/releases');
+    const releasesList = response.data?.data || [];
+    const hasReleases = releasesList.length > 0;
+    
+    console.log('📊 [PupUpStart] عدد الـ Releases:', releasesList.length);
+    
+    if (!hasReleases) {
+      // 🎉 لا يوجد Releases → أظهر الـ Popup (فقط إذا لم يكن ظاهراً بالفعل)
+      if (!showPupUpStart.value) {
+        showPupUpStart.value = true;
+        console.log('🎉 [PupUpStart] تم فتح الـ Popup (لا يوجد Releases)');
+      }
+    } else {
+      // 🔒 يوجد Releases → أخفِ الـ Popup
+      if (showPupUpStart.value) {
+        showPupUpStart.value = false;
+        document.body.style.overflow = '';
+        console.log('🔒 [PupUpStart] تم إغلاق الـ Popup (يوجد Releases)');
+      }
+    }
+  } catch (e) {
+    console.warn('⚠️ [PupUpStart] فشل التحقق من وجود Releases:', e);
+  }
+};
+
+// ============================================================
+// ✅ مراقبة بسيطة فقط لوجود Releases
+// ============================================================
+
+// ✅ مراقبة التغييرات في draftRelease (عند إنشاء أو تعديل Release)
+watch(
+  () => releaseStore.draftRelease,
+  (newDraft) => {
+    if (newDraft) {
+      // ✅ عند وجود draftRelease، تحقق من وجود Releases
+      setTimeout(() => {
+        checkReleasesAndShowPopup();
+      }, 300);
+    }
+  },
+  { deep: true, immediate: true }
+);
+
+// ✅ مراقبة currentReleaseId (عند إنشاء Release جديد)
+watch(
+  () => releaseStore.currentReleaseId,
+  (newId) => {
+    if (newId) {
+      // ✅ عند إنشاء Release جديد، تحقق من وجود Releases
+      setTimeout(() => {
+        checkReleasesAndShowPopup();
+      }, 300);
+    }
+  },
+  { immediate: true }
+);
+
+// ✅ مراقبة isMetasComplete (عند اكتمال البيانات قد يعني وجود Release)
+watch(
+  () => releaseStore.isMetasComplete,
+  (isComplete) => {
+    if (isComplete && releaseStore.currentReleaseId) {
+      setTimeout(() => {
+        checkReleasesAndShowPopup();
+      }, 300);
+    }
+  },
+  { immediate: true }
+);
+
+// ✅ مراقبة التغييرات في المسار (route) للتحقق من وجود Release
+watch(
+  () => route.path,
+  async (newPath) => {
+    // ✅ إذا كان المسار يشير إلى تعديل Release أو أغنية، تحقق من وجود Releases
+    if (newPath.includes('/edit') || newPath.includes('/songs/')) {
+      setTimeout(() => {
+        checkReleasesAndShowPopup();
+      }, 300);
+    }
+  },
+  { immediate: true }
+);
+
+// ============================================================
+// ✅ دالة بسيطة لإغلاق الـ Popup يدوياً
+// ============================================================
 
 // ========== watchers ==========
 watch(() => releaseStore.currentStep, (newStep, oldStep) => {
@@ -1954,8 +2100,9 @@ watch(() => releaseStore.currentStep, (newStep, oldStep) => {
 watch(() => releaseStore.currentStep, (newStep) => {
   if (newStep === 4) {
     if (upload3ComponentRef.value) {
-      upload3ComponentRef.value.currentView = 'shopsPage';
-      console.log('📌 [UploadPNG] تعيين currentView إلى shopsPage في Upload3Component');
+      const hasSelectedStores = Array.isArray(releaseStore.draftRelease?.stores) && releaseStore.draftRelease.stores.length > 0;
+      upload3ComponentRef.value.currentView = hasSelectedStores ? 'shopsPage' : 'main';
+      console.log('📌 [UploadPNG] تعيين currentView في Upload3Component:', hasSelectedStores ? 'shopsPage' : 'main');
     }
   }
 }, { immediate: true });
@@ -2004,9 +2151,14 @@ watch(() => route.path, async (newPath, oldPath) => {
   
   if (newPath === '/create-release' || newPath === '/create-release/') {
     console.log('🔄 العودة إلى صفحة إنشاء جديد - إعادة تعيين الحالة');
-    
+
     removeSkipFromUrl();
-    
+
+    // ✅ إعادة تعيين كاملة للـ store — بما فيها serverCoverUrl و _startComplete ومفاتيح
+    //    localStorage الخاصة بالغلاف — وإلا يبقى غلاف الـ Release السابق في الـ store
+    //    فيستعيده UploadComponent ويظنّ أن هناك صورة، فيقفز تلقائياً إلى الخطوة 2.
+    releaseStore.resetAllData();
+
     showTypeSelection.value = true;
     currentStep.value = 1;
     releaseStore.currentStep = 1;
@@ -2014,16 +2166,23 @@ watch(() => route.path, async (newPath, oldPath) => {
     releaseStore.releaseType = null;
     releaseStore.releaseTypeValue = null;
     draftRelease.value = null;
+    // نُفرّغ الصورة المحلية أيضاً حتى لا تعيد ضبط غلاف الـ store عبر المراقب.
+    uploadedImage.value = null;
     serverCoverUrl.value = defaultBackgroundImage.value;
     shouldSkipCreation.value = false;
     pendingReleaseType.value = null;
-    
+
+    activeTab.value = 'infos';
+    currentView.value = 'main';
+    isInSubLayoutMode.value = false;
+    forceInfosView.value = false;
+
     releaseStore.songUuid = null;
     releaseStore.currentSongTitle = null;
-    
+
     currentTitle.value = '';
     previousBaseTitle.value = '';
-    
+
     console.log('✅ تم إعادة تعيين الحالة للإنشاء الجديد');
   }
 }, { immediate: true });
@@ -2130,6 +2289,19 @@ watch(() => route.path, async (newPath) => {
       releaseStore.setCurrentReleaseId(newReleaseUuid);
       await fetchRelease();
     }
+  } else if (newPath === '/create-release') {
+    // Starting a brand-new release: drop any UUID / cover left over from a
+    // previous edit (the component is reused, so these refs would otherwise
+    // stay populated). Without this, selectReleaseType sees a stale releaseId
+    // and jumps straight to Metas showing the old release's cover/completion.
+    releaseUuidFromUrl.value = null;
+    releaseStore.setCurrentReleaseId(null);
+    releaseStore.draftRelease = null;
+    releaseStore.serverCoverUrl = null;
+    releaseStore._startComplete = false;
+    draftRelease.value = null;
+    serverCoverUrl.value = defaultBackgroundImage.value;
+    uploadedImage.value = null;
   }
 });
 
@@ -2255,86 +2427,92 @@ watch(serverCoverUrl, (newUrl) => {
   }
 }, { immediate: true });
 
-// ========== watch songs and shops completion ==========
+// في UploadPNG.vue، watch songs and shops completion
+
 watch(
   () => [releaseStore.isSongsComplete, releaseStore.isShopsComplete, releaseStore.currentStep],
   async ([isSongsComplete, isShopsComplete, storeCurrentStep]) => {
-    console.log('📌 [UploadPNG] SongsComplete:', isSongsComplete, 'ShopsComplete:', isShopsComplete, 'CurrentStep:', storeCurrentStep, 'currentView:', currentView.value, 'isManualNavigation:', isManualNavigation, 'isNavigatingFromNextStep:', isNavigatingFromNextStep);
+    console.log('📌 [UploadPNG] SongsComplete:', isSongsComplete, 'ShopsComplete:', isShopsComplete, 'CurrentStep:', storeCurrentStep, 'currentView:', currentView.value, 'isManualNavigation:', isManualNavigation, 'isNavigatingFromNextStep:', isNavigatingFromNextStep, 'isPreventingAutoNavigation:', isPreventingAutoNavigation);
+    
+    if (isPreventingAutoNavigation) {
+        console.log('⏸️ [UploadPNG] Auto-navigation prevented, skipping...');
+        return;
+    }
     
     if (isNavigatingFromWatch) {
-      console.log('⏳ [UploadPNG] جاري التنقل، تخطي...');
-      return;
+        console.log('⏳ [UploadPNG] جاري التنقل، تخطي...');
+        return;
     }
     
-    if (isSongsComplete && isShopsComplete && storeCurrentStep === 3) {
-      if (isManualNavigation) {
+    if (isManualNavigation) {
         console.log('📌 [UploadPNG] ⏳ Manual navigation in progress, skipping auto-navigation');
         return;
-      }
-      
-      if (isNavigatingFromNextStep) {
-        console.log('📌 [UploadPNG] ⏳ Navigating from nextStep, skipping auto-navigation');
-        return;
-      }
-      
-      if (currentView.value === 'firstSection') {
-        console.log('📌 [UploadPNG] 📍 User is in firstSection, skipping auto-navigation');
-        return;
-      }
-      
-      const hasSongInUrl = !!route.query.song || !!route.params.songUuid;
-      if (hasSongInUrl) {
-        console.log('📌 [UploadPNG] 📍 songUuid in URL, skipping auto-navigation');
-        return;
-      }
-      
-      console.log('📌 [UploadPNG] ✅ Songs complete and Shops exist → moving to Shops (step 4)');
-      
-      isNavigatingFromWatch = true;
-      
-      currentStep.value = 4;
-      releaseStore.setCurrentStep(4);
-      
-      const currentQuery = { ...route.query };
-      delete currentQuery.song;
-      router.replace({ query: currentQuery });
-      
-      emit('next');
-      
-      setTimeout(() => {
-        isNavigatingFromWatch = false;
-      }, 1000);
     }
     
+    if (isNavigatingFromNextStep) {
+        console.log('📌 [UploadPNG] ⏳ Navigating from nextStep, skipping auto-navigation');
+        return;
+    }
+    
+    // ✅ ✅ ✅ إذا كان المستخدم في firstSection (Songs)، لا ننتقل تلقائياً
+    if (currentView.value === 'firstSection') {
+        console.log('📌 [UploadPNG] 📍 User is in firstSection, skipping auto-navigation');
+        return;
+    }
+    
+    // ✅ ✅ ✅ التحقق من وجود forceView في الـ URL
+    if (route.query.forceView === 'firstSection') {
+        console.log('📌 [UploadPNG] 📍 forceView=firstSection in URL, skipping auto-navigation');
+        return;
+    }
+    
+    // ✅ ✅ ✅ إذا كان هناك forceView في query نمنع التوجيه التلقائي
+    if (route.query.forceView) {
+        console.log('📌 [UploadPNG] 📍 forceView in URL, skipping auto-navigation');
+        return;
+    }
+    
+    const hasSongInUrl = !!route.query.song || !!route.params.songUuid;
+    if (hasSongInUrl) {
+        console.log('📌 [UploadPNG] 📍 songUuid in URL, skipping auto-navigation');
+        return;
+    }
+    
+    // ✅ أُزيل الانتقال التلقائي من Songs إلى Shops. كان يسحب المستخدم خارج Songs
+    //    بمجرّد اكتمال الأغاني ووجود متاجر محفوظة. الدخول إلى Shops صار بنقر
+    //    «Weiter zu Shops» (FirstSection → next → nextStep) أو من القائمة الجانبية،
+    //    وكلاهما مسار مستقل عن هذا المراقب.
+
+    
     if (!isSongsComplete && isShopsComplete && storeCurrentStep === 4 && !isNavigatingFromWatch && !isManualNavigation && !isNavigatingFromNextStep) {
-      const currentPath = route.path;
-      if (currentPath.includes('/edit') && !currentPath.includes('/songs/')) {
-        console.log('📌 [UploadPNG] ⚠️ Songs incomplete but Shops exist → moving back to Songs (step 3)');
-        
-        isNavigatingFromWatch = true;
-        
-        currentStep.value = 3;
-        releaseStore.setCurrentStep(3);
-        
-        const currentQuery = { ...route.query };
-        delete currentQuery.song;
-        router.replace({ query: currentQuery });
-        
-        if (releaseStore.currentReleaseId) {
-          await fetchRelease();
+        const currentPath = route.path;
+        if (currentPath.includes('/edit') && !currentPath.includes('/songs/')) {
+            console.log('📌 [UploadPNG] ⚠️ Songs incomplete but Shops exist → moving back to Songs (step 3)');
+            
+            isNavigatingFromWatch = true;
+            
+            currentStep.value = 3;
+            releaseStore.setCurrentStep(3);
+            
+            const currentQuery = { ...route.query };
+            delete currentQuery.song;
+            delete currentQuery.forceView;
+            router.replace({ query: currentQuery });
+            
+            if (releaseStore.currentReleaseId) {
+                await fetchRelease();
+            }
+            
+            setTimeout(() => {
+                isNavigatingFromWatch = false;
+            }, 1000);
+        } else {
+            console.log('📌 [UploadPNG] ⚠️ Songs incomplete but user manually navigated to Shops, keeping current step');
         }
-        
-        setTimeout(() => {
-          isNavigatingFromWatch = false;
-        }, 1000);
-      } else {
-        console.log('📌 [UploadPNG] ⚠️ Songs incomplete but user manually navigated to Shops, keeping current step');
-      }
     }
   },
   { immediate: true, deep: true }
 );
-
 // ========== handleFormDataUpdateFromChild ==========
 const handleFormDataUpdateFromChild = (data) => {
   console.log('📝 [UploadPNG] Form data updated from child:', data);
@@ -2355,6 +2533,9 @@ onMounted(async () => {
   logUploadState('mounted');
   
   document.addEventListener('keydown', handleVideoKeydown);
+  
+  // ✅ التحقق من وجود releases وإظهار/إخفاء الـ Popup
+  await checkReleasesAndShowPopup();
   
   if (route.query.showTypeSelection === 'true') {
     console.log('📌 showTypeSelection=true في onMounted، عرض كروت الاختيار');
@@ -2429,6 +2610,64 @@ onMounted(async () => {
     }, 5000);
   });
   
+  // ✅ إضافة مستمع لمنع التوجيه التلقائي
+  window.addEventListener('prevent-auto-navigation', (event) => {
+    const duration = event.detail?.duration || 5000;
+    isPreventingAutoNavigation = true;
+    console.log('🔒 [UploadPNG] Auto-navigation prevented for', duration, 'ms');
+    
+    if (manualNavigationTimeout) {
+      clearTimeout(manualNavigationTimeout);
+    }
+    
+    manualNavigationTimeout = setTimeout(() => {
+      isPreventingAutoNavigation = false;
+      console.log('🔓 [UploadPNG] Auto-navigation re-enabled');
+      manualNavigationTimeout = null;
+    }, duration);
+  });
+  
+  // ✅ إضافة مستمع للانتقال إلى FirstSection
+  window.addEventListener('navigate-to-first-section', (event) => {
+    console.log('📢 [UploadPNG] استقبال حدث navigate-to-first-section');
+    
+    if (event?.detail?.force) {
+        console.log('🔄 [UploadPNG] الانتقال إلى FirstSection (force)');
+        
+        // ✅ تعيين currentView إلى firstSection
+        setCurrentView('firstSection');
+        
+        // ✅ تحديث الـ URL
+        const currentReleaseId = releaseStore.currentReleaseId || props.releaseUuid;
+        if (currentReleaseId) {
+            const currentQuery = { ...route.query };
+            currentQuery.forceView = 'firstSection';
+            router.replace({
+                path: `/releases/${currentReleaseId}/edit`,
+                query: currentQuery
+            }).catch(() => {});
+        }
+    }
+  });
+  
+  // ✅ إضافة مستمع لتحديث الخطوة
+  window.addEventListener('step-updated', (event) => {
+    const { step } = event.detail;
+    if (step && step >= 1 && step <= 5) {
+        console.log('📌 [UploadPNG] استقبال حدث step-updated, الانتقال إلى الخطوة:', step);
+        currentStep.value = step;
+        releaseStore.setCurrentStep(step);
+        
+        const currentReleaseId = releaseStore.currentReleaseId || props.releaseUuid;
+        if (currentReleaseId) {
+            router.replace({
+                path: `/releases/${currentReleaseId}/edit`,
+                query: { step: step }
+            }).catch(() => {});
+        }
+    }
+  });
+  
   if (route.query.step) {
     const stepFromQuery = parseInt(route.query.step);
     if (stepFromQuery >= 1 && stepFromQuery <= 5) {
@@ -2473,11 +2712,6 @@ onMounted(async () => {
     document.body.style.overflow = 'hidden';
     return;
   }
-  
-  setTimeout(() => {
-    showPupUpStart.value = true;
-    console.log('🎉 تم فتح PupUpStart');
-  }, 500);
   
   if (!route.query.step && releaseStore.currentStep > 1 && !route.query.skip) {
     currentStep.value = releaseStore.currentStep;
@@ -2599,6 +2833,9 @@ onBeforeUnmount(() => {
   
   window.removeEventListener('manual-navigation', () => {});
   window.removeEventListener('force-full-height', () => {});
+  window.removeEventListener('prevent-auto-navigation', () => {});
+  window.removeEventListener('navigate-to-first-section', () => {});
+  window.removeEventListener('step-updated', () => {});
 });
 </script>
 

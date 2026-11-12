@@ -46,6 +46,8 @@
 <script setup>
 import { ref, computed, watch, onMounted, nextTick, reactive, onUnmounted } from 'vue';
 import { useReleaseStore } from '@/stores/release';
+import { computeTabCompletion, getFirstIncompleteTab, TAB_ORDER } from '@/utils/songCompletion';
+import { resolveSongTab } from '@/utils/corrections';
 import { debounce } from '@/utils/debounce';
 
 // استيراد المكونات الفرعية
@@ -100,7 +102,7 @@ const tabCompletion = reactive({
   infos: false,
   urheber: false,
   mitwirkende: false,
-  deals: true,
+  deals: false,
   'pre-release': false
 });
 
@@ -112,6 +114,8 @@ const isUpdatingFromChild = ref(false);
 const isUpdatingFromParent = ref(false);
 let lastSavedData = null;
 let lastTabCompletionState = '';
+
+const visitedTabs = reactive({ infos: false, urheber: false, mitwirkende: false, deals: false, 'pre-release': false });
 
 // ========== حساب مؤشر التبويب الحالي ==========
 const activeTabIndex = computed(() => {
@@ -141,50 +145,28 @@ const isNextTabEnabled = computed(() => {
 });
 
 // ========== تحليل البيانات وتحديد التاب النشط ==========
+// ✅ يُرجِع أول تبويب غير مكتمل حسب المصدر المشترك @/utils/songCompletion — نفس المنطق
+//    الذي يستخدمه FirstSection.isTrackComplete و tabs.vue، فلا يفتح على تبويب لاحق
+//    بينما تبويب سابق غير مكتمل، ويحترم تخطّي حقول النصوص عند نوع instrumental.
 const analyzeDataAndGetActiveTab = (song) => {
   if (!song || !song.uuid) return 'infos';
-  
-  // ✅ التحقق من اكتمال Infos
-  const infosComplete = 
-    song.title && 
-    song.title !== 'Song Titel' &&
-    song.title.trim() !== '' &&
-    song.explicit_lyrics &&
-    song.title_language &&
-    song.lyrics_language;
-  
-  if (!infosComplete) {
-    return 'infos';
+
+  // ✏️ تبويب التصحيح أولى من كلّ ما بعده: أغنية في وضع correction تكون مكتملة،
+  //    فـ getFirstIncompleteTab يعيد آخر تبويب (pre-release) بدل التبويب المطلوب.
+  const correctionTab = resolveSongTab(releaseStore.correctionFields?.songs?.[song.uuid]);
+  if (correctionTab) {
+    console.log('✏️ [Infos1] تبويب التصحيح:', song.uuid, '->', correctionTab);
+    return correctionTab;
   }
-  
-  // ✅ التحقق من اكتمال Urheber
-  const urheberComplete = 
-    (song.authors?.composer && song.authors.composer.length > 0 && song.authors.composer.some(v => v?.trim())) ||
-    (song.authors?.lyricist && song.authors.lyricist.length > 0 && song.authors.lyricist.some(v => v?.trim()));
-  
-  if (!urheberComplete) {
-    return 'urheber';
+
+  // ✅ استعادة آخر تبويب فتحه المستخدم لهذه الأغنية عند العودة إلى تفاصيلها (المتطلب 103)
+  const savedTab = releaseStore.lastSongTabs?.[song.uuid];
+  if (savedTab && TAB_ORDER.includes(savedTab)) {
+    console.log('📌 [Infos1] استعادة آخر تبويب للأغنية:', song.uuid, '->', savedTab);
+    return savedTab;
   }
-  
-  // ✅ التحقق من اكتمال Mitwirkende
-  const mitwirkendeComplete = 
-    (song.contributors?.artist && song.contributors.artist.length > 0 && song.contributors.artist.some(v => v?.name?.trim())) ||
-    (song.contributors?.producer && song.contributors.producer.length > 0 && song.contributors.producer.some(v => v?.name?.trim()));
-  
-  if (!mitwirkendeComplete) {
-    return 'mitwirkende';
-  }
-  
-  // ✅ Pre-Release
-  const isPreReleaseActive = song.is_pre_release_active === true;
-  const isFullReleaseActive = song.is_full_release_active === true;
-  const hasPreReleaseData = song.pre_release_image || song.release_date;
-  
-  if (isPreReleaseActive || isFullReleaseActive || hasPreReleaseData) {
-    return 'pre-release';
-  }
-  
-  return 'pre-release';
+
+  return getFirstIncompleteTab(song);
 };
 
 // ========== ✅ معالج تحديث الاكتمال من الطفل ==========
@@ -197,9 +179,10 @@ const handleChildTabCompletion = (completion) => {
     
     Object.keys(completion).forEach(key => {
       const value = completion[key];
-      if (key === 'deals') {
-        tabCompletion[key] = true;
-      } else if (value !== undefined && value !== null) {
+      if (value !== undefined && value !== null) {
+        if (visitedTabs[key] !== undefined && !visitedTabs[key]) {
+          return;
+        }
         tabCompletion[key] = value === true ? true : false;
       }
     });
@@ -220,21 +203,17 @@ const updateTabCompletion = debounce(() => {
   console.log('📌 [Infos1] updateTabCompletion called');
   console.log('📌 [Infos1] Current tabCompletion before update:', { ...tabCompletion });
   
-  // ✅ دائماً نجعل deals = true
-  tabCompletion.deals = true;
-  
   // ✅ نسخ القيم الحالية كنسخة احتياطية
   const currentValues = { ...tabCompletion };
   
   // ✅ 1. استخدام tabCompletion من المكون الفرعي (أولوية قصوى)
-  if (tabContentRef.value && tabContentRef.value.tabCompletion) {
+  if (tabContentRef.value && typeof tabContentRef.value.tabCompletion === 'object') {
     const childTabCompletion = tabContentRef.value.tabCompletion;
     if (typeof childTabCompletion === 'object') {
       // ✅ دمج القيم: نأخذ من الطفل ما هو موجود، وما ليس موجوداً نحتفظ به من القيم الحالية
       Object.keys(currentValues).forEach(key => {
-        if (key === 'deals') {
-          tabCompletion[key] = true;
-        } else if (childTabCompletion[key] !== undefined && childTabCompletion[key] !== null) {
+        if (childTabCompletion[key] !== undefined && childTabCompletion[key] !== null) {
+          if (visitedTabs[key] !== undefined && !visitedTabs[key]) return;
           tabCompletion[key] = childTabCompletion[key] === true ? true : false;
         }
       });
@@ -255,9 +234,8 @@ const updateTabCompletion = debounce(() => {
   if (storeCompletion && typeof storeCompletion === 'object') {
     // ✅ دمج القيم: نأخذ من الـ Store ما هو موجود، وما ليس موجوداً نحتفظ به من القيم الحالية
     Object.keys(currentValues).forEach(key => {
-      if (key === 'deals') {
-        tabCompletion[key] = true;
-      } else if (storeCompletion[key] !== undefined && storeCompletion[key] !== null) {
+      if (storeCompletion[key] !== undefined && storeCompletion[key] !== null) {
+        if (visitedTabs[key] !== undefined && !visitedTabs[key]) return;
         tabCompletion[key] = storeCompletion[key] === true ? true : false;
       }
     });
@@ -276,19 +254,13 @@ const updateTabCompletion = debounce(() => {
   if (tabContentRef.value && typeof tabContentRef.value.isTabComplete === 'function') {
     const allTabs = ['infos', 'urheber', 'mitwirkende', 'deals', 'pre-release'];
     allTabs.forEach(tabId => {
-      if (tabId === 'deals') {
-        tabCompletion.deals = true;
-      } else {
-        const isComplete = tabContentRef.value.isTabComplete(tabId);
-        if (isComplete !== undefined) {
-          tabCompletion[tabId] = isComplete === true ? true : false;
-        }
+      if (visitedTabs[tabId] !== undefined && !visitedTabs[tabId]) return;
+      const isComplete = tabContentRef.value.isTabComplete(tabId);
+      if (isComplete !== undefined) {
+        tabCompletion[tabId] = isComplete === true ? true : false;
       }
     });
   }
-  
-  // ✅ تأكد من أن deals دائماً true
-  tabCompletion.deals = true;
   
   console.log('📌 [Infos1] Final tabCompletion:', { ...tabCompletion });
   
@@ -298,6 +270,30 @@ const updateTabCompletion = debounce(() => {
     emit('update-tab-completion', { ...tabCompletion });
   }
 }, 500);
+
+// ========== إرسال جميع التابات ==========
+const emitFullTabCompletion = () => {
+  // ✅ التحقق من وجود currentSong
+  if (!props.currentSong || !props.currentSong.uuid) {
+    console.warn('⚠️ [Infos1] No currentSong available for emitFullTabCompletion');
+    return;
+  }
+
+  // ✅ نحسب الاكتمال من بيانات الأغنية مباشرةً (المصدر الحقيقي) لكل التبويبات،
+  //    بدون قيد "الزيارة" — حتى تظهر كل علامات التبويبات فور فتح الأغنية دون
+  //    الحاجة لزيارة كل تبويب على حدة (كان هذا سبب ظهور علامات خاطئة عند الدخول).
+  const source = computeTabCompletion(props.currentSong);
+  if (source) {
+    Object.keys(tabCompletion).forEach(key => {
+      if (source[key] !== undefined && source[key] !== null) {
+        tabCompletion[key] = source[key] === true ? true : false;
+      }
+    });
+  }
+
+  console.log('📌 [Infos1] Emitting full tabCompletion:', { ...tabCompletion });
+  emit('update-tab-completion', { ...tabCompletion });
+};
 
 // ========== معالجة تحديثات النموذج ==========
 const handleFormDataUpdate = (updates) => {
@@ -309,24 +305,37 @@ const handleFormDataUpdate = (updates) => {
   if (updates.tab && updates.data) {
     // ✅ تحديث حالة الاكتمال
     if (updates.data.isComplete !== undefined) {
-      if (updates.tab === 'deals') {
-        tabCompletion[updates.tab] = true;
+      const tab = updates.tab;
+      if (visitedTabs[tab] !== undefined && !visitedTabs[tab]) {
+        // skip — tab not visited yet
       } else {
-        tabCompletion[updates.tab] = updates.data.isComplete === true ? true : false;
+        tabCompletion[tab] = updates.data.isComplete === true ? true : false;
+        console.log(`📌 [Infos1] Tab ${tab} completion updated to:`, tabCompletion[tab]);
+
+        // ✅ نُثبّت علم pre_release_step_completed على الخادم فور تغيّر اكتمال Pre-Release
+        //   (خاصة إلى false عند تفعيل الزر بلا غلاف/تاريخ). كان المسار الوحيد لحفظ العلم
+        //   يعتمد على لقطة formData ولا يحفظ false أبداً، فتبقى الأغنية مكتملة خطأً في
+        //   FirstSection. هنا نعتمد نتيجة PreReleaseContent.isTabComplete مباشرةً (مصدر
+        //   الحقيقة) ونحفظها فقط عند اختلافها عن المحفوظ لتفادي حفظ زائد.
+        if (tab === 'pre-release' && songData.value?.uuid) {
+          // ✅ مزلاج: نثبّت true فقط، ولا نُرسل false أبداً لئلّا يُلغي تقدّماً محفوظاً.
+          const complete = updates.data.isComplete === true;
+          if (complete && songData.value.pre_release_step_completed !== true) {
+            songData.value.pre_release_step_completed = true;
+            emit('update-tab-completion', { ...tabCompletion });
+            emit('save-song', { uuid: songData.value.uuid, pre_release_step_completed: true });
+            console.log('💾 [Infos1] Persisted pre_release_step_completed = true');
+          }
+        }
       }
-      console.log(`📌 [Infos1] Tab ${updates.tab} completion updated to:`, tabCompletion[updates.tab]);
     }
-    
+
     // ✅ ✅ ✅ تحديث جميع التابات من البيانات المستلمة
     if (updates.data && typeof updates.data === 'object') {
-      // ✅ تحديث tabCompletion من البيانات
       Object.keys(updates.data).forEach(key => {
-        if (key === 'deals') {
-          tabCompletion[key] = true;
-        } else if (key === 'pre-release') {
-          tabCompletion[key] = true;
-        } else if (key !== 'isComplete' && key !== 'tab') {
+        if (key !== 'isComplete' && key !== 'tab') {
           if (typeof updates.data[key] === 'boolean') {
+            if (visitedTabs[key] !== undefined && !visitedTabs[key]) return;
             tabCompletion[key] = updates.data[key];
           }
         }
@@ -474,8 +483,7 @@ const initFormDataFromSong = (song) => {
       titleValid: isValidTitle,
       subtitle: subtitleValue,
       subtitleValid: !!subtitleValue,
-      song_type: song.song_type || '',
-      song_typ: song.song_typ || '',
+      song_type: song.song_type || song.song_typ || '',
       explicit_lyrics: song.explicit_lyrics || '',
       isrc: song.isrc || '',
       title_language: song.title_language || '',
@@ -577,102 +585,46 @@ const scheduleAutoSave = (data) => {
     emit('save-song', data);
   }, 2000);
 };
-// ========== إرسال جميع التابات ==========
-const emitFullTabCompletion = () => {
-  // ✅ تأكد من أن deals دائماً true
-  tabCompletion.deals = true;
-  
-  // ✅ استخدام القيم من الـ Store إذا كانت موجودة
-  const storeCompletion = releaseStore.tabCompletion;
-  if (storeCompletion) {
-    Object.keys(storeCompletion).forEach(key => {
-      if (key === 'deals') {
-        tabCompletion[key] = true;
-      } else if (storeCompletion[key] !== undefined && storeCompletion[key] !== null) {
-        tabCompletion[key] = storeCompletion[key] === true ? true : false;
-      }
-    });
-  }
-  
-  console.log('📌 [Infos1] Emitting full tabCompletion:', { ...tabCompletion });
-  emit('update-tab-completion', { ...tabCompletion });
-};
+// ========== حساب اكتمال جميع التبويبات من بيانات الأغنية (تحقق صارم) ==========
+// ✅ نفس منطق FirstSection.isTrackComplete و updateTabCompletionFromSong،
+//    حتى تعكس علامات التبويبات الحالة الحقيقية للأغنية فور فتحها دون الحاجة لزيارة كل تبويب.
+
+
+
 // ========== تجميع جميع البيانات ==========
+// ✅ compileAllData لم يعد يُرسل بيانات الحقول إطلاقاً.
+//
+//    لماذا: formData في Infos1 مجرّد "مرآة" تُملأ مرّة واحدة عبر initFormDataFromSong
+//    عند فتح أغنية مختلفة، ولا يكتب فيها أحد بعد ذلك — فمكوّنات التبويبات تبعث
+//    update:form-data بقيم منطقية (isComplete) لا بقيم الحقول. لذلك كانت المرآة
+//    تتجمّد على لقطة قديمة، ويُعيد كل تبديل تبويب إرسالها إلى الخادم فيدهس ما حفظه
+//    المكوّن للتوّ: عاد Textdichter بعد تفريغه، وعاد song_type من medley إلى
+//    original_instrumental، وهكذا.
+//
+//    كل تبويب يملك حفظه الخاص (autoSave / debouncedSendUpdate) مع تفريغ للطابور عند
+//    مغادرته (onDeactivated)، فلا حاجة إلى "شبكة أمان" تُعيد كتابة لقطة قديمة.
+//    يبقى هنا فقط ما تملكه Infos1 فعلاً: هوية الأغنية وأعلام اكتمال الخطوات.
 const compileAllData = () => {
-  const allData = { uuid: songData.value.uuid };
-  const songNumber = releaseStore.currentSongNumber || '01';
-  const titleValue = (formData.infos.title || '').trim();
-  
-  let finalTitle = titleValue;
-  if (titleValue && !/^\d{2}\s/.test(titleValue)) {
-    finalTitle = `${songNumber} ${titleValue}`;
-  }
-  
-  Object.assign(allData, {
-    title: finalTitle,
-    subtitle: (formData.infos.subtitle || '').trim(),
-    song_type: formData.infos.song_type || 'SONG',
-    explicit_lyrics: formData.infos.explicit_lyrics || null,
-    isrc: (formData.infos.isrc || '').trim().toUpperCase(),
-    title_language: formData.infos.title_language || null,
-    lyrics_language: formData.infos.lyrics_language || null,
-    song_lyrics: (formData.infos.song_lyrics || '').trim(),
-    preview_enabled: formData.infos.preview_enabled || false,
-  });
-  
-  // Authors
-  const komponistValues = (formData.urheber.komponist || []).filter(v => v && v.trim()).map(v => v.trim());
-  const textdichterValues = (formData.urheber.textdichter || []).filter(v => v && v.trim()).map(v => v.trim());
-  const verlagValue = (formData.urheber.verlag || '').trim();
-  const cLineValue = (formData.urheber.c_line || '').trim();
-  
-  allData.authors = {};
-  if (komponistValues.length > 0) allData.authors.composer = komponistValues;
-  if (textdichterValues.length > 0) allData.authors.lyricist = textdichterValues;
-  if (verlagValue) allData.authors.verlog = [verlagValue];
-  if (cLineValue) allData.authors.c_line = [cLineValue];
-  if (Object.keys(allData.authors).length === 0) delete allData.authors;
-  
-  // Contributors
-  const artistValues = (formData.mitwirkende.artist || []).filter(v => v && v.trim()).map(v => ({ name: v.trim() }));
-  const featureValues = formData.mitwirkende.isFeatureActive ? 
-    (formData.mitwirkende.feature || []).filter(v => v && v.trim()).map(v => ({ name: v.trim() })) : [];
-  const producerValues = (formData.mitwirkende.produzent || []).filter(v => v && v.trim()).map(v => ({ name: v.trim() }));
-  
-  allData.contributors = {};
-  if (artistValues.length > 0) allData.contributors.artist = artistValues;
-  if (featureValues.length > 0) allData.contributors.feature = featureValues;
-  if (producerValues.length > 0) allData.contributors.producer = producerValues;
-  if (formData.mitwirkende.p_line) {
-    allData.contributors.p_line = [{ name: formData.mitwirkende.p_line.trim() }];
-  }
-  if (formData.mitwirkende.isWeitereActive && Array.isArray(formData.mitwirkende.weitere_mitwirkende)) {
-    const otherValues = formData.mitwirkende.weitere_mitwirkende
-      .filter(c => c.role && c.role.trim() && c.name && c.name.trim())
-      .map(c => ({ role: c.role.trim(), name: c.name.trim(), percentage: c.percentage || 0 }));
-    if (otherValues.length > 0) allData.contributors.other_contributors = otherValues;
-  }
-  if (formData.mitwirkende.production_year) {
-    allData.production_year = formData.mitwirkende.production_year;
-  }
-  if (Object.keys(allData.contributors).length === 0) delete allData.contributors;
-  
-  // Deals
-  allData.is_splitting_active = formData.deals.isSplittingActive || false;
-  allData.shares = formData.deals.shares || [];
-  
-  // Pre-Release
-  allData.is_pre_release_active = formData['pre-release'].isPreReleaseActive || false;
-  allData.is_full_release_active = formData['pre-release'].isFullReleaseActive || false;
-  allData.pre_release_image = formData['pre-release'].uploadedImage || null;
-  allData.release_date = formData['pre-release'].selectedReleaseDate || null;
-  
-  Object.keys(allData).forEach(key => {
-    if (key !== 'uuid' && (allData[key] === '' || allData[key] === undefined || allData[key] === null)) {
-      delete allData[key];
-    }
-  });
-  
+  const allData = {
+    uuid: songData.value.uuid,
+    // التبويب المصدر — يستخدمه Upload2Component لفلترة الحقول بدل تخمينه من المفاتيح.
+    __tab: activeTabLocal.value
+  };
+
+  // ✅ Deals: لا حقول فيه → يكتمل بمجرّد فتح التبويب.
+  // ✅ مزلاج: لا يُرسَل إلا true؛ وغياب المفتاح يعني «لا تُغيّر» فتبقى قيمة الخادم.
+  const dealsDone =
+    visitedTabs.deals === true || songData.value?.deals_step_completed === true;
+  if (dealsDone) allData.deals_step_completed = true;
+
+  // ✅ Pre-Release: نعتمد النتيجة الموثوقة التي حسبها PreReleaseContent (المثبَّتة في
+  //    tabCompletion عبر handleFormDataUpdate)؛ وإن لم يُزَر التبويب نُبقي العلم المحفوظ.
+  // ✅ مزلاج أيضاً: متى صار true على الخادم يبقى true، ولا نُرسل false إطلاقاً.
+  const preReleaseDone =
+    (visitedTabs['pre-release'] === true && tabCompletion['pre-release'] === true)
+    || songData.value?.pre_release_step_completed === true;
+  if (preReleaseDone) allData.pre_release_step_completed = true;
+
   return allData;
 };
 
@@ -709,18 +661,49 @@ watch(() => props.activeTab, async (newTab, oldTab) => {
   }, 200);
 }, { immediate: true });
 
+watch(activeTabLocal, (tab) => {
+  if (tab && visitedTabs[tab] !== undefined) {
+    visitedTabs[tab] = true;
+  }
+
+  // ✅ Deals has no fields → opening the tab completes the step. Persist it right
+  //    away (deals_step_completed: true) and show its checkmark immediately,
+  //    instead of waiting for the user to leave the tab.
+  if (tab === 'deals' && songData.value?.uuid && songData.value?.deals_step_completed !== true) {
+    songData.value.deals_step_completed = true;
+    tabCompletion.deals = true;
+    emit('update-tab-completion', { ...tabCompletion });
+    emit('save-song', { uuid: songData.value.uuid, deals_step_completed: true });
+  }
+
+  // ملاحظة: أزلنا "فرض" اكتمال Pre-Release عند دخول التبويب. كان يعتمد على لقطة
+  //   formData التي قد تكون قديمة (isPreReleaseActive=false) فيحفظ pre_release_step_completed
+  //   = true خطأً حتى عند تفعيل Pre-Release بلا غلاف/تاريخ. المصدر الوحيد الموثوق الآن هو
+  //   PreReleaseContent.isTabComplete الذي يُبثّ عبر update:form-data ويُثبَّت في
+  //   handleFormDataUpdate (يحفظ true و false بشكل صحيح).
+}, { immediate: true });
+
 watch(() => props.currentSong, (newSong, oldSong) => {
   if (newSong?.uuid === oldSong?.uuid && oldSong) {
+    // Same song, but its fields were updated (e.g. after a save merged the server
+    // response). Keep the local snapshot `songData` fresh so any tab component that
+    // re-initialises from it sees ALL current fields — not just the ones that
+    // existed when the song was first opened (title + song_file). Merge in place so
+    // the prop reference is stable and we don't reset the live tab's inputs.
+    if (newSong && songData.value) {
+      Object.assign(songData.value, JSON.parse(JSON.stringify(newSong)));
+    }
     return;
   }
-  
+
   if (isUpdatingFromParent.value) {
     return;
   }
   
   if (newSong?.uuid) {
     isUpdatingFromParent.value = true;
-    
+    Object.keys(visitedTabs).forEach(k => { visitedTabs[k] = false; });
+
     songData.value = JSON.parse(JSON.stringify(newSong));
     
     const newFormData = initFormDataFromSong(newSong);
@@ -737,9 +720,20 @@ watch(() => props.currentSong, (newSong, oldSong) => {
       activeTabLocal.value = activeTabFromData;
       emit('update-tab', activeTabFromData);
     }
-    
+
+    // ✅ بعد تصفير visitedTabs أعلاه، نعلّم التبويب النشط (المعروض للمستخدم) كـ "مُزار".
+    //    بدون هذا، عندما لا يتغيّر التبويب النشط عند فتح الأغنية، يبقى visitedTabs.infos=false
+    //    فتتجاهل معالجات الاكتمال تحديثات infos حتى ينتقل المستخدم لتبويب آخر ويعود.
+    if (activeTabLocal.value && visitedTabs[activeTabLocal.value] !== undefined) {
+      visitedTabs[activeTabLocal.value] = true;
+    }
+
     emit('enter-sub-layout');
-    
+
+    // ✅ حساب اكتمال جميع التبويبات من بيانات الأغنية وإرسالها فوراً
+    //    حتى تظهر علامات الصح الصحيحة عند فتح الأغنية (وليس فقط للتبويب النشط).
+    emitFullTabCompletion();
+
     setTimeout(() => {
       isUpdatingFromParent.value = false;
     }, 500);
@@ -794,10 +788,22 @@ watch(() => formData['pre-release'], () => {
 }, { deep: true });
 
 watch(() => tabContentRef.value, (newRef) => {
+  // ✅ التحقق من وجود newRef قبل محاولة الوصول إلى isTabComplete
   if (newRef && typeof newRef.isTabComplete === 'function') {
     setTimeout(() => {
       updateTabCompletion();
     }, 300);
+  } else {
+    // ✅ إذا لم يكن هناك ref، استخدم البيانات من الـ Store
+    const storeCompletion = releaseStore.tabCompletion;
+    if (storeCompletion) {
+      Object.keys(storeCompletion).forEach(key => {
+        if (storeCompletion[key] !== undefined && storeCompletion[key] !== null) {
+          if (visitedTabs[key] !== undefined && !visitedTabs[key]) return;
+          tabCompletion[key] = storeCompletion[key] === true ? true : false;
+        }
+      });
+    }
   }
 }, { immediate: true });
 
@@ -807,9 +813,10 @@ watch(() => activeTabLocal.value, () => {
   }, 300);
 });
 
-// ========== دورة الحياة ==========
 onMounted(async () => {
   console.log('🚀 Infos1 تم التحميل');
+  
+  // ✅ استخدام nextTick للتأكد من اكتمال التصيير
   await nextTick();
   
   // ✅ إذا كان هناك currentSong، تحليل البيانات وتحديد التاب
@@ -826,17 +833,19 @@ onMounted(async () => {
   // ✅ استخدام القيم من الـ Store مباشرة
   const storeCompletion = releaseStore.tabCompletion;
   if (storeCompletion) {
+    // ✅ نبدأ من قيم المخزّن كما هي. كان هنا فرض false لكل تبويب غير مُزار في هذه الجلسة،
+    //    فيُصفّر حالة صحيحة ثم يُبثّ التصفير إلى المخزّن عبر مراقب InfosContent الفوري قبل
+    //    أن يُصحّحه emitFullTabCompletion بعد ~300ms → وميض علامات الاكتمال. المصدر الموثوق
+    //    هو emitFullTabCompletion (يحسب من بيانات الأغنية دون قيد الزيارة).
     Object.keys(storeCompletion).forEach(key => {
-      if (key === 'deals') {
-        tabCompletion[key] = true;
-      } else if (storeCompletion[key] !== undefined && storeCompletion[key] !== null) {
+      if (storeCompletion[key] !== undefined && storeCompletion[key] !== null) {
         tabCompletion[key] = storeCompletion[key] === true ? true : false;
       }
     });
     console.log('📌 [Infos1] Mounted: Using Store tabCompletion:', { ...tabCompletion });
   }
   
-  // ✅ إرسال جميع التابات
+  // ✅ إرسال جميع التابات مع تأخير مناسب
   await nextTick();
   setTimeout(() => {
     emitFullTabCompletion();
@@ -847,7 +856,6 @@ onMounted(async () => {
   
   console.log('✅ [Infos1] Mounted - Full tab completion sent');
 });
-
 onUnmounted(() => {
   if (autoSaveTimer.value) {
     clearTimeout(autoSaveTimer.value);

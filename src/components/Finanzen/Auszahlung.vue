@@ -40,32 +40,47 @@
                         </div>
 
                         <div class="Form-row1">
-                            <div class="form1" v-for="(field, index) in formFields" :key="index">
+                            <!-- حقل كلمة المرور في <form> مستقلّ لا يحوي أيّ حقل نصّ آخر:
+                                 مدير كلمات المرور يملأ اسم المستخدم المرتبط بكلمة المرور داخل
+                                 النموذج نفسه، فحين لا يجد حقلاً كهذا يملأ كلمة المرور وحدها
+                                 ولا يمسّ حقلَي البريد. -->
+                            <component :is="field.type === 'password' ? 'form' : 'div'"
+                                class="form1" v-for="(field, index) in formFields" :key="index"
+                                @submit.prevent>
                                 <div class="title" v-html="field.label"></div>
                                 <div class="input-container">
                                     <input
-                                        :type="field.type === 'password' && showPassword && index === 2 ? 'text' : field.type"
+                                        :type="field.type === 'password' && showPassword ? 'text' : field.type"
                                         v-model="field.value" class="formField"
-                                        :placeholder="field.type === 'password' ? '' : field.placeholder"
-                                        @input="handleInputField(index)" @blur="handleBlurField(index)"
-                                        style="caret-color: transparent;" />
-                                    <div v-if="field.type === 'password' && !showPassword && !field.value"
-                                        class="password-placeholder">
-                                        <img v-for="n in 8" :key="n" :src="Dot" alt="Placeholder Dot"
-                                            class="dot-icon" />
+                                        :autocomplete="field.type === 'password' ? 'current-password' : 'off'"
+                                        :placeholder="field.placeholder"
+                                        @input="handleInputField(index); syncPwSelection($event)"
+                                        @blur="handleBlurField(index); clearPwSelection()"
+                                        @select="syncPwSelection" @keyup="syncPwSelection"
+                                        @mouseup="syncPwSelection" @focus="syncPwSelection" />
+                                    <!-- قناع كلمة المرور بقياسات التصميم (دائرة 8×8 وفجوة 8px) مستقلّة عن حجم الخط.
+                                         الحقل الأصلي تحته يستقبل الإدخال ونصّه شفّاف، فلا تُرسم النقاط مرّتين. -->
+                                    <div v-if="field.type === 'password' && !showPassword" class="pw-mask" aria-hidden="true">
+                                        <div class="pw-track">
+                                            <template v-if="field.value">
+                                                <span v-for="n in field.value.length" :key="'f' + n"
+                                                    class="pw-dot is-filled"
+                                                    :class="{ 'is-selected': isPwDotSelected(n) }"></span>
+                                            </template>
+                                            <template v-else>
+                                                <span v-for="n in 8" :key="'p' + n" class="pw-dot is-placeholder"></span>
+                                            </template>
+                                            <span v-show="!hasPwSelection" class="pw-caret"></span>
+                                        </div>
                                     </div>
-                                    <div v-if="field.type === 'password' && !showPassword && field.value"
-                                        class="password-dots">
-                                        <img v-for="n in dotCount" :key="n" :src="Dot" alt="Input Dot"
-                                            class="dot-icon active" />
-                                    </div>
-                                    <img v-if="field.showIcon && field.type !== 'password'" :src="doneIcon" alt="Done"
+                                    <!-- علامة الصحّ لبريد صالح فعلاً (ومطابق في حقل التأكيد)، لا لأيّ نصّ مكتوب. -->
+                                    <img v-if="field.type !== 'password' && isEmailFieldValid(index)" :src="doneIcon" alt="Done"
                                         class="done-icon" />
                                     <img v-if="field.type === 'password'"
                                         :src="showPassword ? eyeOpenIcon : eyeClosedIcon" alt="Toggle Password"
                                         class="eye-icon" @click="togglePassword" />
                                 </div>
-                            </div>
+                            </component>
                         </div>
                     </div>
 
@@ -89,14 +104,10 @@
                                 </a>
                             </div>
                             <div class="p2">
-                                <div v-if="user">{{ user.billing_first_name }} {{ user.billing_last_name }} || Name</div>
-                                <div v-else> Name</div>
-                                <div v-if="user && user.billing_address">{{ user.billing_address }} || Billing Address</div>
-                                <div v-else> Billing Address</div>
-                                <div v-if="user && user.billing_zip && user.billing_city">{{ user.billing_zip }} {{ user.billing_city }} || ZIP City</div>
-                                <div v-else> ZIP City</div>
-                                <div v-if="user && user.billing_country">{{ user.billing_country }} || Billing Country</div>
-                                <div v-else> Billing Country</div>
+                                <div>{{ billingName || 'Name' }}</div>
+                                <div>{{ billingStreet || 'Straße und Hausnummer' }}</div>
+                                <div>{{ billingCityLine || 'PLZ und Ort' }}</div>
+                                <div>{{ billingCountry || 'Land' }}</div>
                             </div>
                         </div>
 
@@ -124,22 +135,43 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useDataStore } from '@/stores/data';
+import { useWalletStore } from '@/stores/wallet';
+import { readCurrentUser } from '@/utils/currentUser';
 import apiRequest from '@/lib/apiRequest';
 import doneIcon from '@/assets/icons/y.png';
 import eyeOpenIcon from '@/assets/icons/showpw.svg';
 import eyeClosedIcon from '@/assets/icons/eye-open.svg';
-import Dot from '@/assets/icons/pw.svg';
 
 const router = useRouter();
 const dataStore = useDataStore();
 const user = computed(() => dataStore.user);
 
+// ========== Gutschriftadresse (من الملف الشخصي) ==========
+// مفاتيح الـ API الفعلية — billing_address / billing_zip غير موجودين فكان العنوان يظهر فارغاً.
+const joinParts = (...parts) => parts.filter(v => v && String(v).trim() !== '').join(' ');
+
+const countryDisplayName = (c) => {
+  if (!c) return '';
+  const n = String(c).toLowerCase();
+  if (n === 'germany' || n === 'de') return 'Deutschland';
+  if (n === 'austria' || n === 'at') return 'Österreich';
+  if (n === 'switzerland' || n === 'ch') return 'Schweiz';
+  return c;
+};
+
+const billingName     = computed(() => joinParts(user.value?.billing_first_name, user.value?.billing_last_name));
+const billingStreet   = computed(() => joinParts(user.value?.billing_street_name, user.value?.billing_street_number));
+const billingCityLine = computed(() => joinParts(user.value?.billing_postal_code, user.value?.billing_city));
+const billingCountry  = computed(() => countryDisplayName(user.value?.billing_country));
+
 // ========== State ==========
-const balance = ref(0);
-const isLoading = ref(false);
+// الرصيد من مخزن المحفظة — مصدر واحد مشترك مع Guthaben ولوحة القيادة.
+const wallet = useWalletStore();
+const balance = computed(() => wallet.balance);
+const isLoading = computed(() => wallet.isLoading);
 const isSubmitting = ref(false);
 const userIp = ref('...');
 const userUuid = ref(null);
@@ -171,12 +203,42 @@ const formFields = ref([
   },
 ]);
 
+// ========== Email Validation ==========
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const isValidEmail = (value) => EMAIL_PATTERN.test(String(value || '').trim());
+
+// حقل 0: بريد صالح. حقل 1: صالح ومطابق للأول.
+// محسوب من القيم مباشرةً لا من أحداث input، فيتحدّث حقل التأكيد عند تعديل الأول أيضاً.
+const isEmailFieldValid = (index) => {
+  const [email, confirm] = formFields.value;
+  if (index === 0) return isValidEmail(email.value);
+  if (index === 1) return isValidEmail(confirm.value) && confirm.value.trim() === email.value.trim();
+  return false;
+};
+
 // ========== Password ==========
 const showPassword = ref(false);
-const dotCount = computed(() => {
-  const password = formFields.value[2].value;
-  return password.length > 0 ? password.length : 8;
-});
+
+// تحديد نصّ كلمة المرور. الحقل الأصلي نصّه شفّاف، لكنّ المتصفّح يُعيد رسم
+// المحدَّد منه بلونه الخاصّ فتظهر نقاطه الأصلية فوق القناع. لذا نُخفي تحديد
+// المتصفّح بالكامل ونرسمه بأنفسنا على نقاط القناع.
+const pwSelection = ref({ start: 0, end: 0 });
+
+const syncPwSelection = (event) => {
+  const el = event.target;
+  if (el.type !== 'password') return;
+  pwSelection.value = { start: el.selectionStart ?? 0, end: el.selectionEnd ?? 0 };
+};
+
+const clearPwSelection = () => {
+  pwSelection.value = { start: 0, end: 0 };
+};
+
+// n مؤشّر النقطة (يبدأ من 1) → الحرف رقم n-1 داخل مجال التحديد.
+const isPwDotSelected = (n) => n > pwSelection.value.start && n <= pwSelection.value.end;
+
+// لا مؤشّر أثناء وجود تحديد، كما في أيّ حقل نصّ.
+const hasPwSelection = computed(() => pwSelection.value.end > pwSelection.value.start);
 
 // ========== Amount ==========
 const amount = ref(null);
@@ -212,8 +274,7 @@ const isFormValid = computed(() => {
   const isAmountValid = amountValue !== null && amountValue > 0 && amountValue <= balance.value;
   
   return (
-    emailValue !== "" &&
-    confirmValue !== "" &&
+    isValidEmail(emailValue) &&
     emailValue === confirmValue &&
     passwordValue !== "" &&
     isAmountValid &&
@@ -235,53 +296,82 @@ const handleBlur = () => {
   formatDisplayValue();
 };
 
+// العرف الألماني: النقطة فاصل آلاف (نرسمها نحن) والفاصلة للكسور.
+const groupThousands = (digits) =>
+  digits.replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
 const handleInput = (event) => {
   if (balance.value === 0) return;
-  
-  let value = event.target.value;
-  
-  // إزالة كل ما ليس رقم، فاصلة أو نقطة
-  value = value.replace(/[^0-9,.]/g, '');
-  
-  // إذا كان هناك أكثر من فاصلة، نحتفظ فقط بالأولى
-  const commaCount = (value.match(/,/g) || []).length;
-  if (commaCount > 1) {
-    const firstCommaIndex = value.indexOf(',');
-    value = value.substring(0, firstCommaIndex + 1) + 
-            value.substring(firstCommaIndex + 1).replace(/,/g, '');
+
+  const el = event.target;
+  const caret = el.selectionStart ?? el.value.length;
+  let value = el.value;
+
+  if (event.data === '.' || event.data === ',') {
+    // ما يكتبه المستخدم من نقطة أو فاصلة هو الفاصلة العشرية — نقطة لوحة
+    // الأرقام تُكتب '.' فلا تصحّ معاملتها كفاصل آلاف.
+    value = value.slice(0, caret - 1) + ',' + value.slice(caret);
+  } else if (event.inputType === 'insertFromPaste') {
+    // نصّ ملصوق: آخر فاصل يليه رقمان أو أقلّ هو الفاصلة العشرية.
+    const match = value.match(/[.,](\d{0,2})$/);
+    if (match) value = value.slice(0, match.index) + ',' + match[1];
   }
-  
-  // تحديد منزلتين عشريتين فقط بعد الفاصلة
-  const commaIndex = value.indexOf(',');
-  if (commaIndex >= 0) {
-    const afterComma = value.substring(commaIndex + 1);
-    if (afterComma.length > 2) {
-      value = value.substring(0, commaIndex + 3);
+
+  // عدد المحارف ذات المعنى قبل المؤشّر — نعيده إلى موضعه بعد إعادة التنسيق،
+  // وإلا قفز إلى النهاية مع كلّ نقطة آلاف تُضاف.
+  let significantBefore = (value.slice(0, caret).match(/[0-9,]/g) || []).length;
+
+  // النقاط الباقية فواصل آلاف من الرسم السابق: تُحذف ويُعاد بناؤها.
+  const cleaned = value.replace(/\./g, '').replace(/[^0-9,]/g, '');
+  const [intRaw = '', ...rest] = cleaned.split(',');
+  const hasComma = cleaned.includes(',');
+  const decimals = rest.join('').slice(0, 2);
+
+  let formatted = groupThousands(intRaw);
+  if (hasComma) formatted = (formatted || '0') + ',' + decimals;
+
+  displayValue.value = formatted;
+
+  // لا يُسحب أكثر من الرصيد: كان الرقم المكتوب يبقى معروضاً بينما القيمة
+  // المُرسَلة مقصوصة إلى الرصيد — فيرى المستخدم مبلغاً غير الذي سيُسحب.
+  if (updateNumericValue()) {
+    formatDisplayValue();
+    formatted = displayValue.value;
+    significantBefore = Number.MAX_SAFE_INTEGER;
+  }
+
+  nextTick(() => {
+    let pos = 0;
+    let seen = 0;
+    while (pos < formatted.length && seen < significantBefore) {
+      if (/[0-9,]/.test(formatted[pos])) seen += 1;
+      pos += 1;
     }
-  }
-  
-  displayValue.value = value;
-  updateNumericValue();
+    el.setSelectionRange(pos, pos);
+  });
 };
 
+// يُرجع true إن تجاوز المكتوب الرصيد فقُصّ إليه.
 const updateNumericValue = () => {
   if (!displayValue.value) {
     amount.value = null;
-    return;
+    return false;
   }
-  
+
   // تحويل من التنسيق الألماني إلى رقم
   // إزالة النقاط (فاصل الآلاف) واستبدال الفاصلة بنقطة
   let cleanValue = displayValue.value.replace(/\./g, '');
   cleanValue = cleanValue.replace(',', '.');
-  
+
   const val = parseFloat(cleanValue);
-  
+
   if (!isNaN(val) && val >= 0) {
     amount.value = Math.min(val, balance.value);
-  } else {
-    amount.value = null;
+    return val > balance.value;
   }
+
+  amount.value = null;
+  return false;
 };
 
 const formatDisplayValue = () => {
@@ -318,6 +408,7 @@ const handleBlurField = (index) => {
 
 const togglePassword = () => {
   showPassword.value = !showPassword.value;
+  clearPwSelection();
 };
 
 // ========== Reset Form ==========
@@ -329,6 +420,7 @@ const resetForm = () => {
   amount.value = null;
   displayValue.value = '';
   showPassword.value = false;
+  clearPwSelection();
 };
 
 // ========== Get User IP ==========
@@ -344,115 +436,36 @@ const getUserIp = async () => {
 };
 
 // ========== Get User Data ==========
+// المصدر هو ردّ ‎/user‎ في مخزن البيانات فقط. كانت الدالّة تقرأ 'user' من
+// localStorage أوّلاً، وهو مفتاح تكتبه تطبيقات ZOUNDR الأخرى على النطاق نفسه،
+// فكانت بيانات حساب آخر تُرسَل إلى ‎/wallet/balance‎ وإلى طلب السحب.
 const getUserData = () => {
-  try {
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      const parsed = JSON.parse(userData);
-      const userObj = parsed.data || parsed;
-      
-      userUuid.value = userObj.uuid || userObj.id || userObj.user_uuid;
-      userName.value = userObj.name || userObj.username || userObj.user_name || userObj.first_name;
-      userEmail.value = userObj.email || userObj.user_email;
-      
-      if (userUuid.value && userName.value && userEmail.value) {
-        console.log('👤 User data loaded from localStorage');
-        return true;
-      }
-    }
-    
-    const sessionUser = sessionStorage.getItem('user');
-    if (sessionUser) {
-      const parsed = JSON.parse(sessionUser);
-      const userObj = parsed.data || parsed;
-      
-      userUuid.value = userObj.uuid || userObj.id || userObj.user_uuid;
-      userName.value = userObj.name || userObj.username || userObj.user_name || userObj.first_name;
-      userEmail.value = userObj.email || userObj.user_email;
-      
-      if (userUuid.value && userName.value && userEmail.value) {
-        console.log('👤 User data loaded from sessionStorage');
-        return true;
-      }
-    }
-    
-    if (user.value) {
-      const userObj = user.value.data || user.value;
-      
-      userUuid.value = userObj.uuid || userObj.id || userObj.user_uuid;
-      userName.value = userObj.name || userObj.username || userObj.user_name || userObj.first_name;
-      userEmail.value = userObj.email || userObj.user_email;
-      
-      if (userUuid.value && userName.value && userEmail.value) {
-        console.log('👤 User data loaded from store');
-        return true;
-      }
-    }
-    
+  const current = readCurrentUser();
+
+  if (!current) {
+    userUuid.value = null;
+    userName.value = null;
+    userEmail.value = null;
     console.warn('⚠️ No user data found');
     return false;
-  } catch (error) {
-    console.error('❌ Error parsing user data:', error);
-    return false;
   }
+
+  userUuid.value = current.uuid;
+  userName.value = current.name;
+  userEmail.value = current.email;
+  console.log('👤 User data loaded from store:', current.email);
+  return true;
 };
 
 // ========== Fetch Balance ==========
-const fetchBalance = async () => {
-  if (!userUuid.value || !userName.value || !userEmail.value) {
-    console.warn('⚠️ Missing user data, cannot fetch balance');
-    return;
-  }
-  
-  isLoading.value = true;
-  try {
-    const params = new URLSearchParams();
-    params.append('user_uuid', userUuid.value);
-    params.append('user_name', userName.value);
-    params.append('user_email', userEmail.value);
-    
-    const url = `/wallet/balance?${params.toString()}`;
-    console.log('💰 Fetching balance from:', url);
-    
-    const response = await apiRequest.get(url);
-    console.log('📦 Response data:', response.data);
-    
-    let balanceValue = 0;
-    
-    if (response.data) {
-      if (response.data.user_balance !== undefined) {
-        const rawBalance = response.data.user_balance;
-        balanceValue = typeof rawBalance === 'string' ? parseFloat(rawBalance) : rawBalance;
-      } else if (response.data.balance !== undefined) {
-        balanceValue = typeof response.data.balance === 'string' ? parseFloat(response.data.balance) : response.data.balance;
-      } else if (response.data.data?.balance !== undefined) {
-        balanceValue = typeof response.data.data.balance === 'string' ? parseFloat(response.data.data.balance) : response.data.data.balance;
-      } else if (typeof response.data === 'number') {
-        balanceValue = response.data;
-      }
-      
-      if (isNaN(balanceValue)) {
-        balanceValue = 0;
-      }
-    }
-    
-    balance.value = balanceValue;
-    console.log('💰 Final balance:', balance.value);
-    
-    // إذا كان الرصيد 0، امسح حقل المبلغ
-    if (balance.value === 0) {
-      displayValue.value = '';
-      amount.value = null;
-    }
-    
-  } catch (error) {
-    console.error('❌ Error fetching balance:', error);
-    balance.value = 0;
+// المنطق كلّه في src/stores/wallet.js؛ هنا نتعامل مع أثر النتيجة على النموذج.
+const fetchBalance = async ({ force = false } = {}) => {
+  const value = await wallet.fetchBalance({ force });
+  if (!value) {
     displayValue.value = '';
     amount.value = null;
-  } finally {
-    isLoading.value = false;
   }
+  return value;
 };
 
 // ========== Submit Payout ==========
@@ -460,19 +473,19 @@ const submitPayout = async () => {
   if (!userName.value || !userEmail.value) {
     const userLoaded = getUserData();
     if (!userLoaded) {
-      alert('Benutzerdaten konnten nicht geladen werden. Bitte melden Sie sich erneut an.');
+     
       return;
     }
   }
   
   if (!isFormValid.value) {
-    console.warn('⚠️ Form is not valid');
+   
     alert('Bitte füllen Sie alle Felder korrekt aus.');
     return;
   }
   
   if (balance.value <= 0) {
-    alert('Sie haben kein verfügbares Guthaben.');
+    
     return;
   }
   
@@ -512,6 +525,8 @@ const submitPayout = async () => {
     });
     
     console.log('✅ Payout submitted successfully');
+    // المبلغ تغيّر على الخادم — نُحدّث المخزن فتتبعه كلّ الشاشات.
+    wallet.fetchBalance({ force: true });
     router.push('/finale-msg');
     
   } catch (error) {
@@ -547,7 +562,8 @@ onMounted(async () => {
   }
   
   if (userUuid.value && userName.value && userEmail.value) {
-    await fetchBalance();
+    // صفحة السحب تعرض مبلغاً يُتصرَّف به، فتُحدّثه دائماً ولا تكتفي بالمحفوظ.
+    await fetchBalance({ force: true });
   } else {
     console.warn('⚠️ Cannot fetch balance - missing user data');
   }
@@ -842,6 +858,8 @@ defineExpose({
 }
 
 .Form-row1 .form1 {
+    /* حقل كلمة المرور يُصيَّر <form>، فنُصفّر هامشه الافتراضي. */
+    margin: 0;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -888,10 +906,62 @@ defineExpose({
             line-height: 1;
             letter-spacing: 1px;
 
+            /* النقاط يرسمها .pw-mask بقياسات التصميم. الحقل هنا يستقبل الكتابة فقط:
+               نصّه ومؤشّره شفّافان حتى لا تتراكب نقاط المتصفّح مع القناع. */
             &[type="password"] {
-                -webkit-text-security: none;
-                font-family: monospace;
-                letter-spacing: 4px;
+                color: transparent;
+                -webkit-text-fill-color: transparent;
+                caret-color: transparent;
+
+                /* المتصفّح يتجاهل شفافية النصّ عند التحديد ويرسمه بلون التحديد،
+                   فتظهر نقاطه الأصلية فوق القناع. التحديد يرسمه .pw-dot.is-selected. */
+                &::selection {
+                    color: transparent;
+                    -webkit-text-fill-color: transparent;
+                    background: transparent;
+                }
+
+                &::-moz-selection {
+                    color: transparent;
+                    background: transparent;
+                }
+            }
+
+            /* الملء التلقائي: المتصفّح يفرض خلفيةً فاتحة على الحقل ولا تُلغيها
+               background ولا !important. نغطّيها بظلّ داخليّ بلون الحاوية،
+               ونؤخّر انتقال اللون طويلاً فلا تظهر ولو لحظة.
+               :-webkit-autofill لكروم وسفاري، و:autofill المعياريّة لفايرفوكس
+               (يتجاهل البادئة تماماً فتبقى خلفيته الصفراء بلا الثانية). */
+            &:-webkit-autofill,
+            &:-webkit-autofill:hover,
+            &:-webkit-autofill:focus,
+            &:-webkit-autofill:active,
+            &:autofill,
+            &:autofill:hover,
+            &:autofill:focus,
+            &:autofill:active {
+                -webkit-box-shadow: 0 0 0 1000px var(--primary) inset;
+                box-shadow: 0 0 0 1000px var(--primary) inset;
+                /* فايرفوكس لا يعرف ‎-webkit-text-fill-color‎ فيلزمه color. */
+                color: var(--Main-Colors-White, #fff) !important;
+                -webkit-text-fill-color: var(--Main-Colors-White, #fff);
+                caret-color: var(--Main-Colors-White, #fff);
+                transition: background-color 600000s 0s, color 600000s 0s;
+            }
+
+            /* كلمة المرور: النقاط يرسمها .pw-mask، فيبقى نصّ الحقل ومؤشّره شفّافين
+               حتى بعد الملء التلقائي. */
+            &[type="password"]:-webkit-autofill,
+            &[type="password"]:-webkit-autofill:hover,
+            &[type="password"]:-webkit-autofill:focus,
+            &[type="password"]:-webkit-autofill:active,
+            &[type="password"]:autofill,
+            &[type="password"]:autofill:hover,
+            &[type="password"]:autofill:focus,
+            &[type="password"]:autofill:active {
+                color: transparent !important;
+                -webkit-text-fill-color: transparent;
+                caret-color: transparent;
             }
 
             &:not(:placeholder-shown),
@@ -907,27 +977,6 @@ defineExpose({
                 font-weight: 300;
                 line-height: 1;
                 letter-spacing: 1px;
-            }
-        }
-
-        .password-placeholder,
-        .password-dots {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            position: absolute;
-            left: 15px;
-            top: 52%;
-            transform: translateY(-50%);
-
-            .dot-icon {
-                width: 8px;
-                height: 8px;
-                filter: invert(42%) sepia(6%) saturate(473%) hue-rotate(169deg) brightness(92%) contrast(88%);
-
-                &.active {
-                    filter: brightness(0) invert(1);
-                }
             }
         }
 
@@ -1176,5 +1225,99 @@ defineExpose({
     .row2 .column1 .p span {
         font-size: 18px;
     }
+}
+
+/* 236 — عند النقر في الحقل يختفي نصّ الإرشاد فتبدأ الكتابة مباشرة.
+   يشمل نقاط كلمة المرور لأنها صارت placeholder حقيقياً لا طبقة صور. */
+.formField:focus::placeholder,
+.form-input:focus::placeholder {
+    color: transparent !important;
+}
+
+/* ========== قناع كلمة المرور ==========
+   الإطار: من حشو الحقل الأيسر (12px) حتى ما قبل أيقونة العين (12 + 20 + 8 = 40px).
+   الطول الزائد: .pw-mask يحاذي إلى النهاية و.pw-track عرضه 100% كحدّ أدنى —
+   فالنقاط تبدأ من اليسار ما دامت تتّسع، وإن فاضت يُقصّ أوّلها ويبقى آخرها
+   والمؤشّر ظاهرَين، كما في أيّ حقل نصّ. */
+.pw-mask {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 12px;
+    right: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.pw-track {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 100%;
+    flex-shrink: 0;
+}
+
+/* النقطة نفسها في ::after حتى يبقى ::before (شريط التحديد) تحتها في ترتيب الرسم. */
+.pw-dot {
+    position: relative;
+    width: 8px;
+    height: 8px;
+    aspect-ratio: 1 / 1;
+    flex-shrink: 0;
+}
+
+.pw-dot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--pw-dot-color, var(--Main-Colors-White, #FFF));
+}
+
+.pw-dot.is-placeholder {
+    --pw-dot-color: var(--Main-Colors-Dove, #6A6C6D);
+}
+
+.pw-dot.is-filled {
+    --pw-dot-color: var(--Main-Colors-White, #FFF);
+}
+
+/* شريط التحديد: يمتدّ 5px يميناً ويساراً فيملأ الفجوة (8px) بين نقطتين
+   متجاورتين محدَّدتين ويتداخل 2px مع جاره، فلا يظهر خطّ فاصل بينهما،
+   ويبدو شريطاً واحداً متّصلاً بلون تحديد النظام. */
+.pw-dot.is-selected::before {
+    content: '';
+    position: absolute;
+    top: -11px;
+    bottom: -11px;
+    left: -5px;
+    right: -5px;
+    background: Highlight;
+}
+
+/* 236 — عند النقر يختفي الـ placeholder وتبدأ الكتابة مباشرة */
+.input-container:focus-within .pw-dot.is-placeholder {
+    display: none;
+}
+
+/* مؤشّر مرسوم بعد آخر نقطة، لأنّ مؤشّر الحقل الأصلي شفّاف */
+.pw-caret {
+    display: none;
+    width: 1px;
+    height: 18px;
+    flex-shrink: 0;
+    background: var(--Main-Colors-White, #FFF);
+    animation: pw-caret-blink 1s step-end infinite;
+}
+
+.input-container:focus-within .pw-caret {
+    display: block;
+}
+
+@keyframes pw-caret-blink {
+    50% { opacity: 0; }
 }
 </style>

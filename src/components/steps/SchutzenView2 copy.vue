@@ -1081,6 +1081,12 @@ const dragEndSelected = (event) => {
   scroll-behavior: smooth;
 }
 
+/* إخفاء شريط التمرير في فايرفوكس أيضاً — ::-webkit-scrollbar خاصّ بكروم وسفاري. */
+.favorite-section {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
 .favorite-section::-webkit-scrollbar {
   display: none; /* إخفاء شريط التمرير */
 }
@@ -1093,6 +1099,12 @@ const dragEndSelected = (event) => {
   position: relative;
   z-index: 1;
   flex-shrink: 0;
+}
+
+/* إخفاء شريط التمرير في فايرفوكس أيضاً — ::-webkit-scrollbar خاصّ بكروم وسفاري. */
+.schutzen-favorite {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 
 .schutzen-favorite::-webkit-scrollbar {
@@ -1126,11 +1138,18 @@ const dragEndSelected = (event) => {
   cursor: move;
 }
 
+/* :autofill المعياريّة لفايرفوكس؛ البادئة لكروم وسفاري. */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
-input:-webkit-autofill:active {
+input:-webkit-autofill:active,
+input:autofill,
+input:autofill:hover,
+input:autofill:focus,
+input:autofill:active {
   -webkit-box-shadow: 0 0 0 1000px var(--Main-Colors-Slate-Dark) inset !important;
+  box-shadow: 0 0 0 1000px var(--Main-Colors-Slate-Dark) inset !important;
+  color: white !important;
   -webkit-text-fill-color: white !important;
   caret-color: white !important;
 }

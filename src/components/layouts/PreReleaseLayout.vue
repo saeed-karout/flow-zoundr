@@ -15,11 +15,11 @@
                 <div class="p">{{ sectionTitle }}</div>
                 
                 <div v-if="currentStep === 2 && currentView === 'firstSection'" class="top-line-image-container">
-                  <img 
-                    :src="displayTopLineImage" 
+                  <img
+                    :src="displayTopLineImage"
                     alt="Top line image"
-                    class="top-line-image clickable"
-                    :class="{ 'image-loaded': imageLoaded }"
+                    class="top-line-image"
+                    :class="{ 'image-loaded': imageLoaded, 'clickable': !releaseStore.hasUploadedAudio }"
                     @click="handleTopLineImageClick"
                     @load="onImageLoad"
                     @error="handleImageError"
@@ -82,7 +82,7 @@
 
         <!-- ✅ tabs يستخدم Store مباشرة -->
         <tabs 
-          :server-cover-url="serverCoverUrl" 
+          :server-cover-url="backgroundFullUrl" 
           :active-tab="activeTab"
           @update-tab="$emit('update-tab', $event)"
           @back="$emit('back')" 
@@ -155,14 +155,14 @@ const emit = defineEmits([
   'update-tab', 
   'back', 
   'update:topLineImage', 
-  'change-song-type', 
+  'change-audio-quality', 
   'back-to-first-section'
 ]);
 
 const STORAGE_URL = import.meta.env.VITE_STORAGE_URL || 'https://zoundr-flow-api.davinda.dev/storage';
 const DEFAULT_BG_IMAGE = '/img/bgCardSongs/card1.png';
 
-const songTypeImageMap = {
+const audioQualityImageMap = {
   'lossless': losslessIcon,
   'digital_master': digitalMastersIcon,
   'dobly_atmos': admIcon
@@ -326,23 +326,32 @@ watch(() => props.backgroundImage, (newUrl) => {
 const bgImageStyle = computed(() => {
   const fullUrl = backgroundFullUrl.value;
   if (fullUrl && fullUrl !== DEFAULT_BG_IMAGE) {
-    const timestamp = Date.now();
-    const urlWithTimestamp = `${fullUrl}${fullUrl.includes('?') ? '&' : '?'}_t=${timestamp}`;
+    // ✅ بلا طابع زمني: الطابع كان يولّد عنواناً جديداً في كل إعادة حساب، فيصبح مورداً
+    //    مختلفاً عن الذي تستخدمه التبويبات (فينكسر التطابق) ويُعاد تنزيل الغلاف مراراً.
+    //    اسم ملف الغلاف يتغيّر عند كل رفع، فلا حاجة إلى كسر الكاش.
     return {
-      backgroundImage: `url(${urlWithTimestamp})`,
+      backgroundImage: `url("${fullUrl}")`,
       backgroundSize: 'cover',
       backgroundPosition: 'center',
+      // ✅ مثبّت بالنافذة كي تتطابق شرائح الغلاف في التبويبات (fixed أيضاً) مع هذه
+      //    الخلفية، فيبدو التبويب تتمّةً متّصلةً للصورة اليسرى.
+      backgroundAttachment: 'fixed',
       backgroundRepeat: 'no-repeat'
     };
   }
-  return { backgroundColor: 'var(--secondary)' };
+  // ✅ استخدام الصورة الافتراضية بدلاً من var(--secondary)
+  return {
+    backgroundImage: `url(${DEFAULT_BG_IMAGE})`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundAttachment: 'fixed',
+    backgroundRepeat: 'no-repeat'
+  };
 });
 
-const getUrlWithTimestamp = (url) => {
-  if (!url) return null;
-  const timestamp = Date.now();
-  return `${url}${url.includes('?') ? '&' : '?'}_t=${timestamp}`;
-};
+// ✅ يُعيد العنوان كما هو — شرائح خلفية الفيديو تشارك نفس مورد الغلاف
+//    المستخدم في ‎.bg-image والتبويبات، بدل تنزيل نسخة منفصلة لكل شريحة.
+const getUrlWithTimestamp = (url) => (url || null);
 
 // ========== أنماط خلفية الفيديو ==========
 const videoBgRightImageStyle = computed(() => {
@@ -403,6 +412,10 @@ const displayTopLineImage = computed(() => {
   if (props.topLineImage) {
     return props.topLineImage;
   }
+  const quality = releaseStore.draftRelease?.audio_quality;
+  if (quality && audioQualityImageMap[quality]) {
+    return audioQualityImageMap[quality];
+  }
   return losslessIcon;
 });
 
@@ -420,22 +433,18 @@ watch(() => displayTopLineImage.value, () => {
 
 const handleTopLineImageClick = () => {
   if (props.currentView !== 'firstSection') return;
-  if (confirm('Möchten Sie den Songtyp ändern? Alle nicht gespeicherten Änderungen gehen verloren.')) {
-    emit('change-song-type');
-  }
+  // ✅ النقر على صورة الجودة (audio_quality المخزّنة) يعيدنا إلى قائمة الأغاني
+  //    (FirstSection) مع الحفاظ على الجودة — وليس فتح كروت إعادة اختيار الجودة.
+  //    كان الإصدار السابق يُطلق change-audio-quality الذي يمسح الجودة ويعرض الكروت.
+  handleBackToFirstSection();
 };
 
 const handleBackToFirstSection = () => {
-  // ✅ مسح tabCompletion من الـ Store عند العودة
-  releaseStore.updateTabCompletion({
-    infos: false,
-    urheber: false,
-    mitwirkende: false,
-    deals: true,
-    'pre-release': true
-  });
-  console.log('🧹 [PreReleaseLayout] Reset tabCompletion in Store');
-  
+  // ⚠️ لا نُعيد ضبط tabCompletion بقيم ثابتة هنا. كان ذلك يفرض deals:true و
+  //   pre-release:true بينما الأغنية الحالية لا تزال نشطة، فيلتقطها مراقِب tabs.vue
+  //   ويحفظ pre_release_step_completed:true فوق القيمة الحقيقية (false) → تظهر الأغنية
+  //   مكتملة خطأً في FirstSection. القيم الافتراضية للأغنية التالية يتكفّل بها
+  //   tabs.vue.onMounted وإعادة بثّ مكوّنات كل أغنية لحالتها الحقيقية عند فتحها.
   setTimeout(() => {
     emit('back-to-first-section');
   }, 100);
@@ -650,7 +659,6 @@ watch(() => isNewRight2Active.value, (newVal) => {
 
 .column2 .video {
   display: flex;
-  height: 167px;
   padding: 0 0 20px 20px;
   flex-direction: column;
   align-items: flex-end;
@@ -733,7 +741,7 @@ watch(() => isNewRight2Active.value, (newVal) => {
 .video-bg-right {
   position: absolute;
   right: 0;
-  bottom: -30px;
+  // bottom: -30px;
   width: 10px;
   height: 10px;
   z-index: 1;

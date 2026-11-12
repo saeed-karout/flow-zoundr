@@ -11,7 +11,7 @@
                 @mouseenter="updateHoverData(bar)" 
                 @mouseleave="resetHoverData"
             >
-                <div class="number" :style="{ top: `calc(${barHeight}px - ${bar.percentage * (barHeight / 100)}px - 16px)` }">
+                <div class="number" :style="{ top: `calc(${barHeight}px - ${bar.percentage * (barHeight / 100)}px)` }">
                     {{ formatCurrency(hoveredBar.label === bar.label ? hoveredBar.value : bar.value) }}
                 </div>
 
@@ -54,7 +54,7 @@ const chartData = ref({
     dates: [],
     values: []
 });
-const barHeight = ref(340);
+const barHeight = ref(330);
 const barsContainer = ref(null);
 let fetchTimeout = null;
 let resizeObserver = null;
@@ -131,7 +131,7 @@ const resetHoverData = () => {
 const updateBarHeight = () => {
     if (barsContainer.value) {
         const containerHeight = barsContainer.value.clientHeight;
-        const availableHeight = containerHeight - 40;
+        const availableHeight = containerHeight - 75;
         if (availableHeight > 100) {
             barHeight.value = availableHeight;
         } else {
@@ -292,7 +292,7 @@ onUnmounted(() => {
     flex-direction: column;
     justify-content: flex-end;
     align-items: center;
-    gap: 8px;
+    gap: 27px;
     // flex: 1;
     min-width: 0;
     cursor: pointer;
@@ -390,11 +390,12 @@ onUnmounted(() => {
     color: #FFF;
     text-align: center;
     font-family: Heebo, sans-serif;
-    font-size: 14px;
+    font-size: 16px;
     font-style: normal;
     font-weight: 300;
     line-height: 0.6;
     letter-spacing: 0.7px;
+    opacity: 0.7;
     text-transform: uppercase;
     top: 0;
 }
@@ -431,7 +432,7 @@ onUnmounted(() => {
     pointer-events: none;
     opacity: 0.1;
     white-space: nowrap;
-    z-index: 100;
+    z-index: 50;
 }
 
 .loading-state {
@@ -462,12 +463,12 @@ onUnmounted(() => {
         max-width: 57px;
     }
     
-    .graph-month .month-container .p {
-        font-size: 12px;
-    }
     
-    .graph-month .number {
-        font-size: 12px;
+}
+
+@media (min-width:1600px) and (max-width:2074px) {
+    .bg-number{
+        font-size: 150px;
     }
 }
 

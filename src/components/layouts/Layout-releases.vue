@@ -76,14 +76,19 @@
             <div class="content">
               <slot></slot>
             </div>
-            <Tabs v-if="currentStep === 2 && currentView === 'infos'" class="tabs" @update-tab="$emit('update-tab', $event)"
+            <!-- ✅ عمود تبويبات تفاصيل الأغنية يخصّ الخطوة 3 (Songs) فقط — كان الشرط
+                 currentStep === 2 فيظهر فوق Metas إذا بقي currentView على 'infos'
+                 (مثلاً: تعديل أغنية ← COVER ← رفع غلاف ← Metas). -->
+            <Tabs v-if="currentStep === 3 && currentView === 'infos'" class="tabs"
+              :server-cover-url="backgroundFullUrl"
+              @update-tab="$emit('update-tab', $event)"
               @back="$emit('back')" />
           </div>
         </div>
       </div>
 
       <!-- Vimeo Video Section -->
-      <div class="youtube" @click="openVideoPopup">
+      <div class="youtube" @click="openVideoPopup" :style="youtubeCornerStyle">
         <div class="video-wrapper">
           <div class="video-bg-left">
             <div class="video-bg-left-image" :style="videoBgLeftImageStyle"></div>
@@ -93,8 +98,10 @@
             <img src="@/assets/icons/Play.png" alt="Vimeo Play Icon">
           </div>
           <div class="video-bg-right">
-            <div class="video-bg-right-image" :style="videoBgRightImageStyle"></div>
-            <div class="video-bg-right-blur"></div>
+            <div class="video-bg-right-clip">
+              <div class="video-bg-right-image" :style="videoBgRightImageStyle"></div>
+              <div class="video-bg-right-blur"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -106,6 +113,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import ProgressBar from '@/zoundr/components/ProgressBar.vue';
 import Tabs from '@/components/uploadPngSteps/Upload2/tabs.vue';
+import { useReleaseStore } from '@/stores/release';
 
 import losslessIcon from '@/assets/icons/top-line/lossless.png';
 import digitalMastersIcon from '@/assets/icons/top-line/digital-masters.png';
@@ -129,12 +137,14 @@ const props = defineProps({
   uploadedImage: { type: [String, null], default: null },
 });
 
-const emit = defineEmits(['back', 'update-tab', 'update:topLineImage', 'change-song-type']);
+const emit = defineEmits(['back', 'update-tab', 'update:topLineImage', 'change-audio-quality']);
+
+const releaseStore = useReleaseStore();
 
 const STORAGE_URL = import.meta.env.VITE_STORAGE_URL || 'https://zoundr-flow-api.davinda.dev/storage';
 const DEFAULT_BG_IMAGE = '/img/bgCardSongs/card1.png';
 
-const songTypeImageMap = {
+const audioQualityImageMap = {
   'lossless': losslessIcon,
   'digital_master': digitalMastersIcon,
   'dobly_atmos': admIcon
@@ -149,14 +159,13 @@ const videoError = ref(false);
 
 // ========== 🔥 حساب الـ classes ==========
 const mainClasses = computed(() => {
-  // ✅ content-full-height فقط عندما يكون showNewRight2 و currentStep === 2
   const isContentFullHeight = props.showNewRight2 && props.currentStep === 2;
-  
+
   return {
     'full-height': (props.showNewRight2 || props.showFinalPage || isUpload3Active.value) && props.currentStep !== 1,
     'final-page-active': props.showFinalPage,
     'upload3-height': isUpload3Active.value,
-    'content-full-height': isContentFullHeight,  // ✅ فقط عند الحاجة
+    'content-full-height': isContentFullHeight,
     'songs-main-view': props.currentStep === 3 && props.currentView === 'main',
     'force-full-height': props.forceFullHeight && (props.currentStep === 1 || props.currentStep === 2)
   };
@@ -164,16 +173,6 @@ const mainClasses = computed(() => {
 // ========== 🔥 حساب الـ style ==========
 // ========== 🔥 حساب الـ style ==========
 const mainStyle = computed(() => {
-  // ✅ فقط عند showNewRight2 و currentStep === 2
-  const isNewRight2Active = props.showNewRight2 && props.currentStep === 2;
-  
-  if (isNewRight2Active) {
-    return {
-      height: '100% !important',
-      minHeight: '100% !important'
-    };
-  }
-  
   // ✅ عند العودة إلى Cover، إزالة الارتفاع
   if (props.currentStep === 1 && !props.showNewRight2) {
     return {
@@ -181,7 +180,7 @@ const mainStyle = computed(() => {
       minHeight: 'auto !important'
     };
   }
-  
+
   return {};
 });
 
@@ -238,9 +237,11 @@ const shouldShowImage = computed(() => {
 });
 
 const isImageClickable = computed(() => {
-  return props.currentStep === 3 && 
-         props.currentView !== 'main' && 
-         (props.currentView === 'firstSection' || props.currentView === 'infos');
+  return props.currentStep === 3 &&
+         props.currentView !== 'main' &&
+         (props.currentView === 'firstSection' || props.currentView === 'infos') &&
+         // ✅ لا يمكن النقر لتغيير نوع الصوت بعد رفع ملف صوتي
+         !releaseStore.hasUploadedAudio;
 });
 
 const getFullImageUrl = (url) => {
@@ -261,9 +262,14 @@ const getFullImageUrl = (url) => {
 
 const displayTopLineImage = computed(() => {
   const image = props.topLineImage;
-  if (!image) return null;
-  const fullUrl = getFullImageUrl(image);
-  return fullUrl;
+  if (image) {
+    return getFullImageUrl(image);
+  }
+  const quality = releaseStore.draftRelease?.audio_quality;
+  if (quality && audioQualityImageMap[quality]) {
+    return audioQualityImageMap[quality];
+  }
+  return null;
 });
 
 const onImageLoad = () => {
@@ -271,14 +277,10 @@ const onImageLoad = () => {
   console.log('✅ [StepLayout] Top line image loaded successfully');
 };
 
-watch(() => displayTopLineImage.value, () => {
-  imageLoaded.value = false;
-}, { immediate: true });
-
 const handleTopLineImageClick = () => {
   if (!isImageClickable.value) return;
   console.log('🖱️ [StepLayout] تم النقر على الصورة العلوية - تغيير نوع الأغنية');
-  emit('change-song-type');
+  emit('change-audio-quality');
 };
 
 const handleImageError = (event) => {
@@ -296,6 +298,18 @@ const preloadImage = (src) => {
     img.src = src;
   });
 };
+
+// ✅ عندما تصل صورة الـ top-line بعد تحميل الـ Layout (مثل الانتقال التلقائي إلى
+//    FirstSection عند وجود audio_quality محفوظة)، نُحمّلها مسبقاً ونكشفها بأنفسنا بدل
+//    الاعتماد فقط على حدث @load الذي قد لا يُطلق فتبقى الصورة بشفافية 0 (غير مرئية).
+//    مُعرّفة بعد preloadImage لتفادي مشكلة TDZ عند التشغيل الفوري (immediate).
+watch(() => displayTopLineImage.value, async (newImg) => {
+  imageLoaded.value = false;
+  if (newImg) {
+    await preloadImage(newImg);
+    imageLoaded.value = true;
+  }
+}, { immediate: true });
 
 // ========== 🔥 دوال فتح وإغلاق الفيديو ==========
 const openVideoPopup = () => {
@@ -428,23 +442,32 @@ watch(() => props.backgroundImage, (newUrl, oldUrl) => {
 const bgImageStyle = computed(() => {
   const fullUrl = backgroundFullUrl.value;
   if (fullUrl) {
-    const timestamp = Date.now();
-    const urlWithTimestamp = `${fullUrl}${fullUrl.includes('?') ? '&' : '?'}_t=${timestamp}`;
+    // ✅ بلا طابع زمني — مورد واحد مشترك مع شرائح الزوايا والتبويبات،
+    //    فتبدو صورة واحدة متّصلة بدل موارد متعددة.
     return {
-      backgroundImage: `url(${urlWithTimestamp})`,
+      backgroundImage: `url("${fullUrl}")`,
       backgroundSize: 'cover',
       backgroundPosition: 'center',
+      // ✅ مثبّت بالنافذة كي تتطابق معه شرائح الزوايا (youtube::after / video-bg-right)
+      //    فتبدو تتمّةً متّصلة لهذه الخلفية.
+      backgroundAttachment: 'fixed',
       backgroundRepeat: 'no-repeat'
     };
   }
   return { backgroundColor: 'var(--secondary)' };
 });
 
-const getUrlWithTimestamp = (url) => {
-  if (!url) return null;
-  const timestamp = Date.now();
-  return `${url}${url.includes('?') ? '&' : '?'}_t=${timestamp}`;
-};
+// ✅ متغيّر CSS يحمل صورة الغلاف لتمريرها إلى العنصر الزائف .youtube::after
+//    (لا يمكن ضبط خلفية عنصر زائف عبر :style مباشرةً).
+const youtubeCornerStyle = computed(() => {
+  const fullUrl = backgroundFullUrl.value;
+  return { '--cover-img': fullUrl ? `url("${getUrlWithTimestamp(fullUrl)}")` : 'none' };
+});
+
+// ✅ يُعيد العنوان كما هو. كان يُلحق _t=Date.now() فتصبح كل شريحة (الخلفية،
+//    زاوية youtube::after، video-bg-right/left، التبويبات) مورداً منفصلاً — أي
+//    صوراً متعددة قد تصل في أوقات مختلفة فتظهر فواصل بينها بدل صورة متّصلة.
+const getUrlWithTimestamp = (url) => (url || null);
 
 const videoBgRightImageStyle = computed(() => {
   const fullUrl = backgroundFullUrl.value;
@@ -452,9 +475,11 @@ const videoBgRightImageStyle = computed(() => {
     const urlWithTimestamp = getUrlWithTimestamp(fullUrl);
     return {
       backgroundImage: `url(${urlWithTimestamp})`,
-      backgroundSize: '3000% 100%',
-      backgroundRepeat: 'no-repeat',
-      borderRadius: '0 20px 0 0'
+      // ✅ نفس أسلوب الخلفية (cover + مثبّت بالنافذة) فتُكمِل صورة .bg-image بسلاسة.
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundAttachment: 'fixed',
+      backgroundRepeat: 'no-repeat'
     };
   }
   return {};
@@ -478,7 +503,11 @@ const videoBgLeftImageStyle = computed(() => {
 watch(() => props.topLineImage, (newUrl, oldUrl) => {
   if (newUrl !== oldUrl) {
     console.log('🖼️ [StepLayout] topLineImage changed:', newUrl);
-    imageLoaded.value = false;
+    // ⚠️ لا نُصفّر imageLoaded هنا. إدارة imageLoaded مسؤولية مراقِب displayTopLineImage
+    //    وحده. كان تصفيرها هنا يُخفي الصورة (opacity 0) عندما يتغيّر prop إلى نفس عنوان
+    //    الصورة الناتج (مثلاً من مسار draftRelease.audio_quality الاحتياطي إلى نفس
+    //    ملف lossless): displayTopLineImage لا يتغيّر فلا يُعيد الكشف، و@load لا يُطلق
+    //    لأن src لم يتغيّر → تبقى الصورة مخفية. الاعتماد على مراقِب displayTopLineImage.
   }
 });
 
@@ -486,19 +515,6 @@ watch(() => shouldUseOverflowAuto.value, (newVal) => {
   console.log('🔄 [StepLayout] overflow mode changed:', newVal ? 'auto' : 'hidden');
 });
 
-// 🔥 مراقبة showNewRight2 لتطبيق الارتفاع
-watch(() => props.showNewRight2, (newVal) => {
-  if (newVal && props.currentStep === 2) {
-    console.log('📌 [StepLayout] NewRight2 active, applying height: 100%');
-    nextTick(() => {
-      const mainEl = document.querySelector('.main');
-      if (mainEl) {
-        mainEl.style.height = '100%';
-        mainEl.style.minHeight = '100%';
-      }
-    });
-  }
-}, { immediate: true });
 // ========== 🔥 مراقبة currentStep لإزالة الارتفاع عند العودة إلى Cover ==========
 watch(() => props.currentStep, (newStep, oldStep) => {
   // ✅ إذا عدنا إلى الخطوة 1 (Cover)
@@ -795,6 +811,9 @@ main.restrict-overflow {
   position: relative;
   height: auto;
   min-height: auto;
+  /* Enable the existing height transition to animate between the intrinsic
+     size (auto) and 100% — e.g. .content-full-height when entering NewRight2. */
+  interpolate-size: allow-keywords;
   transition: min-height 0.5s ease, height 0.5s ease;
 }
 
@@ -1015,22 +1034,29 @@ main.restrict-overflow {
 .youtube::before {
   content: '';
   position: absolute;
-  left: -10px;
+  left: -20px;
   top: 0;
   background: var(--primary);
-  width: 10px;
-  height: 10px;
+  width: 20px;
+  height: 20px;
 }
 
 .youtube::after {
   content: '';
   position: absolute;
-  left: -10px;
+  left: -20px;
   top: 0;
-  width: 10px;
-  height: 10px;
+  width: 20px;
+  height: 20px;
   border-radius: 0 20px 0 0;
-  background: var(--secondary);
+  /* ✅ صورة الغلاف كتتمّة لـ .bg-image: مثبّتة بالنافذة (fixed) بمقاس cover، مع طبقة
+     تعتيم داكنة تُطابق تعتيم الخلفية. تعود إلى لون secondary عند غياب الغلاف. */
+  background-color: var(--secondary);
+  background-image: linear-gradient(rgba(38, 40, 45, 0.80), rgba(38, 40, 45, 0.80)), var(--cover-img, none);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
 }
 
 .video-wrapper {
@@ -1071,13 +1097,31 @@ main.restrict-overflow {
 .video-bg-right {
   position: absolute;
   right: 0;
-  bottom: -30px;
-  width: 10px;
-  height: 10px;
+  bottom: -40px;
+  width: 20px;
+  height: 20px;
   z-index: 1;
   background: var(--primary);
   overflow: hidden;
 }
+
+/* ✅ طبقة قصّ داخلية تتولّى التدوير وحدها.
+   لماذا: اجتماع backdrop-filter مع border-radius على نفس العنصر يُنتج في Chromium
+   هالة فاتحة بعرض بكسل على الحافة المُدوّرة (الـ «border أبيض»). ووضع التدوير
+   على الحاوية الخارجية كان يقصّ خلفيتها primary أيضاً فيظهر ما خلفها (صورة
+   الصفحة) في الركن. الطبقة الداخلية تحلّ الأمرين: لا تدوير على طبقة التمويه،
+   وخلفية primary تبقى ظاهرة في الركن المُدوّر كما كانت. */
+.video-bg-right-clip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 0 20px 0 0;
+  overflow: hidden;
+}
+
+
 
 .video-bg-right-image {
   position: absolute;
@@ -1085,10 +1129,11 @@ main.restrict-overflow {
   left: 0;
   width: 100%;
   height: 100%;
-  opacity: 0.9;
+  /* ✅ تعتيم كامل (1) مطابق لغلاف .bg-image — كان 0.9 يجعلها أفتح فتبدو منقطعة */
+  opacity: 1;
   z-index: 2;
   background-repeat: no-repeat;
-  border-radius: 0 20px 0 0;
+  /* مربّعة عمداً — التدوير تتولّاه الحاوية عبر overflow: hidden. */
 }
 
 .video-bg-right-blur {
@@ -1098,9 +1143,9 @@ main.restrict-overflow {
   width: 100%;
   height: 100%;
   z-index: 3;
-  background: rgba(38, 40, 45, 0.90);
+  background: rgba(38, 40, 45, 0.80);
   backdrop-filter: blur(10px);
-  border-radius: 0 20px 0 0;
+  /* مربّعة عمداً — التدوير تتولّاه الحاوية عبر overflow: hidden. */
   pointer-events: none;
 }
 

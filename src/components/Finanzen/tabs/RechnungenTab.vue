@@ -8,7 +8,7 @@
         </div>
 
         <div class="subtitle">
-          Deine Rechnungen findest du alle gebündelt in deinem Profil unter dem Punkt Rechnungen.
+          Deine Rechnungen findest Du alle gebündelt in Deinem Profil unter dem Punkt Rechnungen.
         </div>
 
         <div class="btn-profile" @click="goToProfile">

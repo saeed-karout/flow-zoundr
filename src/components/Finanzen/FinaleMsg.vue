@@ -1,10 +1,9 @@
-```vue
 <template>
     <div class="mains">
         <div v-if="showTopRow" class="top-row">
             <div class="Guthaben">
                 <div class="title">Dein Verfügbares Guthaben</div>
-                <div class="number">2.761,66 EUR</div>
+                <div class="number">{{ formattedBalance }}</div>
             </div>
         </div>
         <div v-else class="top-row-placeholder"></div>
@@ -20,73 +19,19 @@
                 </router-link>
             </div>
 
-            <div class="content-images">
-                <div class="column1">
-                    <img class="img-test1" src="../../assets/images/column/col1/1.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col1/2.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col1/3.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col1/4.png" alt="Celebration Image">
-                </div>
-                <div class="column2">
-                    <img class="img-test1" src="../../assets/images/column/col2/1.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col2/2.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col2/3.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col2/4.png" alt="Celebration Image">
-                </div>
-                <div class="column3">
-                    <img class="img-test1" src="../../assets/images/column/col3/1.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col3/2.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col3/3.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col3/4.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col3/5.png" alt="Celebration Image">
-                </div>
-                <div class="column4">
-                    <img class="img-test1" src="../../assets/images/column/col4/1.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col4/2.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col4/3.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col4/4.png" alt="Celebration Image">
-                </div>
-                <div class="column5">
-                    <img class="img-test1" src="../../assets/images/column/col5/1.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col5/2.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col5/3.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col5/4.png" alt="Celebration Image">
-                </div>
-                <div class="column6">
-                    <img class="img-test1" src="../../assets/images/column/col6/1.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col6/2.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col6/3.png" alt="Celebration Image">
-                </div>
-                <div class="column7">
-                    <img class="img-test1" src="../../assets/images/column/col7/1.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col7/2.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col7/3.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col7/4.png" alt="Celebration Image">
-                </div>
-                <div class="column8">
-                    <img class="img-test1" src="../../assets/images/column/col8/1.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col8/2.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col8/3.png" alt="Celebration Image">
-                </div>
-                <div class="column9">
-                    <img class="img-test1" src="../../assets/images/column/col9/1.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col9/2.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col9/3.png" alt="Celebration Image">
-                </div>
-                <div class="column10">
-                    <img class="img-test1" src="../../assets/images/column/col10/1.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col10/2.png" alt="Celebration Image">
-                    <img class="img-test1" src="../../assets/images/column/col10/3.png" alt="Celebration Image">
-                </div>
-            </div>
-            <div class="Fade"></div>
+            <div class="final-bg" role="img" aria-label="Celebration Illustration"></div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import testImage from '@/assets/icons/dashboard/user/user.jpg';
+import { ref, computed, onMounted } from 'vue';
+import { useWalletStore } from '@/stores/wallet';
+
+// الرصيد من مخزن المحفظة — كان رقماً ثابتاً مكتوباً في القالب.
+// السحب يُحدّث المخزن (fetchBalance force في Auszahlung) قبل الانتقال إلى هنا.
+const wallet = useWalletStore();
+const formattedBalance = computed(() => wallet.formattedBalance);
 
 // Control visibility of top-row and up-content
 const showTopRow = ref(true);
@@ -203,13 +148,20 @@ onMounted(() => {
     }
 }
 
+/* الخلفية عنصر موضَّع، فتُرسم فوق النصّ الساكن ما لم نرفعه. */
+.up-content .title,
+.up-content .subtitle {
+    position: relative;
+    z-index: 1;
+}
+
 .up-content .title {
     color: var(--Main-Colors-White, #FFF);
     font-family: Heebo;
     font-size: 92px;
     font-style: normal;
     font-weight: 700;
-    line-height: .8;
+    line-height: .9;
     text-transform: uppercase;
 }
 
@@ -221,7 +173,7 @@ onMounted(() => {
     font-size: 18px;
     font-style: normal;
     font-weight: 300;
-    line-height: 1.2;
+    line-height: normal;
 }
 
 .up-content .primary-btn {
@@ -252,67 +204,19 @@ onMounted(() => {
     text-transform: uppercase;
 }
 
-.content-images {
-    display: flex;
-    width: 100%;
-    align-items: flex-start;
-    gap: 20px;
+/* الصورة خلفيةٌ من طبقتين: التلاشي فوق والصورة تحته — نفس صفحة final.vue
+   حتى تكون شاشة «شكراً» بعد السحب مطابقة لشاشة نهاية الإصدار. */
+.final-bg {
     position: absolute;
-    bottom: 0px;
     left: 0;
     right: 0;
-    height: 550px; // Adjusted to fit within viewport
-    overflow: hidden;
-}
-
-// Column animations
-.content-images [class^="column"] {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 20px;
-    flex: 1 0 0;
-    animation: slideUpColumn 0.8s ease-out forwards;
-}
-
-.content-images .column1 { padding-top: 160px; animation-delay: 0s; }
-.content-images .column2 { padding-top: 80px; animation-delay: 0.1s; }
-.content-images .column3 { padding-top: 0; animation-delay: 0.2s; }
-.content-images .column4 { padding-top: 80px; animation-delay: 0.3s; }
-.content-images .column5 { padding-top: 160px; animation-delay: 0.4s; }
-.content-images .column6 { padding-top: 240px; animation-delay: 0.5s; }
-.content-images .column7 { padding-top: 160px; animation-delay: 0.6s; }
-.content-images .column8 { padding-top: 240px; animation-delay: 0.7s; }
-.content-images .column9 { padding-top: 320px; animation-delay: 0.8s; }
-.content-images .column10 { padding-top: 240px; animation-delay: 0.9s; }
-
-@keyframes slideUpColumn {
-    0% {
-        transform: translateY(50px);
-        opacity: 0;
-    }
-    100% {
-        transform: translateY(0);
-        opacity: 1;
-    }
-}
-
-.img-test1 {
-    height: 136px;
+    bottom: 0;
     width: 100%;
-    align-self: stretch;
-    aspect-ratio: 1/1;
-    border-radius: 12px;
-    object-fit: cover;
+    aspect-ratio: 1534 / 498;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(27, 28, 32, 0.00) 40%, var(--Main-Colors-Slate-Dark, #1B1C20) 100%),
+                url('/img/thanks/thanks2.webp') center top / 100% auto no-repeat;
 }
 
-.Fade {
-    width: 100%;
-    height: 100%; // Match up-content height
-    position: absolute;
-    right: 0;
-    top: 12px;
-    background: linear-gradient(180deg, rgba(27, 28, 32, 0.00) 0%, var(--primary) 100%);
-}
 </style>
-```

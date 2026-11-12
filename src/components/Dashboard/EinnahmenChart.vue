@@ -9,6 +9,9 @@
         
         <!-- Bars -->
         <div class="bars">
+            <!-- بلا بيانات: لا أعمدة ولا أشهر ولا قيم — يبقى الرقم الكبير وحده.
+                 الحاوية باقية فيحتفظ الصندوق بارتفاعه. -->
+            <template v-if="hasData">
             <div 
                 v-for="bar in displayedBars" 
                 :key="bar.label" 
@@ -16,14 +19,18 @@
                 @mouseenter="updateHoverData(bar)" 
                 @mouseleave="resetHoverData"
             >
-                <div class="number" :style="{ top: `calc(${250 - bar.percentage * 1.8}px - 16px)` }">
-                    {{ formatCurrency(hoveredBar.label === bar.label ? hoveredBar.value : bar.value) }}
-                </div>
+                <!-- الغلاف ارتفاعه = ارتفاع العمود في كلّ مقاس شاشة، فـ top بالنسبة
+                     المئوية يقع تماماً على حافة التعبئة — نفس نتيجة BarChart. -->
+                <div class="bar-wrap">
+                    <div class="number" :style="{ top: `calc(${93 - bar.percentage}% )` }">
+                        {{ formatCurrency(hoveredBar.label === bar.label ? hoveredBar.value : bar.value) }}
+                    </div>
 
-                <div class="bar-graph" :style="{ '--percentage': bar.percentage }">
-                    <div v-for="index in 48" :key="index" class="segment-wrapper">
-                        <div class="segment"></div>
-                        <div class="gap"></div>
+                    <div class="bar-graph" :style="{ '--percentage': bar.percentage }">
+                        <div v-for="index in 48" :key="index" class="segment-wrapper">
+                            <div class="segment"></div>
+                            <div class="gap"></div>
+                        </div>
                     </div>
                 </div>
                 
@@ -32,6 +39,7 @@
                     <div class="hover-line"></div>
                 </div>
             </div>
+            </template>
         </div>
 
         <div class="bg-number">
@@ -73,6 +81,10 @@ const maxValue = computed(() => {
     const max = Math.max(...chartData.value.values, 1);
     return max;
 });
+
+const hasData = computed(() =>
+    chartData.value.values.some((value) => Number(value) > 0)
+);
 
 const displayedBars = computed(() => {
     const dates = chartData.value.dates;
@@ -220,10 +232,12 @@ onUnmounted(() => {
     flex-direction: column;
     justify-content: space-between;
     align-items: flex-start;
+    overFlow:hidden;
     gap: 4px;
-    flex: 1 0 0;
+    flex: 1;
     width: 100%;
-    height: auto;
+    // height: var(--chart-h, 300px);
+    // max-height: var(--chart-h, 300px);
     border-radius: 20px;
     background: var(--Main-Colors-Slate, #26282D);
     padding: 20px 30px 12px 30px;
@@ -251,8 +265,8 @@ onUnmounted(() => {
     justify-content: space-between;
     align-items: flex-end;
     align-self: stretch;
-    height: 100%;
-    min-height: 213px;
+    height: 87%;
+    min-height: 0; /* الارتفاع من --chart-h — حدّ أدنى ثابت كان سيمنع التقلّص */
     z-index: 2;
     gap: 4px;
 }
@@ -262,7 +276,8 @@ onUnmounted(() => {
     flex-direction: column;
     justify-content: flex-end;
     align-items: center;
-    gap: 8px;
+    gap: 14px;
+    height: 100%;
     // flex: 1 0 0;
     cursor: pointer;
     transition: 0.3s ease;
@@ -295,10 +310,17 @@ onUnmounted(() => {
     transform: translateX(-50%) translateY(-5px);
 }
 
+.Graph-month .bar-wrap {
+    position: relative;
+    display: flex;
+    flex: 1;       /* يملأ ما تبقّى فوق اسم الشهر */
+    min-height: 0;
+}
+
 .Graph-month .bar-graph {
     display: flex;
     width: 67px;
-    height: 204px;
+    height: 100%; /* بدل 204px الثابتة — التعبئة والرقم بالنسبة المئوية فيتبعانه */
     flex-direction: column-reverse;
     align-items: center;
     position: relative;
@@ -313,7 +335,9 @@ onUnmounted(() => {
     top: 0;
     left: 0;
     width: 100%;
-    height: calc(100% - var(--percentage) * 1.8px);
+    /* بالنسبة المئوية: 1.8px كانت تفترض عموداً 180px فقط، فلا تمتلئ الـ 204px
+       أبداً وتفيض عن الـ 110px في 1440–1599. */
+    height: calc(100% - var(--percentage) * 1%);
     background: var(--Main-Colors-Slate, #26282D);
 }
 
@@ -325,13 +349,13 @@ onUnmounted(() => {
 
 .Graph-month .bar-graph .segment {
     width: 100%;
-    height: 3px;
+    height: 5px;
     background: transparent;
 }
 
 .Graph-month .bar-graph .gap {
     width: 100%;
-    height: 2px;
+    height: 4px;
     background: var(--Main-Colors-Slate, #26282D);
 }
 
@@ -352,6 +376,7 @@ onUnmounted(() => {
     line-height: 0.6;
     letter-spacing: 0.7px;
     text-transform: uppercase;
+    opacity: 0.7;
 }
 
 .Graph-month .month-container .hover-line {
@@ -374,7 +399,7 @@ onUnmounted(() => {
     transform: translate(-50%);
     left: 50%;
     top: 40%;
-    color: var(--Main-Colors-Dove, #6A6C6D);
+    color: var(--selvar);
     font-family: Heebo;
     font-size: 180px;
     font-style: normal;
@@ -382,7 +407,7 @@ onUnmounted(() => {
     line-height: .5;
     letter-spacing: 9px;
     text-transform: uppercase;
-    opacity: 0.1;
+    opacity: 0.07;
     z-index: 10;
     padding: 0;
     pointer-events: none;
@@ -412,7 +437,6 @@ onUnmounted(() => {
 @media (min-width: 1440px) and (max-width: 1599px) {
     .Graph-month .bar-graph {
         width: 50px;
-        height: 110px;
     }
 
 }
@@ -420,22 +444,23 @@ onUnmounted(() => {
 
 @media (min-width: 1600px) and (max-width: 2073px){
     .bars{
-        min-height: 235px;
+        min-height: 0;
     }
+    .Graph-month{
+        font-size:160px;
+    }
+ 
 }
 
 @media (min-width: 2074px) and (max-width: 2560px) {
     .Graph-month .bar-graph {
         width: 93px;
-        height: 250px;
     }
 
-    .Graph-month .bar-graph .gap {
-        height: 3px;
-    }
+  
 
     .bars{
-        min-height: 285px;
+        min-height: 0;
     }
 }
 </style>

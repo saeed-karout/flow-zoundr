@@ -166,9 +166,11 @@
     padding: 20px;
     align-items: flex-start;
     gap: 20px;
+    flex: 1 0 0;
     align-self: stretch;
-    border-radius: 20px;
-    background: var(--Main-Colors-Slate, #26282D);
+    /* ✅ نفس Titelliste: الزاوية العلوية اليسرى قائمة + خلفية secondary (بلا قفزة) */
+    border-radius:  20px;
+    background: var(--secondary);
     overflow-x: auto;
   }
   
@@ -176,7 +178,7 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 20px;
+    gap: 12px; /* ✅ نفس Titelliste — يوحّد تباعد الصفوف فلا تقفز عند التنقّل */
     flex: 1 0 0;
     min-width: min-content;
   }
@@ -205,9 +207,10 @@
   
   .value {
     font-size: 18px;
-    opacity: 1;
+    opacity: 0.7; /* ✅ نفس Titelliste (روح واحدة) */
     white-space: nowrap;
     text-overflow: ellipsis;
+    letter-spacing: 0.9px;
   }
   
   .head-title:nth-child(1),
@@ -219,6 +222,7 @@
   .value:nth-child(2) {
     flex: 1 0 0;
     min-width: 200px;
+    font-weight: 700;
   }
   
   /* العنوان الرابع (Anteil) */
@@ -252,10 +256,8 @@
   .line1 {
     display: flex;
     justify-content: flex-end;
-    align-items: center;
     gap: 20px;
     align-self: stretch;
-    padding: 4px 0;
   }
   
   .line1.no-percentages {

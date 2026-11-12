@@ -8,6 +8,7 @@ export default {
     return {
       screenWidth: window.innerWidth,
       routerReady: false,
+      tooltipObserver: null,
     };
   },
   computed: {
@@ -67,6 +68,8 @@ export default {
   mounted() {
     // إضافة مستمع لتغيير حجم النافذة
     window.addEventListener('resize', this.handleResize);
+    this.disableTooltipsGlobally();
+    this.startTooltipObserver();
     
     // تسجيل معلومات التوجيه الأولية
     console.log('Initial route:', this.$route?.name, this.$route?.path);
@@ -81,8 +84,69 @@ export default {
   beforeUnmount() {
     // تنظيف مستمع الحدث
     window.removeEventListener('resize', this.handleResize);
+    this.stopTooltipObserver();
   },
   methods: {
+    disableTooltipsGlobally() {
+      this.removeTooltipAttributes();
+      this.removeTooltipElements();
+    },
+    removeTooltipAttributes() {
+      document.querySelectorAll('[title]').forEach((el) => {
+        el.removeAttribute('title');
+      });
+      document.querySelectorAll('[data-tooltip], [data-tip], [data-balloon], [data-balloon-pos]').forEach((el) => {
+        el.removeAttribute('data-tooltip');
+        el.removeAttribute('data-tip');
+        el.removeAttribute('data-balloon');
+        el.removeAttribute('data-balloon-pos');
+      });
+    },
+    removeTooltipElements() {
+      const selectors = [
+        '[role="tooltip"]',
+        '.tooltip',
+        '.v-tooltip',
+        '.v-popper',
+        '.v-popper__popper',
+        '.v-popper--theme-tooltip',
+        '.tippy-box',
+        '.tippy-content',
+        '.tippy-popper',
+        '.el-tooltip__popper',
+        '.p-tooltip',
+        '.prime-tooltip'
+      ];
+
+      document.querySelectorAll(selectors.join(',')).forEach((el) => {
+        el.remove();
+      });
+    },
+    startTooltipObserver() {
+      try {
+        this.tooltipObserver = new MutationObserver(() => {
+          this.disableTooltipsGlobally();
+        });
+        this.tooltipObserver.observe(document.body, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['title', 'data-tooltip', 'data-tip', 'data-balloon', 'data-balloon-pos', 'role', 'class']
+        });
+      } catch (e) {
+        console.warn('⚠️ Could not start tooltip observer:', e);
+      }
+    },
+    stopTooltipObserver() {
+      if (!this.tooltipObserver) return;
+      try {
+        this.tooltipObserver.disconnect();
+      } catch (e) {
+        console.warn('⚠️ Could not stop tooltip observer:', e);
+      } finally {
+        this.tooltipObserver = null;
+      }
+    },
     handleResize() {
       this.screenWidth = window.innerWidth;
       console.log('Screen width updated:', this.screenWidth);

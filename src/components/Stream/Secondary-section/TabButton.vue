@@ -1,6 +1,5 @@
-```vue
 <template>
-    <div class="tab-btn" :class="{ active: isActive }" @click="$emit('set-active', tabName)">
+    <div class="tab-btn" :class="{ active: isActive, 'save-tab': tabName === 'Save' }" @click="$emit('set-active', tabName)">
         <div class="left-corner">
             <div class="rectangle3" v-if="tabName === 'Songs'">
                 <div class="rectangle2"></div>
@@ -69,7 +68,6 @@ export default {
     align-items: flex-end;
     position: relative;
     cursor: pointer;
-    // transition: all 0.3s ease;
 }
 
 .tab-btn .Button-tab {
@@ -80,8 +78,6 @@ export default {
     gap: 10px;
     border-radius: 20px 20px 0px 0px;
     background: rgba(38, 40, 45, 0.00);
-
-    // transition: background 0.3s ease;
     z-index: 11;
 }
 
@@ -129,7 +125,6 @@ export default {
 .tab-btn .right-corner {
     display: none;
     opacity: 0;
-    // transition: opacity 0.3s ease;
 }
 
 /* Show corner elements for active tab or on hover */
@@ -161,7 +156,6 @@ export default {
     height: 20px;
     background: var(--Main-Colors-Slate, #26282D);
     position: relative;
-    // transition: background 0.3s ease;
 }
 
 .right-corner .rectangle2 {
@@ -173,7 +167,6 @@ export default {
     top: 0px;
     right: 0px;
     z-index: 2;
-    // transition: background 0.3s ease;
 }
 
 .left-corner .rectangle3 {
@@ -181,7 +174,6 @@ export default {
     height: 20px;
     background: var(--Main-Colors-Slate, #26282D);
     position: relative;
-    // transition: background 0.3s ease;
 }
 
 .left-corner .rectangle2 {
@@ -193,7 +185,6 @@ export default {
     top: 0px;
     left: 0;
     z-index: 2;
-    // transition: background 0.3s ease;
 }
 
 /* Handle Services tab's nested structure */
@@ -205,7 +196,6 @@ export default {
     position: absolute;
     top: 0;
     z-index: 2;
-    // transition: background 0.3s ease;
 }
 
 .tab-btn .left-corner .rectangle3 .rectangle2 {
@@ -264,31 +254,12 @@ export default {
     background: var(--secondary);
 }
 
-.Content-Box {
-    display: flex;
-    padding: 20px;
-    align-items: flex-start;
-    gap: 20px;
-    flex: 1 0 0;
-    align-self: stretch;
-    border-radius: 20px;
-    background: var(--secondary);
-    min-height: 281px;
-}
+/* ===== RESPONSIVE BREAKPOINTS ===== */
 
-.Content-Box .column1 {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 20px;
-    flex: 1 0 0;
-}
-
-
+/* Screen 1440px - 1605px */
 @media (min-width: 1440px) and (max-width: 1599px) {
     .tab-btn .Button-tab {
-        padding: 19px 16px;
-
+        padding: 19px 11px;
     }
 
     .tab-btn .Button-tab span {
@@ -303,22 +274,29 @@ export default {
         line-height: normal;
         text-transform: uppercase;
         max-width: 103px;
-
     }
 }
 
-@media (min-width:1600px) and (max-width:2074px) {
+/* Screen 1606px - 2074px */
+@media (min-width: 1600px) and (max-width: 2074px) {
     .tab-btn .Button-tab {
         padding: 26px clamp(15.5px, calc(15.5px + 16.5 * (100vw - 1600px) / 474), 37.5px);
     }
+    
+    /* ✅ تطبيق الخلفية على زر Save فقط عند 1606px - 2074px */
+    /* استخدام specificity أعلى مع !important لضمان التطبيق */
+    .tab-btn.save-tab.active .right-corner .rectangle2,
+    .tab-btn.save-tab.active .right-corner .rectangle3 .rectangle2,
+    .tab-btn.save-tab.active .left-corner .rectangle2,
+    .tab-btn.save-tab.active .left-corner .rectangle3 .rectangle2 {
+        background: var(--secondary) !important;
+    }
 }
 
-
-@media (min-width:2075px) and (max-width:2560px) {
+/* Screen 2075px - 2560px */
+@media (min-width: 2075px) and (max-width: 2560px) {
     .tab-btn .Button-tab {
         padding: 26px 37.5px;
-
     }
 }
 </style>
-```

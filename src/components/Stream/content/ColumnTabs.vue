@@ -1,7 +1,7 @@
 <template>
     <div class="column2">
         <div class="youtube">
-            <div class="video">
+            <div class="video" @click="openVideoPopup">
                 <img src="/icon/Play-youtube.svg" class="icon" alt="">
             </div>
         </div>
@@ -15,11 +15,129 @@
             <img src="/icon/Left_corner.svg" class="right-corner" alt="">
         </div>
     </div>
+
+    <!-- ✅ Video Popup مع Teleport -->
+    <Teleport to="body">
+        <div v-if="showVideoPopup" class="video-popup-overlay" @click="closeVideoPopup">
+            <div class="video-popup-container" @click.stop>
+                <iframe 
+                    ref="vimeoRef"
+                    width="100%" 
+                    height="100%" 
+                    :src="vimeoEmbedUrl"
+                    frameborder="0"
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowfullscreen
+                    loading="lazy"
+                    @error="handleIframeError"
+                >
+                </iframe>
+                <button class="close-btn" @click="closeVideoPopup">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+                <div v-if="videoError" class="video-error">
+                    <p>⚠️ Fehler beim Laden des Videos.</p>
+                    <p class="video-id">Video ID: {{ videoId }}</p>
+                    <button @click="reloadVideo" class="reload-btn">Neu laden</button>
+                </div>
+            </div>
+        </div>
+    </Teleport>
 </template>
 
 <script setup>
-defineProps(['tabs', 'activeTab']);
-defineEmits(['set-active-tab']);
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+
+const props = defineProps({
+    tabs: { type: Array, default: () => [] },
+    activeTab: { type: Number, default: 0 },
+    videoId: { type: String, default: '480705053' }
+});
+
+const emit = defineEmits(['set-active-tab']);
+
+// ========== Video Popup ==========
+const showVideoPopup = ref(false);
+const videoId = ref(props.videoId || '480705053');
+const vimeoRef = ref(null);
+const videoError = ref(false);
+
+// ========== بناء رابط Vimeo ==========
+const vimeoEmbedUrl = computed(() => {
+    const id = videoId.value?.replace(/\D/g, '') || '480705053';
+    const params = new URLSearchParams({
+        autoplay: '1',
+        controls: '1',
+        byline: '0',
+        portrait: '0',
+        title: '0',
+        dnt: '1',
+        transparent: '0',
+        responsive: '1'
+    });
+    return `https://player.vimeo.com/video/${id}?${params.toString()}`;
+});
+
+// ========== دوال الفيديو ==========
+const openVideoPopup = () => {
+    console.log('🎬 [Column2] Opening Vimeo video with ID:', videoId.value);
+    showVideoPopup.value = true;
+    videoError.value = false;
+    document.body.style.overflow = 'hidden';
+};
+
+const closeVideoPopup = () => {
+    showVideoPopup.value = false;
+    document.body.style.overflow = '';
+    videoError.value = false;
+    // إيقاف تشغيل الفيديو عند الإغلاق
+    if (vimeoRef.value) {
+        const src = vimeoRef.value.src;
+        vimeoRef.value.src = '';
+        setTimeout(() => {
+            vimeoRef.value.src = src;
+        }, 100);
+    }
+};
+
+const reloadVideo = () => {
+    videoError.value = false;
+    const iframe = vimeoRef.value;
+    if (iframe) {
+        const src = iframe.src;
+        iframe.src = '';
+        setTimeout(() => {
+            iframe.src = src;
+        }, 200);
+    }
+};
+
+const handleIframeError = (error) => {
+    console.error('❌ Vimeo iframe error:', error);
+    videoError.value = true;
+};
+
+// ========== 🔥 مستمع حدث Esc ==========
+const handleKeydown = (event) => {
+    if (showVideoPopup.value && event.key === 'Escape') {
+        console.log('⌨️ [Column2] Esc pressed, closing video popup');
+        closeVideoPopup();
+    }
+};
+
+// ========== دورة الحياة ==========
+onMounted(() => {
+    document.addEventListener('keydown', handleKeydown);
+});
+
+onBeforeUnmount(() => {
+    document.removeEventListener('keydown', handleKeydown);
+    document.body.style.overflow = '';
+});
 </script>
 
 <style lang="scss" scoped>
@@ -43,6 +161,11 @@ defineEmits(['set-active-tab']);
     aspect-ratio: 240/143;
 }
 
+.youtube:hover .video {
+    border: 1px solid #D15;
+    cursor: pointer;
+}
+
 .youtube .video {
     display: flex;
     width: 220px;
@@ -55,6 +178,8 @@ defineEmits(['set-active-tab']);
     aspect-ratio: 220/123;
     border-radius: 20px;
     background: var(--secondary);
+    cursor: pointer;
+    transition: border 0.3s ease;
 }
 
 .youtube .video .icon {
@@ -62,6 +187,7 @@ defineEmits(['set-active-tab']);
     height: 40px;
     flex-shrink: 0;
     fill: var(--selvar);
+    transition: filter 0.3s ease;
 }
 
 .youtube:hover .video .icon {
@@ -73,7 +199,6 @@ defineEmits(['set-active-tab']);
     flex-direction: column;
     justify-content: center;
     align-items: flex-start;
-    // flex: 1 0 0;
     align-self: stretch;
     position: relative;
 }
@@ -159,24 +284,129 @@ svg {
     vertical-align: 0;
 }
 
-
-
+/* ========== Responsive ========== */
 @media (min-width:1440px) and (max-width:1599px) {
-  .column2 .youtube{
-    height: 125px;
-  }
+    .column2 .youtube {
+        height: 125px;
+    }
 
-  .youtube .video{
-    height: 105px;
-  }
+    .youtube .video {
+        height: 105px;
+    }
 }
 
 @media (min-height:1060px) {
     .tab-col:nth-child(7) .right-corner {
-    left: 0;
-    bottom: -18px;
-    transform: rotate(90deg);
-
+        left: 0;
+        bottom: -18px;
+        transform: rotate(90deg);
+    }
 }
+</style>
+
+<!-- ✅ Styles للـ Popup خارج الـ scoped لتعمل مع Teleport -->
+<style>
+.video-popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #1b1c20a6;
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(8px);
+    animation: fadeIn 0.3s ease-out;
+}
+
+.video-popup-container {
+    position: relative;
+    width: 80%;
+    max-width: 1000px;
+    aspect-ratio: 16/9;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.video-popup-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.video-error {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    text-align: center;
+    z-index: 5;
+    background: rgba(0, 0, 0, 0.85);
+    padding: 30px 40px;
+    border-radius: 12px;
+    min-width: 250px;
+}
+
+.video-error .video-id {
+    font-size: 12px;
+    opacity: 0.6;
+    margin-top: 8px;
+}
+
+.reload-btn {
+    margin-top: 16px;
+    padding: 8px 24px;
+    background: #DE1456;
+    border: none;
+    border-radius: 5px;
+    color: white;
+    cursor: pointer;
+    font-family: Heebo, sans-serif;
+    font-size: 14px;
+    transition: background 0.3s ease;
+}
+
+.reload-btn:hover {
+    background: #b01048;
+}
+
+.close-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    border: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+    transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #DE1456;
+}
+
+.close-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 </style>

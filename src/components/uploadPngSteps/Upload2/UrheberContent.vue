@@ -2,7 +2,7 @@
   <div class="tab-content">
     <div class="frame">
       <!-- Komponist -->
-      <div class="section">
+      <div class="section" :class="{ 'is-correction': isSongCorrected('authors') }">
         <div class="title">Komponist</div>
         <div
           v-for="(input, index) in komponistInputs"
@@ -26,7 +26,6 @@
             <img src="@/assets/icons/y.png" class="icon-y" alt="checkmark" />
           </div>
           
-          <!-- ✅ Plus icon يظهر عند hover فقط (بدون شرط isValidName) -->
           <div
             v-if="index === 0 "
             class="plus-icon"
@@ -57,15 +56,15 @@
         </div>
       </div>
 
-      <!-- Textdichter -->
-      <div class="section">
+      <!-- Textdichter — يُعطَّل عند نوع instrumental (لا نصوص → لا كاتب نصوص) -->
+      <div class="section" :class="{ 'section-disabled': isInstrumental, 'is-correction': isSongCorrected('authors') }">
         <div class="title">Textdichter</div>
         <div
           v-for="(input, index) in textdichterInputs"
           :key="'textdichter-' + index"
           class="form-field"
-          :class="{ 
-            'is-hovered': input.isHovered, 
+          :class="{
+            'is-hovered': input.isHovered,
             'has-checkmark': isValidName(input.value)
           }"
           @mouseenter="input.isHovered = true"
@@ -76,6 +75,7 @@
             class="input-field"
             v-model="input.value"
             placeholder="Vor- und Familienname"
+            :disabled="isInstrumental"
             @input="updateTextdichterValue(index, $event.target.value)"
           />
           <div v-if="isValidName(input.value)" class="checkmark">
@@ -83,7 +83,7 @@
           </div>
           
           <div
-            v-if="index === 0"
+            v-if="index === 0 "
             class="plus-icon"
             @click="addTextdichterInput"
           >
@@ -115,7 +115,7 @@
 
     <div class="frame">
       <!-- Verlag -->
-      <div class="section">
+      <div class="section" :class="{ 'is-correction': isSongCorrected('authors') }">
         <div class="title">Verlag</div>
         <div
           v-for="(input, index) in verlagInputs"
@@ -140,7 +140,7 @@
           </div>
           
           <div
-            v-if="index === 0 "
+            v-if="index === 0"
             class="plus-icon"
             @click="addVerlagInput"
           >
@@ -170,7 +170,7 @@
       </div>
 
       <!-- C-Line -->
-      <div class="section">
+      <div class="section" :class="{ 'is-correction': isSongCorrected('authors') }">
         <div class="title">C-Line</div>
         <div
           v-for="(input, index) in cLineInputs"
@@ -217,7 +217,8 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, onDeactivated, nextTick } from 'vue';
+import { useCorrections } from '@/composables/useCorrections';
 import iconPlay from '@/assets/icons/play.png';
 import { debounce } from '@/utils/debounce';
 
@@ -240,11 +241,34 @@ const props = defineProps({
   }
 });
 
+// حقول مطلوب تصحيحها (Korrektur) → بوردر أحمر.
+const { isSongCorrected } = useCorrections(() => props.currentSong?.uuid);
+
 const emit = defineEmits(['openVideoPopup', 'update:form-data', 'save-song']);
+
+// ✅ نوع instrumental (لا نصوص) → يُعطَّل Textdichter ولا يُطلَب للاكتمال.
+const isInstrumental = computed(() =>
+  String(props.currentSong?.song_type || props.currentSong?.song_typ || '').includes('instrumental')
+);
+
+// عند التحوّل إلى instrumental (أو عند فتح أغنية instrumental أصلاً): نُفرّغ Textdichter
+// (lyricist) ونحفظ المصفوفة فارغة — لا كاتب نصوص لأغنية بلا نصوص.
+watch(isInstrumental, (val) => {
+  if (!val) return;
+  const hadValue = textdichterInputs.value.some(i => i.value && i.value.trim() !== '');
+  textdichterInputs.value = [{ value: '', isHovered: false }];
+  if (hadValue && props.currentSong?.uuid) {
+    markEdited();
+    debouncedSendUpdate();
+  }
+});
+// ملاحظة: بلا immediate عمداً — textdichterInputs يُعرَّف بعد هذا المراقب، فتشغيله فوراً
+//   يسبب TDZ. حالة "الأغنية instrumental منذ الفتح" يغطّيها الحارس داخل updateFromProps.
 
 // ──── حالة حفظ البيانات ────
 const isSaving = ref(false);
 const saveQueue = ref([]);
+let savingTimeout = null;
 
 // ──── تهيئة البيانات المحلية ────
 const komponistInputs = ref([{ value: '', isHovered: false }]);
@@ -260,6 +284,19 @@ const previousValues = ref({
   c_line: []
 });
 
+// ──── حارس التعديلات غير المحفوظة ────
+// عند كتابة المستخدم تُضبط hasUnsavedEdits = true فتُمنَع updateFromProps ودوال
+// المزامنة من الكتابة فوق الحقول بقيم الخادم (التي قد تكون أقدم من ما كتبه المستخدم
+// للتو) أثناء دورة الحفظ أو أثناء تصفير/إعادة تحميل currentSong بفعل التنقل.
+// lastLoadedUuid يُميّز "إعادة تحميل نفس الأغنية" (لا نكتب فوقها) عن "التبديل لأغنية
+// أخرى" (نحمّلها بالكامل). يُصفّى الحارس فقط بعد نجاح الحفظ وخلوّ قائمة الانتظار.
+const hasUnsavedEdits = ref(false);
+const lastLoadedUuid = ref(null);
+
+const markEdited = () => {
+  hasUnsavedEdits.value = true;
+};
+
 
 
 // ──── دوال Autofill لـ Verlag ────
@@ -272,6 +309,37 @@ const initializeVerlag = () => {
   }
 };
 
+// ──── مزامنة Textdichter من الأغنية ────
+//   نظير syncVerlagFromSong / syncCLineFromSources، وكان غائباً — فلم يكن هناك أي مسار
+//   يُفرّغ حقل Textdichter عندما يمسح الخادم lyricist (عند التحوّل إلى instrumental).
+//   فيبقى الحقل يعرض القيمة القديمة، ويعتبرها isTabComplete صالحة، فتظهر urheber
+//   "مكتملة" رغم أن بيانات الأغنية تقول العكس.
+const syncTextdichterFromSong = (newLyricist) => {
+  const incoming = Array.isArray(newLyricist)
+    ? newLyricist.map(v => (v == null ? '' : String(v).trim())).filter(v => v !== '')
+    : [];
+  const shown = textdichterInputs.value
+    .map(i => (i.value == null ? '' : String(i.value).trim()))
+    .filter(v => v !== '');
+
+  if (JSON.stringify(incoming) === JSON.stringify(shown)) return;
+
+  // ✅ الخادم فرّغ القائمة → نُفرّغ الحقل دائماً (حتى لو كان معطّلاً بسبب instrumental).
+  if (incoming.length === 0) {
+    if (shown.length > 0) {
+      textdichterInputs.value = [{ value: '', isHovered: false }];
+      previousValues.value.textdichter = [];
+      console.log('🧹 UrheberContent: الخادم فرّغ lyricist → تفريغ حقل Textdichter');
+    }
+    return;
+  }
+
+  // ✅ قيمة قادمة من الخادم: لا نكتب فوق ما يكتبه المستخدم الآن.
+  if (hasUnsavedEdits.value) return;
+  textdichterInputs.value = incoming.map(v => ({ value: v, isHovered: false }));
+  previousValues.value.textdichter = [...incoming];
+};
+
 // ──── دالة تهيئة C-Line من الـ Release ────
 const initializeCLineFromRelease = () => {
   if (props.releaseCLine && props.releaseCLine.trim() !== '') {
@@ -280,33 +348,130 @@ const initializeCLineFromRelease = () => {
     
     if (!currentValues.includes(releaseCLineValue)) {
       cLineInputs.value = [{ value: releaseCLineValue, isHovered: false }];
-      previousValues.value.c_line = [releaseCLineValue];
+      previousValues.value.c_line = [];
+      // ✅ إرسال التحديث فوراً بعد تعيين القيمة
+      if (props.currentSong?.uuid) {
+        console.log('📌 C-Line initialized from Release, sending update:', releaseCLineValue);
+        debouncedSendUpdate();
+      }
       console.log('📌 C-Line initialized from Release:', releaseCLineValue);
     }
   }
 };
 
+// ──── دالة تهيئة C-Line من مصادر متعددة ────
+const syncCLineFromSources = (newCLineFromSong) => {
+  // ملاحظة: لا نضع حارس hasUnsavedEdits العام هنا. هذه الدالة تملأ/تزامن حقل C-Line فقط
+  //   ولديها حمايتها الخاصة (لا تلمس قيمة أدخلها المستخدم). الحارس العام كان يمنع
+  //   autofill الـ C-Line عند تعديل حقل آخر (Komponist/Textdichter) فتظهر C-Line فارغة.
+  const cLineArray = Array.isArray(newCLineFromSong) ? newCLineFromSong : [];
+  const currentValues = cLineInputs.value.map(i => i.value);
+
+  // 1. إذا كانت هناك قيمة من الأغنية، استخدمها
+  if (cLineArray.length > 0) {
+    if (JSON.stringify(currentValues) !== JSON.stringify(cLineArray)) {
+      cLineInputs.value = cLineArray.map(value => ({ value: value || '', isHovered: false }));
+      previousValues.value.c_line = [...cLineArray];
+      emitTabCompletion();
+    } else {
+      previousValues.value.c_line = [...cLineArray];
+    }
+    return;
+  }
+
+  // 2. إذا لم تكن هناك قيمة من الأغنية، استخدم قيمة الـ Release
+  const releaseCLineValue = props.releaseCLine?.trim() || '';
+  if (releaseCLineValue) {
+    // ✅ تحقق مما إذا كانت القيمة الحالية مختلفة عن قيمة الـ Release
+    const hasReleaseValue = currentValues.some(v => v === releaseCLineValue);
+    const hasOtherValues = currentValues.some(v => v && v.trim() !== '' && v !== releaseCLineValue);
+    
+    // إذا كانت هناك قيم أخرى غير قيمة الـ Release، لا نغيرها
+    if (hasOtherValues) {
+      console.log('📌 C-Line has other values, keeping them');
+      return;
+    }
+    
+    // إذا كانت القيمة الحالية مختلفة عن قيمة الـ Release
+    if (!hasReleaseValue || currentValues.length === 0 || (currentValues.length === 1 && currentValues[0] === '')) {
+      cLineInputs.value = [{ value: releaseCLineValue, isHovered: false }];
+      previousValues.value.c_line = [];
+      // ✅ إرسال التحديث فوراً
+      if (props.currentSong?.uuid) {
+        console.log('📌 C-Line synced from Release, sending update:', releaseCLineValue);
+        debouncedSendUpdate();
+      }
+      emitTabCompletion();
+      return;
+    }
+    
+    // القيمة معروضة بالفعل في الحقل. لكن يجب ألا نعتبرها "محفوظة" إلا إذا كانت
+    // موجودة فعلاً على الأغنية في الـ backend. وإلا فإن القيمة المعبّأة تلقائياً من
+    // الـ Release تبقى غير محفوظة (previousValues == القيمة الحالية → لا يُرسل شيء).
+    const songHasCLine = Array.isArray(props.currentSong?.authors?.c_line) &&
+      props.currentSong.authors.c_line.some(v => (v || '').trim() === releaseCLineValue);
+
+    if (!songHasCLine && props.currentSong?.uuid) {
+      // معبّأة تلقائياً لكنها غير محفوظة بعد → أجبر الحفظ (debounce يمنع التكرار).
+      previousValues.value.c_line = [];
+      debouncedSendUpdate();
+    } else if (previousValues.value.c_line.length === 0) {
+      previousValues.value.c_line = [releaseCLineValue];
+    }
+    return;
+  }
+
+  // 3. إذا كانت جميع الحقول فارغة
+  if (currentValues.some(value => value && value.trim() !== '')) {
+    cLineInputs.value = [{ value: '', isHovered: false }];
+    previousValues.value.c_line = [];
+    emitTabCompletion();
+  }
+};
+
+const syncVerlagFromSong = (newVerlog) => {
+  // لا حارس عام هنا: الدالة تخصّ حقل Verlag فقط ولا تلمس قيمة أدخلها المستخدم.
+  const verlogArray = Array.isArray(newVerlog) ? newVerlog : [];
+  const currentValues = verlagInputs.value.map(i => i.value);
+
+  if (verlogArray.length > 0) {
+    if (JSON.stringify(currentValues) !== JSON.stringify(verlogArray)) {
+      verlagInputs.value = verlogArray.map(value => ({ value: value || '', isHovered: false }));
+      previousValues.value.verlag = [...verlogArray];
+      emitTabCompletion();
+    } else {
+      previousValues.value.verlag = [...verlogArray];
+    }
+    return;
+  }
+
+  if (!verlagInputs.value[0]?.value || verlagInputs.value[0].value.trim() === '') {
+    verlagInputs.value = [{ value: 'Copyright Control', isHovered: false }];
+    previousValues.value.verlag = [];
+    if (props.currentSong?.uuid) debouncedSendUpdate();
+    emitTabCompletion();
+  } else if (previousValues.value.verlag.length > 0) {
+    previousValues.value.verlag = [];
+  }
+};
+
+
+
 // في UrheberContent.vue
 const isTabComplete = (tabId) => {
   if (tabId !== 'urheber') return true;
   
-  // ✅ التحقق من Komponist - يجب أن يكون لدينا على الأقل اسم واحد صالح
-  const komponistValid = komponistInputs.value.some(input => 
-    input.value && input.value.trim() !== '' && isValidName(input.value)
-  );
-  
-  // ✅ التحقق من Textdichter - يجب أن يكون لدينا على الأقل اسم واحد صالح
-  const textdichterValid = textdichterInputs.value.some(input => 
-    input.value && input.value.trim() !== '' && isValidName(input.value)
-  );
-  
-  // ✅ التحقق من Verlag - يجب أن يكون لدينا على الأقل قيمة واحدة غير فارغة
-  const verlagValid = verlagInputs.value.some(input => 
+  const komponistValid = komponistInputs.value.length > 0 && komponistInputs.value.every(input => isValidName(input.value));
+
+  // ✅ عند instrumental لا يُطلَب Textdichter (لا نصوص).
+  const textdichterValid = isInstrumental.value ||
+    (textdichterInputs.value.length > 0 && textdichterInputs.value.every(input => isValidName(input.value)));
+
+  const verlagValid = verlagInputs.value.length > 0 && verlagInputs.value.every(input =>
     input.value && input.value.trim() !== ''
   );
-  
-  // ✅ التحقق من C-Line - يجب أن يكون لدينا على الأقل قيمة واحدة غير فارغة
-  const cLineValid = cLineInputs.value.some(input => 
+
+  const cLineValid = cLineInputs.value.length > 0 && cLineInputs.value.every(input =>
     input.value && input.value.trim() !== ''
   );
   
@@ -343,6 +508,12 @@ const emitTabCompletion = () => {
 const updateFromProps = () => {
   if (!props.currentSong?.uuid) return;
 
+  // ✅ لا نكتب فوق حقول يعدّلها المستخدم حالياً ولم تُحفَظ بعد.
+  if (hasUnsavedEdits.value) {
+    console.log('⏭️ UrheberContent: تخطي updateFromProps (توجد تعديلات غير محفوظة)');
+    return;
+  }
+
   console.log('🔄 UrheberContent: تحديث من currentSong', props.currentSong);
 
   // ✅ Komponist
@@ -362,7 +533,26 @@ const updateFromProps = () => {
   }
 
   // ✅ Textdichter
-  if (props.currentSong.authors?.lyricist && props.currentSong.authors.lyricist.length > 0) {
+  //    نوع instrumental (لا نصوص): الحقل معطّل ولا يُطلَب — نُبقيه فارغاً دائماً ولا نعيد
+  //    تعبئته من الخادم. وإن كان الخادم ما يزال يحمل قيماً قديمة (أغنية كانت غنائية ثم
+  //    تحوّلت) نجدول حفظاً يُرسل lyricist: [] كي تتطابق البيانات مع حالة الواجهة.
+  if (isInstrumental.value) {
+    const serverLyricist = Array.isArray(props.currentSong.authors?.lyricist)
+      ? props.currentSong.authors.lyricist.filter(v => v && String(v).trim() !== '')
+      : [];
+
+    textdichterInputs.value = [{ value: '', isHovered: false }];
+
+    if (serverLyricist.length > 0 && props.currentSong?.uuid) {
+      // previousValues يبقى بالقيم القديمة كي يُحتسب التغيير ويُرسل المصفوفة الفارغة.
+      previousValues.value.textdichter = [...serverLyricist];
+      console.log('🎼 UrheberContent: instrumental → تفريغ Textdichter وحفظ lyricist فارغة');
+      markEdited();
+      debouncedSendUpdate();
+    } else {
+      previousValues.value.textdichter = [];
+    }
+  } else if (props.currentSong.authors?.lyricist && props.currentSong.authors.lyricist.length > 0) {
     const lyricistArray = Array.isArray(props.currentSong.authors.lyricist) 
       ? props.currentSong.authors.lyricist 
       : [props.currentSong.authors.lyricist];
@@ -391,7 +581,8 @@ const updateFromProps = () => {
   } else {
     if (!verlagInputs.value[0]?.value || verlagInputs.value[0].value.trim() === '') {
       verlagInputs.value = [{ value: 'Copyright Control', isHovered: false }];
-      previousValues.value.verlag = ['Copyright Control'];
+      // ✅ القيمة الافتراضية معروضة فقط وغير محفوظة بعد → نترك previousValues فارغة ليُرسلها sendUpdate ويحفظها.
+      previousValues.value.verlag = [];
     }
   }
 
@@ -413,6 +604,14 @@ const updateFromProps = () => {
     previousValues.value.c_line = [];
   }
 
+  // ✅ حفظ القيم المعروضة تلقائياً (Verlag الافتراضي و C-Line من الـ Release) إن لم تكن محفوظة بعد.
+  //    sendUpdate يتخطى تلقائياً عند عدم وجود فرق، لذا لا يحدث حفظ زائد للأغاني المحفوظة مسبقاً.
+  if (props.currentSong?.uuid) {
+    debouncedSendUpdate();
+  }
+
+  lastLoadedUuid.value = props.currentSong.uuid;
+
   setTimeout(() => {
     emitTabCompletion();
   }, 100);
@@ -421,19 +620,26 @@ const updateFromProps = () => {
 // ──── دالة معالجة نجاح الحفظ ────
 const handleSaveComplete = (event) => {
   const { success, songUuid, error } = event.detail || {};
-  
+
   if (success) {
     console.log('✅ UrheberContent: تم استلام إشارة نجاح الحفظ للأغنية:', songUuid);
   } else {
     console.warn('⚠️ UrheberContent: فشل الحفظ:', error);
   }
-  
+
+  if (savingTimeout) {
+    clearTimeout(savingTimeout);
+    savingTimeout = null;
+  }
   isSaving.value = false;
-  
+
   setTimeout(() => {
     if (saveQueue.value.length > 0) {
       console.log(`📦 UrheberContent: معالجة ${saveQueue.value.length} عناصر في قائمة الانتظار`);
       processSaveQueue();
+    } else if (success) {
+      // ✅ حُفظ كل شيء ولا يوجد ما ينتظر → أصبح المحلي = الخادم، فنسقط الحارس بأمان.
+      hasUnsavedEdits.value = false;
     }
   }, 200);
 };
@@ -451,31 +657,28 @@ const processSaveQueue = () => {
   
   const payload = {};
   let hasChanges = false;
-  
-  if (JSON.stringify(latestSave.komponist) !== JSON.stringify(previousValues.value.komponist)) {
-    payload['authors'] = payload['authors'] || {};
-    payload['authors']['composer'] = latestSave.komponist;
+  const prev = previousValues.value;
+
+  // ✅ اكتشاف أي تغيير في أي حقل من حقول authors
+  const authorsChanged =
+    JSON.stringify(latestSave.komponist) !== JSON.stringify(prev.komponist || []) ||
+    JSON.stringify(latestSave.textdichter) !== JSON.stringify(prev.textdichter || []) ||
+    JSON.stringify(latestSave.verlag) !== JSON.stringify(prev.verlag || []) ||
+    JSON.stringify(latestSave.c_line) !== JSON.stringify(prev.c_line || []);
+
+  // ✅ لقطة كاملة لكل حقول authors عند أي تغيير (نفس منطق sendUpdate). نُرسل كل الحقول
+  //   دائماً — بما فيها الفارغة — لأن الـ backend يستبدل كائن authors بالكامل، فلا يُفقَد
+  //   أي حقل أدخله المستخدم.
+  if (authorsChanged) {
     hasChanges = true;
+    payload['authors'] = {
+      composer: latestSave.komponist,
+      lyricist: latestSave.textdichter,
+      verlog: latestSave.verlag,
+      c_line: latestSave.c_line
+    };
   }
-  
-  if (JSON.stringify(latestSave.textdichter) !== JSON.stringify(previousValues.value.textdichter)) {
-    payload['authors'] = payload['authors'] || {};
-    payload['authors']['lyricist'] = latestSave.textdichter;
-    hasChanges = true;
-  }
-  
-  if (JSON.stringify(latestSave.verlag) !== JSON.stringify(previousValues.value.verlag)) {
-    payload['authors'] = payload['authors'] || {};
-    payload['authors']['verlog'] = latestSave.verlag;
-    hasChanges = true;
-  }
-  
-  if (JSON.stringify(latestSave.c_line) !== JSON.stringify(previousValues.value.c_line)) {
-    payload['authors'] = payload['authors'] || {};
-    payload['authors']['c_line'] = latestSave.c_line;
-    hasChanges = true;
-  }
-  
+
   if (!hasChanges) {
     isSaving.value = false;
     return;
@@ -491,8 +694,14 @@ const processSaveQueue = () => {
     verlag: [...latestSave.verlag],
     c_line: [...latestSave.c_line]
   };
-  
+
   isSaving.value = true;
+  if (savingTimeout) clearTimeout(savingTimeout);
+  savingTimeout = setTimeout(() => {
+    console.warn('⚠️ UrheberContent: isSaving safety timeout (processSaveQueue)');
+    isSaving.value = false;
+    savingTimeout = null;
+  }, 10000);
   emit('save-song', payload);
 };
 
@@ -547,29 +756,25 @@ const sendUpdate = () => {
 
   const payload = {};
   let hasChanges = false;
+  const prev = previousValues.value;
 
-  if (JSON.stringify(currentKomponist) !== JSON.stringify(previousValues.value.komponist)) {
-    payload['authors'] = payload['authors'] || {};
-    payload['authors']['composer'] = currentKomponist;
-    hasChanges = true;
-  }
+  // ✅ التحقق من التغييرات في كل حقل على حدة
+  const komponistChanged = JSON.stringify(currentKomponist) !== JSON.stringify(prev.komponist || []);
+  const textdichterChanged = JSON.stringify(currentTextdichter) !== JSON.stringify(prev.textdichter || []);
+  const verlagChanged = JSON.stringify(currentVerlag) !== JSON.stringify(prev.verlag || []);
+  const cLineChanged = JSON.stringify(currentCLine) !== JSON.stringify(prev.c_line || []);
 
-  if (JSON.stringify(currentTextdichter) !== JSON.stringify(previousValues.value.textdichter)) {
-    payload['authors'] = payload['authors'] || {};
-    payload['authors']['lyricist'] = currentTextdichter;
+  // ✅ عند أي تغيير نرسل كائن authors كاملاً (composer + lyricist + verlog + c_line).
+  //    الـ backend يستبدل كامل authors بما يُرسَل، فإرسال حقل واحد فقط (مثلاً composer)
+  //    كان يمسح القيم المعبّأة تلقائياً (verlog / c_line). اللقطة الكاملة تحفظها جميعاً.
+  if (komponistChanged || textdichterChanged || verlagChanged || cLineChanged) {
     hasChanges = true;
-  }
-
-  if (JSON.stringify(currentVerlag) !== JSON.stringify(previousValues.value.verlag)) {
-    payload['authors'] = payload['authors'] || {};
-    payload['authors']['verlog'] = currentVerlag;
-    hasChanges = true;
-  }
-
-  if (JSON.stringify(currentCLine) !== JSON.stringify(previousValues.value.c_line)) {
-    payload['authors'] = payload['authors'] || {};
-    payload['authors']['c_line'] = currentCLine;
-    hasChanges = true;
+    payload.authors = {
+      composer: currentKomponist,
+      lyricist: currentTextdichter,
+      verlog: currentVerlag,
+      c_line: currentCLine
+    };
   }
 
   if (!hasChanges) {
@@ -578,12 +783,9 @@ const sendUpdate = () => {
     return;
   }
 
-  if (payload['authors'] && Object.keys(payload['authors']).length === 0) {
-    delete payload['authors'];
-  }
-
   console.log('📤 UrheberContent: إرسال التغييرات:', payload);
-  
+
+  // ✅ تحديث previousValues بالكامل
   previousValues.value = {
     komponist: [...currentKomponist],
     textdichter: [...currentTextdichter],
@@ -592,16 +794,23 @@ const sendUpdate = () => {
   };
 
   isSaving.value = true;
+  if (savingTimeout) clearTimeout(savingTimeout);
+  savingTimeout = setTimeout(() => {
+    console.warn('⚠️ UrheberContent: isSaving safety timeout (sendUpdate)');
+    isSaving.value = false;
+    savingTimeout = null;
+  }, 10000);
   emit('save-song', payload);
 };
 
 const debouncedSendUpdate = debounce(() => {
   sendUpdate();
-}, 1200);
+}, 800);
 
 // ──── دوال إدارة Komponist ────
 const updateKomponistValue = (index, value) => {
   if (komponistInputs.value[index]) {
+    markEdited();
     komponistInputs.value[index].value = value || '';
     debouncedSendUpdate();
     setTimeout(() => emitTabCompletion(), 300);
@@ -610,6 +819,7 @@ const updateKomponistValue = (index, value) => {
 
 // ✅ دالة الإضافة - تعمل بشكل مباشر ومتكرر
 const addKomponistInput = () => {
+  markEdited();
   komponistInputs.value.push({ value: '', isHovered: false });
   // تعيين isHovered على العنصر الجديد فوراً
   const newIndex = komponistInputs.value.length - 1;
@@ -626,25 +836,10 @@ const addKomponistInput = () => {
 
 // ✅ دالة الحذف - تعمل بشكل مباشر ومتكرر
 const removeKomponistInput = (index) => {
+  markEdited();
   if (komponistInputs.value.length > 1) {
     komponistInputs.value.splice(index, 1);
-    // تعيين isHovered على العنصر التالي فوراً
-    if (komponistInputs.value[index]) {
-      komponistInputs.value[index].isHovered = true;
-      komponistInputs.value.forEach((item, i) => {
-        if (i !== index) {
-          item.isHovered = false;
-        }
-      });
-    } else if (komponistInputs.value.length > 0) {
-      const lastIndex = komponistInputs.value.length - 1;
-      komponistInputs.value[lastIndex].isHovered = true;
-      komponistInputs.value.forEach((item, i) => {
-        if (i !== lastIndex) {
-          item.isHovered = false;
-        }
-      });
-    }
+    komponistInputs.value.forEach(item => { item.isHovered = false; });
     if (!isSaving.value) debouncedSendUpdate();
   }
   setTimeout(() => emitTabCompletion(), 300);
@@ -653,6 +848,7 @@ const removeKomponistInput = (index) => {
 // ──── دوال إدارة Textdichter ────
 const updateTextdichterValue = (index, value) => {
   if (textdichterInputs.value[index]) {
+    markEdited();
     textdichterInputs.value[index].value = value || '';
     debouncedSendUpdate();
     setTimeout(() => emitTabCompletion(), 300);
@@ -660,6 +856,7 @@ const updateTextdichterValue = (index, value) => {
 };
 
 const addTextdichterInput = () => {
+  markEdited();
   textdichterInputs.value.push({ value: '', isHovered: false });
   const newIndex = textdichterInputs.value.length - 1;
   textdichterInputs.value[newIndex].isHovered = true;
@@ -673,24 +870,10 @@ const addTextdichterInput = () => {
 };
 
 const removeTextdichterInput = (index) => {
+  markEdited();
   if (textdichterInputs.value.length > 1) {
     textdichterInputs.value.splice(index, 1);
-    if (textdichterInputs.value[index]) {
-      textdichterInputs.value[index].isHovered = true;
-      textdichterInputs.value.forEach((item, i) => {
-        if (i !== index) {
-          item.isHovered = false;
-        }
-      });
-    } else if (textdichterInputs.value.length > 0) {
-      const lastIndex = textdichterInputs.value.length - 1;
-      textdichterInputs.value[lastIndex].isHovered = true;
-      textdichterInputs.value.forEach((item, i) => {
-        if (i !== lastIndex) {
-          item.isHovered = false;
-        }
-      });
-    }
+    textdichterInputs.value.forEach(item => { item.isHovered = false; });
     if (!isSaving.value) debouncedSendUpdate();
   }
   setTimeout(() => emitTabCompletion(), 300);
@@ -699,6 +882,7 @@ const removeTextdichterInput = (index) => {
 // ──── دوال إدارة Verlag ────
 const updateVerlagValue = (index, value) => {
   if (verlagInputs.value[index]) {
+    markEdited();
     verlagInputs.value[index].value = value || '';
     debouncedSendUpdate();
     setTimeout(() => emitTabCompletion(), 300);
@@ -706,6 +890,7 @@ const updateVerlagValue = (index, value) => {
 };
 
 const addVerlagInput = () => {
+  markEdited();
   verlagInputs.value.push({ value: '', isHovered: false });
   const newIndex = verlagInputs.value.length - 1;
   verlagInputs.value[newIndex].isHovered = true;
@@ -719,24 +904,10 @@ const addVerlagInput = () => {
 };
 
 const removeVerlagInput = (index) => {
+  markEdited();
   if (verlagInputs.value.length > 1) {
     verlagInputs.value.splice(index, 1);
-    if (verlagInputs.value[index]) {
-      verlagInputs.value[index].isHovered = true;
-      verlagInputs.value.forEach((item, i) => {
-        if (i !== index) {
-          item.isHovered = false;
-        }
-      });
-    } else if (verlagInputs.value.length > 0) {
-      const lastIndex = verlagInputs.value.length - 1;
-      verlagInputs.value[lastIndex].isHovered = true;
-      verlagInputs.value.forEach((item, i) => {
-        if (i !== lastIndex) {
-          item.isHovered = false;
-        }
-      });
-    }
+    verlagInputs.value.forEach(item => { item.isHovered = false; });
     if (!isSaving.value) debouncedSendUpdate();
   }
   setTimeout(() => emitTabCompletion(), 300);
@@ -745,6 +916,7 @@ const removeVerlagInput = (index) => {
 // ──── دوال إدارة C-Line ────
 const updateCLineValue = (index, value) => {
   if (cLineInputs.value[index]) {
+    markEdited();
     cLineInputs.value[index].value = value || '';
     debouncedSendUpdate();
     setTimeout(() => emitTabCompletion(), 300);
@@ -752,6 +924,7 @@ const updateCLineValue = (index, value) => {
 };
 
 const addCLineInput = () => {
+  markEdited();
   cLineInputs.value.push({ value: '', isHovered: false });
   const newIndex = cLineInputs.value.length - 1;
   cLineInputs.value[newIndex].isHovered = true;
@@ -765,24 +938,10 @@ const addCLineInput = () => {
 };
 
 const removeCLineInput = (index) => {
+  markEdited();
   if (cLineInputs.value.length > 1) {
     cLineInputs.value.splice(index, 1);
-    if (cLineInputs.value[index]) {
-      cLineInputs.value[index].isHovered = true;
-      cLineInputs.value.forEach((item, i) => {
-        if (i !== index) {
-          item.isHovered = false;
-        }
-      });
-    } else if (cLineInputs.value.length > 0) {
-      const lastIndex = cLineInputs.value.length - 1;
-      cLineInputs.value[lastIndex].isHovered = true;
-      cLineInputs.value.forEach((item, i) => {
-        if (i !== lastIndex) {
-          item.isHovered = false;
-        }
-      });
-    }
+    cLineInputs.value.forEach(item => { item.isHovered = false; });
     if (!isSaving.value) debouncedSendUpdate();
   }
   setTimeout(() => emitTabCompletion(), 300);
@@ -790,12 +949,52 @@ const removeCLineInput = (index) => {
 
 // ──── مراقبة تغييرات currentSong ────
 watch(() => props.currentSong, (newSong, oldSong) => {
-  if (newSong?.uuid === oldSong?.uuid && oldSong) {
-    console.log('⏭️ UrheberContent: تخطي watch (نفس UUID)');
+  const newUuid = newSong?.uuid || null;
+
+  // ✅ نقارن بآخر uuid حُمِّل فعلاً (وليس oldSong فقط)، لأن التنقل يصفّر currentSong
+  //    إلى null ثم يعيد نفس الأغنية، فيبدو ذلك كتغيير uuid ويستدعي updateFromProps
+  //    الذي يمسح تعديلات المستخدم غير المحفوظة. المقارنة بـ lastLoadedUuid تكشف أنها
+  //    نفس الأغنية فنتخطّاها ونحافظ على ما كُتب.
+  if (newUuid && newUuid === lastLoadedUuid.value) {
+    // ✅ نفس الأغنية: نحمي تعديلات المستخدم غير المحفوظة فلا نُعيد التحميل فوقها.
+    //    لكن إن لم تكن هناك تعديلات معلّقة واختلفت authors القادمة عمّا تعرضه الحقول
+    //    (مثلاً بعد تفريغ lyricist عند التحوّل إلى instrumental) نُعيد المزامنة — وإلا
+    //    بقي الحقل يعرض القيمة القديمة ثم أعاد إرسالها إلى الخادم عند أول حفظ.
+    if (!hasUnsavedEdits.value && !isSaving.value) {
+      const norm = (list) => (Array.isArray(list) ? list : [])
+        .map(v => (v == null ? '' : String(v).trim()))
+        .filter(v => v !== '');
+      const shown = (inputs) => inputs.value
+        .map(i => (i.value == null ? '' : String(i.value).trim()))
+        .filter(v => v !== '');
+
+      const incomingAuthors = JSON.stringify({
+        composer: norm(newSong?.authors?.composer),
+        lyricist: norm(newSong?.authors?.lyricist),
+        verlog: norm(newSong?.authors?.verlog),
+        c_line: norm(newSong?.authors?.c_line)
+      });
+      const shownAuthors = JSON.stringify({
+        composer: shown(komponistInputs),
+        lyricist: shown(textdichterInputs),
+        verlog: shown(verlagInputs),
+        c_line: shown(cLineInputs)
+      });
+
+      if (incomingAuthors !== shownAuthors) {
+        console.log('🔄 UrheberContent: نفس الأغنية لكن authors تغيّرت على الخادم → إعادة مزامنة');
+        updateFromProps();
+        return;
+      }
+    }
+
+    console.log('⏭️ UrheberContent: تخطي watch (نفس الأغنية المحمّلة)');
     return;
   }
-  
+
   if (newSong?.uuid) {
+    // تبديل فعلي لأغنية أخرى → نُحمّلها بالكامل ونُسقط حارس التعديلات القديمة.
+    hasUnsavedEdits.value = false;
     if (newSong.authors?.composer) {
       previousValues.value.komponist = [...newSong.authors.composer];
     }
@@ -812,17 +1011,21 @@ watch(() => props.currentSong, (newSong, oldSong) => {
   }
 }, { deep: true, immediate: true });
 
+watch(() => props.currentSong?.authors?.lyricist, (newLyricist) => {
+  syncTextdichterFromSong(newLyricist);
+}, { deep: true, immediate: true });
+
+watch(() => props.currentSong?.authors?.verlog, (newVerlog) => {
+  syncVerlagFromSong(newVerlog);
+}, { deep: true, immediate: true });
+
+watch(() => props.currentSong?.authors?.c_line, (newCLine) => {
+  syncCLineFromSources(newCLine);
+}, { deep: true, immediate: true });
+
 // ──── مراقبة تغييرات releaseCLine ────
-watch(() => props.releaseCLine, (newCLine) => {
-  if (newCLine && newCLine.trim() !== '') {
-    const currentValues = cLineInputs.value.map(i => i.value);
-    if (!currentValues.includes(newCLine.trim())) {
-      cLineInputs.value = [{ value: newCLine.trim(), isHovered: false }];
-      previousValues.value.c_line = [newCLine.trim()];
-      console.log('📌 C-Line updated from Release:', newCLine);
-      emitTabCompletion();
-    }
-  }
+watch(() => props.releaseCLine, () => {
+  syncCLineFromSources(props.currentSong?.authors?.c_line);
 }, { immediate: true });
 
 // ──── دورة الحياة ────
@@ -833,19 +1036,36 @@ onMounted(() => {
   window.addEventListener('save-song-complete', handleSaveComplete);
 });
 
+// ✅ نُفرّغ أي حفظ مؤجّل عالق (debounce لم ينتهِ بعد) قبل مغادرة التاب أو تدميره.
+//   السبب: Infos1 يلفّ التابات بـ <keep-alive>، فالتبديل لتاب آخر لا يُطلق onUnmounted بل
+//   onDeactivated فقط. بدون التفريغ هنا كانت القيم المُلصَقة بسرعة تُفقَد إذا انتقل المستخدم
+//   قبل انتهاء مهلة الـ debounce (800ms).
+const flushPendingSave = () => {
+  if (debouncedSendUpdate.flush) {
+    debouncedSendUpdate.flush();
+  } else if (debouncedSendUpdate.cancel) {
+    debouncedSendUpdate.cancel();
+  }
+  if (saveQueue.value.length > 0 && !isSaving.value) {
+    processSaveQueue();
+  }
+};
+
+onDeactivated(() => {
+  console.log('💤 UrheberContent: deactivated (keep-alive) → flush الحفظ المؤجّل');
+  flushPendingSave();
+});
+
 onUnmounted(() => {
   console.log('🗑️ UrheberContent: تم إزالة المكون');
   window.removeEventListener('save-song-complete', handleSaveComplete);
-  
-  if (debouncedSendUpdate.cancel) {
-    debouncedSendUpdate.cancel();
+
+  if (savingTimeout) {
+    clearTimeout(savingTimeout);
+    savingTimeout = null;
   }
-  
-  if (saveQueue.value.length > 0) {
-    if (!isSaving.value) {
-      processSaveQueue();
-    }
-  }
+
+  flushPendingSave();
 });
 
 // ========== ✅ تصدير الدوال ==========
@@ -881,6 +1101,12 @@ defineExpose({
   align-self: stretch;
   position: relative;
   width: 100%;
+}
+
+/* ✅ تعطيل قسم Textdichter عند نوع instrumental */
+.section-disabled {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .title {

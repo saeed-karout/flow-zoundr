@@ -1,11 +1,11 @@
 <template>
   <div class="trends-chart-container">
-    <div class="trends-chart-box">
+    <div class="trends-chart-box" ref="chartRootRef">
       <div class="p">{{ title }}</div>
       
       <!-- Chart - Area Chart with circles -->
       <div class="chart-wrapper" ref="chartWrapperRef">
-        <div class="chart-container" ref="chartContainerRef">
+        <div v-if="hasData" class="chart-container" ref="chartContainerRef">
           <svg 
             class="trends-svg" 
             :viewBox="`0 0 ${svgWidth} ${svgHeight}`"
@@ -28,10 +28,11 @@
             />
             
             <!-- Line stroke -->
-            <path 
-              :d="linePath" 
-              :stroke="chartColor" 
-              stroke-width="2" 
+            <path
+              ref="linePathRef"
+              :d="linePath"
+              :stroke="chartColor"
+              stroke-width="2"
               fill="none"
               class="line-stroke"
             />
@@ -58,7 +59,7 @@
         </div>
         
         <!-- X-axis labels -->
-        <div class="chart-labels">
+        <div v-if="hasData" class="chart-labels">
           <div 
             v-for="(item, index) in displayedLabels" 
             :key="index"
@@ -73,6 +74,7 @@
       <div 
         v-if="tooltip.visible" 
         class="chart-tooltip"
+        :class="{ 'is-below': tooltip.below }"
         :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
       >
         <div class="tooltip-label">{{ tooltip.label }}</div>
@@ -139,6 +141,8 @@ const tooltip = ref({
 
 // Hover state for circle following
 const hoveredPoint = ref(null);
+const linePathRef = ref(null);
+const chartRootRef = ref(null);
 
 // ========== معرفة نوع الفلتر ==========
 const isLast7Days = computed(() => {
@@ -155,6 +159,11 @@ const updateSvgDimensions = () => {
 };
 
 // ========== Computed ==========
+// بلا بيانات لا نرسم خطّاً مسطّحاً ولا محور تواريخ فارغاً — يبقى الرقم (0) وحده.
+const hasData = computed(() =>
+  chartData.value.values.some((value) => Number(value) > 0)
+);
+
 const totalValue = computed(() => {
   return chartData.value.values.reduce((sum, val) => sum + val, 0);
 });
@@ -327,57 +336,82 @@ const formatNumber = (num) => {
   return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 };
 
-const getPositionOnLine = (xPos) => {
+// ✅ أقرب نقطة بيانات (يوم) لموضع الماوس — تُستخدم للتولتيب فقط، حتى يُظهر كل يوم
+//    رقمه المحدّد من الريسبونس (بدل الاستيفاء الذي كان يُظهر أرقاماً متغيّرة).
+const getNearestPoint = (xPos) => {
   const points = chartPoints.value;
-  if (points.length < 2) return null;
-  
-  for (let i = 0; i < points.length - 1; i++) {
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    
-    if (xPos >= p1.x && xPos <= p2.x && p2.x !== p1.x) {
-      const t = (xPos - p1.x) / (p2.x - p1.x);
-      const y = p1.y + (p2.y - p1.y) * t;
-      const value = p1.value + (p2.value - p1.value) * t;
-      const labelIndex = Math.floor(i + t);
-      
-      return { 
-        y, 
-        value, 
-        label: chartLabels.value[labelIndex] || chartLabels.value[i] || '' 
-      };
+  if (points.length === 0) return null;
+
+  let nearest = points[0];
+  let minDist = Math.abs(points[0].x - xPos);
+  for (let i = 1; i < points.length; i++) {
+    const dist = Math.abs(points[i].x - xPos);
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = points[i];
     }
   }
-  
-  return null;
+  return nearest;
+};
+
+// ✅ النقطة الحقيقية على المنحنى (الـ path) عند إحداثي x المطلوب — تتحرك الدائرة
+//    بسلاسة مع الماوس وتبقى دائماً على الخط (المنحنى Bézier وليس استيفاءً خطياً).
+const getPointOnPathAtX = (targetX) => {
+  const path = linePathRef.value;
+  if (!path || typeof path.getTotalLength !== 'function') return null;
+
+  const total = path.getTotalLength();
+  if (total === 0) return null;
+
+  // x يتزايد باطّراد على طول الخط → بحث ثنائي بطول المسار للوصول إلى x المطلوب.
+  let lo = 0;
+  let hi = total;
+  let best = path.getPointAtLength(0);
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    const p = path.getPointAtLength(mid);
+    best = p;
+    if (Math.abs(p.x - targetX) < 0.25) break;
+    if (p.x < targetX) lo = mid; else hi = mid;
+  }
+  return best;
 };
 
 const showTooltipOnLine = (event) => {
   const svg = event.target.closest('.trends-svg');
   if (!svg) return;
-  
+
   const rect = svg.getBoundingClientRect();
   const x = event.clientX - rect.left;
-  const containerRect = chartWrapperRef.value?.getBoundingClientRect();
-  
-  if (containerRect) {
-    const linePos = getPositionOnLine(x);
-    if (linePos) {
-      // Update hovered point for circle
-      hoveredPoint.value = {
-        x: x,
-        y: linePos.y
-      };
-      
-      tooltip.value = {
-        visible: true,
-        x: event.clientX - containerRect.left - 30,
-        y: (linePos.y / svgHeight.value) * rect.height + padding.top - 15,
-        value: Math.round(linePos.value),
-        label: linePos.label
-      };
-    }
-  }
+
+  // التولتيب position: absolute داخل الجذر، فصندوق احتوائه هو الجذر لا .chart-wrapper.
+  // القياس من الورابر كان يزيحه بمقدار (الترويسة + الفجوة + الحشو) إلى الأعلى.
+  const rootRect = chartRootRef.value?.getBoundingClientRect();
+  if (!rootRect) return;
+
+  // الدائرة: تتبع الماوس بسلاسة على المنحنى نفسه.
+  const curvePoint = getPointOnPathAtX(x) || getNearestPoint(x);
+  // التولتيب: رقم اليوم المحدّد (أقرب نقطة).
+  const nearest = getNearestPoint(x);
+  if (!curvePoint || !nearest) return;
+
+  hoveredPoint.value = {
+    x: curvePoint.x,
+    y: curvePoint.y
+  };
+
+  // موضع النقطة رأسياً داخل البطاقة (من أعلى الجذر). الرفع فوقها يتمّ
+  // بـ translateY(-100%) في الـ CSS، فيتبع ارتفاع التولتيب الفعلي ولا يغطّي الدائرة.
+  const pointY = rect.top - rootRect.top + (curvePoint.y / svgHeight.value) * rect.height;
+
+  tooltip.value = {
+    visible: true,
+    x: event.clientX - rootRect.left - 30,
+    y: pointY,
+    below: pointY < 60,
+    value: Math.round(nearest.value),
+    label: nearest.label
+  };
 };
 
 const hideTooltip = () => {
@@ -420,6 +454,7 @@ const buildApiParams = () => {
     } else if (props.filters.dateType === 'last_month') {
       params.append('date-type', 'last_month');
     } else if (props.filters.dateType === 'custom' && props.filters.startDate && props.filters.endDate) {
+      params.append('date-type', 'custom');
       params.append('start_date', props.filters.startDate);
       params.append('end_date', props.filters.endDate);
     } else {
@@ -427,12 +462,9 @@ const buildApiParams = () => {
     }
   }
   
-  if (props.filters?.startDate && props.filters.dateType !== 'custom') {
-    params.append('start_date', props.filters.startDate);
-  }
-  if (props.filters?.endDate && props.filters.dateType !== 'custom') {
-    params.append('end_date', props.filters.endDate);
-  }
+  // التواريخ تُرسَل مع custom فقط، وهي مُضافة أعلاه في فرعه.
+  // سابقاً كانت تُرفق مع كلّ preset — وهذا تحديداً ما ولّد
+  // date-type=last_7_days&start_date=…&end_date=…
   
   // Array filters
   if (props.filters?.songUuid?.length) {
@@ -529,16 +561,31 @@ const handleResize = () => {
 };
 
 // ========== Lifecycle ==========
-onMounted(() => {
-  fetchData();
-  window.addEventListener('resize', handleResize);
-  
-  if (chartContainerRef.value) {
+// الحاوية تُنشأ فقط عند وجود بيانات، فقد تكون غائبة وقت التركيب.
+const observeContainer = () => {
+  if (!chartContainerRef.value) return;
+  if (!resizeObserver) {
     resizeObserver = new ResizeObserver(() => {
       updateSvgDimensions();
     });
-    resizeObserver.observe(chartContainerRef.value);
   }
+  resizeObserver.disconnect();
+  resizeObserver.observe(chartContainerRef.value);
+};
+
+// عند وصول البيانات تظهر الحاوية → نربط المراقب ونقيس أبعادها.
+watch(hasData, (value) => {
+  if (!value) return;
+  nextTick(() => {
+    observeContainer();
+    updateSvgDimensions();
+  });
+});
+
+onMounted(() => {
+  fetchData();
+  window.addEventListener('resize', handleResize);
+  observeContainer();
 });
 
 onUnmounted(() => {
@@ -679,7 +726,14 @@ onUnmounted(() => {
   z-index: 100;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   transition: opacity 0.2s ease;
-  transform: translateX(24px);
+  /* يُرفع بكامل ارتفاعه فوق النقطة + 12px فجوة، فلا يغطّي الدائرة أبداً
+     مهما طال نصّه (رقم طويل أو تاريخ أعرض). */
+  transform: translateX(24px) translateY(calc(-100% - 12px));
+}
+
+/* قرب قمّة البطاقة لا متّسع فوقه — يُقلَب تحت النقطة بدل أن يُقصّ. */
+.chart-tooltip.is-below {
+  transform: translateX(24px) translateY(12px);
 }
 
 .tooltip-label {

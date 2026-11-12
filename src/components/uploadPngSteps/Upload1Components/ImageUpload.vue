@@ -75,6 +75,7 @@ const emit = defineEmits(['update:uploadedImage', 'file-selected']);
 
 const isDragging = ref(false);
 const errorMessage = ref('');
+let errorTimer = null;
 const localUploading = ref(false);
 const localProgress = ref(0);
 const circleSize = ref(280);
@@ -226,23 +227,32 @@ const handleFileSelect = (e) => {
   e.target.value = '';
 };
 
+const setError = (msg) => {
+  errorMessage.value = msg;
+  if (errorTimer) clearTimeout(errorTimer);
+  errorTimer = setTimeout(() => {
+    errorMessage.value = '';
+  }, 3000);
+};
+
 const processFile = async (file) => {
   errorMessage.value = '';
-  
+  if (errorTimer) clearTimeout(errorTimer);
+
   if (!validateFileType(file)) {
-    errorMessage.value = 'Nur JPEG Dateien sind erlaubt.';
+    setError('Nur JPEG Dateien sind erlaubt.');
     return;
   }
-  
+
   if (!validateFileSize(file)) {
-    errorMessage.value = 'Maximale Dateigröße ist 10 MB.';
+    setError('Maximale Dateigröße ist 10 MB.');
     return;
   }
-  
+
   try {
     await validateImageDimensions(file);
   } catch (err) {
-    errorMessage.value = err;
+    setError(err);
     return;
   }
   
@@ -292,6 +302,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   isMounted.value = false;
+  if (errorTimer) clearTimeout(errorTimer);
   window.removeEventListener('resize', updateCircleSize);
 });
 </script>
@@ -505,7 +516,7 @@ onBeforeUnmount(() => {
   font-weight: 500;
   background: var(--secondary);
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 20px;
   border: 1px solid var(--Strawberry);
   text-align: center;
   z-index: 20;
@@ -557,7 +568,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.circle-progress__circle-foreground) {
-  stroke: var(--Strawberry, #DE1456) !important;
+  // stroke: var(--Strawberry, #DE1456) !important;
   transition: stroke-dashoffset 0.1s linear;
 }
 </style>

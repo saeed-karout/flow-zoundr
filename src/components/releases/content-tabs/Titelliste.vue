@@ -20,17 +20,17 @@
         <div class="line">
           <div class="value">{{ index + 1 }}</div>
           <div class="value weight-7">
-            {{ song.title || 'Unbenannter Titel' }}
-            <span v-if="song.subtitle" class="subtitle-small">({{ song.subtitle }})</span>
+            {{ toTitleCase(song.title || '—') }}
+            <span v-if="song.subtitle" class="subtitle-small">({{ toTitleCase(song.subtitle) }})</span>
           </div>
-          <div class="value weight-7">{{ song.song_type || 'Original' }}</div> 
-          <div class="value">{{ song.duration || '00:00' }}</div> 
-          <div class="value">{{ song.lyrics_language || 'unbekannt' }}</div>
+          <div class="value weight-7">{{ toTitleCase(song.song_type || '—') }}</div> 
+          <div class="value">{{ formatDuration(song.duration) }}</div> 
+          <div class="value">{{ toTitleCase(getLanguageDisplayName(song.lyrics_language) || '—') }}</div>
           <div class="value">{{ hasDeals(song) ? 'Ja' : 'Nein' }}</div>
-          <div class="value">{{ song.isrc || 'kein ISRC' }}</div>
+          <div class="value">{{ toTitleCase(song.isrc || '—') }}</div>
           <div class="play-button">
             <div class="play-music" @click="playSong(song)">
-              <div class="icon"></div>
+              <div class="icon" :class="{ 'is-pause': playingUuid === song.uuid }"></div>
             </div>
           </div>
         </div>
@@ -42,7 +42,10 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { toTitleCase } from '@/utils/formatText';
+import apiRequest from '@/lib/apiRequest';
+import { computed, ref, onBeforeUnmount, onMounted } from 'vue';
+import { storage_url } from '@/constants';
 
 const props = defineProps({
   release: {
@@ -50,6 +53,53 @@ const props = defineProps({
     default: () => ({})
   }
 });
+
+// أسماء اللغات من GET /languages — نفس مصدر ومنطق getLanguageDisplayName في InfosContent.
+// الـ API يحفظ الرمز (ar / sq / en_MT) والقائمة تربطه بالاسم.
+const languages = ref([]);
+
+onMounted(async () => {
+  try {
+    const response = await apiRequest.get('/languages');
+    languages.value = Array.isArray(response.data) ? response.data : (response.data?.data ?? []);
+  } catch (error) {
+    console.warn('⚠️ [Titelliste] فشل تحميل اللغات:', error?.message || error);
+  }
+});
+
+// لا تُعرض الأكواد أبداً. القيمة قد تكون رمز لغة مع منطقة (en_MT / en-MT)
+// بينما قائمة /languages تحوي اللغة الأساسية فقط (en) — فكانت المطابقة الحرفية
+// تفشل ويُعرض الرمز نفسه ("En MT"). ترتيب المحاولات:
+//   1) القائمة بمطابقة مُطبّعة (حالة الأحرف، _ و -)
+//   2) اللغة الأساسية من القائمة + اسم المنطقة    en_MT → English (Malta)
+//   3) Intl.DisplayNames بالألمانية                         sq → Albanisch
+//   4) — (بدل الرمز)
+const langKey = (v) => String(v || '').trim().toLowerCase().replace(/-/g, '_');
+
+const intlName = (type, code) => {
+  try {
+    const name = new Intl.DisplayNames(['de'], { type }).of(code);
+    return name && name.toLowerCase() !== String(code).toLowerCase() ? name : '';
+  } catch {
+    return '';
+  }
+};
+
+const getLanguageDisplayName = (value) => {
+  if (!value) return '';
+  const key = langKey(value);
+  const [base, region] = key.split('_');
+
+  const exact = languages.value.find(l => langKey(l.value) === key);
+  if (exact?.name) return exact.name;
+
+  const baseLang = languages.value.find(l => langKey(l.value) === base);
+  const regionName = region ? intlName('region', region.toUpperCase()) : '';
+  if (baseLang?.name) return regionName ? `${baseLang.name} (${regionName})` : baseLang.name;
+
+  const tag = region ? `${base}-${region.toUpperCase()}` : base;
+  return intlName('language', tag) || intlName('language', base) || '—';
+};              
 
 const songs = computed(() => {
   return Array.isArray(props.release?.songs) ? props.release.songs : [];
@@ -72,16 +122,65 @@ const hasDeals = (song) => {
 
 // حساب مدة الأغنية (إذا كانت متوفرة)
 const formatDuration = (seconds) => {
-  if (!seconds) return '00:00';
+  if (!seconds) return '—'; // لا مدّة متاحة — لا '00:00' الذي يبدو كقيمة حقيقية
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.floor(seconds % 60);
   return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
 };
 
-const playSong = (song) => {
-  console.log('Play song:', song.title);
-  // يمكن إضافة منطق تشغيل الأغنية هنا
+// ========== تشغيل / إيقاف الأغنية ==========
+//   الزر يتحوّل إلى pause أثناء التشغيل فقط — بلا أي تأثيرات بصرية أخرى.
+const playingUuid = ref(null);
+let audio = null;
+
+const buildAudioUrl = (path) => {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  const fileName = String(path).split('/').pop();
+  return `${storage_url}/audio/${encodeURIComponent(fileName)}`;
 };
+
+const stopPlayback = () => {
+  if (audio) {
+    audio.pause();
+    audio.src = '';
+    audio = null;
+  }
+  playingUuid.value = null;
+};
+
+const playSong = (song) => {
+  // نفس الأغنية قيد التشغيل → إيقاف مؤقّت.
+  if (playingUuid.value === song.uuid) {
+    stopPlayback();
+    return;
+  }
+
+  // أغنية أخرى → نوقف الحالية أولاً (مشغّل واحد في كل مرة).
+  stopPlayback();
+
+  const url = buildAudioUrl(song.song_file);
+  if (!url) {
+    console.warn('⚠️ [Titelliste] لا يوجد ملف صوتي لهذه الأغنية:', song.title);
+    return;
+  }
+
+  audio = new Audio(url);
+  audio.addEventListener('ended', stopPlayback);
+  audio.addEventListener('error', () => {
+    console.error('❌ [Titelliste] تعذّر تشغيل الملف:', url);
+    stopPlayback();
+  });
+
+  playingUuid.value = song.uuid;
+  audio.play().catch(err => {
+    console.error('❌ [Titelliste] فشل التشغيل:', err);
+    stopPlayback();
+  });
+};
+
+// إيقاف الصوت عند مغادرة التبويب حتى لا يستمرّ في الخلفية.
+onBeforeUnmount(stopPlayback);
 </script>
 
 <style lang="scss" scoped>
@@ -100,7 +199,7 @@ const playSong = (song) => {
 .column1 {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   flex: 1 0 0;
 }
@@ -126,8 +225,11 @@ const playSong = (song) => {
   width: 120px;
 }
 
+/* قيم التابات الثلاثة (Titelliste / Urheber / Mitwirkende) موحّدة:
+   18px افتراضياً و16px بين 1440 و1599، وتباعد أحرف 0.9px. */
 .value {
   font-size: 18px;
+  letter-spacing: 0.9px;
 }
 
 .head-title:nth-child(1),
@@ -142,11 +244,25 @@ const playSong = (song) => {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
   // overflow: hidden;
+  letter-spacing: 0.9px;
 }
 
 .head-title:nth-child(3),
 .value:nth-child(3) {
   width: 160px;
+}
+
+/* ✅ Version: قصّ النص الطويل بـ … عند تجاوز عرض العمود (مثل original_instrumental).
+   الـ padding/margin المتعاكسان مقصودان: overflow: hidden يقصّ عند صندوق الحشو،
+   ولأن line-height هنا 0.8 (أقصر من ارتفاع الحرف) كان القصّ سيأكل أعلى الحروف
+   وأسفلها — وهو سبب تعطيل overflow بتعليق في عمود العنوان. الحشو يوسّع منطقة
+   القصّ رأسياً، والهامش السالب يلغي أثره على التخطيط فلا يتغير ارتفاع الصف. */
+.value:nth-child(3) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-block: 6px;
+  margin-block: -6px;
 }
 
 .head-title:nth-child(7),
@@ -165,16 +281,16 @@ const playSong = (song) => {
   font-style: normal;
   font-weight: 300;
   line-height: .8;
-  letter-spacing: 0.7px;
+  letter-spacing: 0.9px;
   opacity: 0.7;
 }
 
 .line {
   display: flex;
   justify-content: flex-end;
-  align-items: center;
   gap: 20px;
   align-self: stretch;
+  align-items: center;
 }
 
 .Trenner {
@@ -188,7 +304,7 @@ const playSong = (song) => {
   display: flex;
   width: 56px;
   flex-direction: column;
-  align-items: flex-end;
+ 
   gap: 10px;
 }
 
@@ -217,12 +333,29 @@ const playSong = (song) => {
   filter: brightness(0) invert(1);
 }
 
+/* ✅ أثناء التشغيل: شريطا إيقاف بدل المثلّث — بنفس القياس واللون،
+   ولا شيء آخر يتغيّر في الزر. مرسومان بـ CSS لأنّه لا توجد أيقونة pause في المشروع. */
+.play-music .icon.is-pause {
+  background-image: none;
+  filter: none;
+  display: flex;
+  justify-content: space-between;
+}
+
+.play-music .icon.is-pause::before,
+.play-music .icon.is-pause::after {
+  content: '';
+  width: 3px;
+  height: 100%;
+  background: #fff;
+}
+
 .weight-7 {
   font-weight: 700;
 }
 
 .subtitle-small {
-  font-size: 0.9em;
+  font-size: inherit; /* نفس حجم القيمة — التمييز بالشفافية والوزن لا بالحجم */
   opacity: 0.7;
   font-weight: 400;
 }

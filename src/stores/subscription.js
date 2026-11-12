@@ -1,3 +1,4 @@
+// stores/subscription.js
 import { defineStore } from 'pinia';
 import { subscriptionService } from '@/services/subscriptionService';
 

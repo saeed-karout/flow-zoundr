@@ -1159,11 +1159,19 @@ html, body {
   width: 219px;
 }
 
+/* :autofill المعياريّة لفايرفوكس؛ البادئة لكروم وسفاري. */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
-input:-webkit-autofill:active {
+input:-webkit-autofill:active,
+input:autofill,
+input:autofill:hover,
+input:autofill:focus,
+input:autofill:active {
   -webkit-box-shadow: 0 0 0 1000px var(--primary) inset !important;
+  box-shadow: 0 0 0 1000px var(--primary) inset !important;
+  /* فايرفوكس لا يعرف ‎-webkit-text-fill-color‎. */
+  color: #a3b3bc !important;
   -webkit-text-fill-color: #a3b3bc !important;
   caret-color: #a3b3bc !important;
 }

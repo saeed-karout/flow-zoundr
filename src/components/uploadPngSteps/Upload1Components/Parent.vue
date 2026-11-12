@@ -1,5 +1,6 @@
+<!-- src/components/uploadPngSteps/Upload1Components/Parent.vue -->
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, nextTick, inject } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, onDeactivated, nextTick, inject } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { debounce } from '@/utils/debounce';
 import apiRequest from '@/lib/apiRequest';
@@ -60,11 +61,14 @@ const isEditMode = computed(() => {
 // دالة الانتقال للخطوة التالية
 const handleNextStep = () => {
   console.log('Weiter zu Songs تم الضغط → تمرير next للأعلى');
-  
-  // ✅ إزالة showTypeSelection من query عند الانتقال من Metas
+
+  // ✅ نُفرّغ أي حفظ Release مؤجّل (debounce 2s) قبل الانتقال — وإلا فقيمة اختيرت للتوّ
+  //    (مثل السعر) والمستخدم انتقل قبل انتهاء المهلة لا تُرسَل إطلاقاً.
+  flushPendingReleaseSave();
+
   const { showTypeSelection: _, ...restQuery } = route.query;
   router.replace({ query: restQuery });
-  
+
   emit('next');
 };
 
@@ -165,6 +169,10 @@ const isCalendarVisible = ref(false);
 const showPopup = ref(false);
 const showNewRight = ref(false);
 const showNewRight2 = ref(false);
+// True during the NewRight2 → NewRight back-transition (there's a 500ms gap where
+// both show flags are false). While true, we suppress RightSection so it doesn't
+// flash in that gap — nothing shows, then NewRightSection appears.
+const isSectionTransitioning = ref(false);
 const isSlidingUp = ref(false);
 const isSlidingOut = ref(false);
 const isNewRight2Visible = ref(false);
@@ -300,7 +308,6 @@ const uploadCoverImage = async (file) => {
     return;
   }
   
-  // ✅ منع التحميل المتكرر
   if (isUploading.value) {
     console.log('⏳ جاري تحميل الصورة بالفعل');
     return;
@@ -357,7 +364,6 @@ const uploadCoverImage = async (file) => {
       serverCoverUrl.value = fullUrl;
       uploadedImage.value = fullUrl;
       
-      // ✅ تحديث serverCoverUrl في الـ Store
       releaseStore.setServerCoverUrl(fullUrl);
       
       emit('cover-updated', { coverUrl: fullUrl });
@@ -405,7 +411,7 @@ const uploadCoverImage = async (file) => {
   }
 };
 
-// ========== 🔥 دالة handleFileUpload المعدلة ==========
+// ========== 🔥 دالة handleFileUpload ==========
 const handleFileUpload = async (file) => {
   console.log('📸 Parent: تم استلام ملف جديد:', file.name, file.type, 'حجم:', (file.size / 1024 / 1024).toFixed(2), 'MB');
 
@@ -434,16 +440,13 @@ const handleFileUpload = async (file) => {
   
   pendingCoverFile.value = file;
   
-  // 🔥🔥🔥 التحقق من وجود Release
   const hasRelease = !!(releaseUuid.value || releaseStore.currentReleaseId || props.releaseUuid);
   
   if (hasRelease) {
     console.log('📌 يوجد Release، تحديث الصورة فقط (UUID:', releaseUuid.value || releaseStore.currentReleaseId || props.releaseUuid, ')');
-    // ✅ تحديث الصورة فقط، لا تنشئ Release جديد
     await uploadCoverImage(file);
   } else {
     console.log('📌 لا يوجد releaseUuid، إنشاء Release جديد مع الصورة');
-    // ✅ إنشاء Release جديد مع الصورة
     await createReleaseWithAllData(file);
   }
 };
@@ -513,28 +516,33 @@ const recommendedDateForPlaceholder = computed(() => {
 });
 
 const calculateRecommendedDateFrom = (dateStr) => {
-  if (!dateStr) {
+  const defaultRecommended = () => {
     const today = dayjs();
     let targetDate = today.add(14, 'day');
     const currentDay = targetDate.day();
     let daysToAdd = currentDay <= 5 ? 5 - currentDay : (5 - currentDay) + 7;
     targetDate = targetDate.add(daysToAdd, 'day');
     return targetDate.format('DD/MM/YY');
+  };
+
+  if (!dateStr || typeof dateStr !== 'string') {
+    return defaultRecommended();
   }
-  
-  const [day, month, yearShort] = dateStr.split('/');
-  const year = parseInt(yearShort) < 50 ? 2000 + parseInt(yearShort) : 1900 + parseInt(yearShort);
-  const date = dayjs(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`);
-  
-  if (!date.isValid()) {
-    const today = dayjs();
-    let targetDate = today.add(14, 'day');
-    const currentDay = targetDate.day();
-    let daysToAdd = currentDay <= 5 ? 5 - currentDay : (5 - currentDay) + 7;
-    targetDate = targetDate.add(daysToAdd, 'day');
-    return targetDate.format('DD/MM/YY');
+
+  let date;
+  const parts = dateStr.split('/');
+  if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+    const [day, month, yearShort] = parts;
+    const year = parseInt(yearShort) < 50 ? 2000 + parseInt(yearShort) : 1900 + parseInt(yearShort);
+    date = dayjs(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+  } else {
+    date = dayjs(dateStr);
   }
-  
+
+  if (!date || !date.isValid()) {
+    return defaultRecommended();
+  }
+
   let targetDate = date.add(14, 'day');
   const currentDay = targetDate.day();
   let daysToAdd = 0;
@@ -598,9 +606,8 @@ const resetReturningFromSongs = () => {
   console.log('🔄 [Parent] resetReturningFromSongs called');
 };
 
-// ========== 🔥 onMounted المعدل ==========
+// ========== 🔥 onMounted ==========
 onMounted(async () => {
-  // 🔥 إظهار الـ loading
   isLoading.value = true;
   
   document.addEventListener('click', handleGlobalClick);
@@ -614,7 +621,6 @@ onMounted(async () => {
   console.log('📌 isEditMode.value:', isEditMode.value);
   console.log('📌 props.skipCreation:', props.skipCreation);
   
-  // 🔥 إذا كان هناك releaseUuid من props أو من المتجر، نعتبر الـ Release موجوداً
   const hasValidReleaseId = props.releaseUuid || releaseStore.currentReleaseId || route.params.releaseUuid;
   const isInEditMode = isEditMode.value;
   const isNewRelease = !hasValidReleaseId && !isInEditMode;
@@ -627,7 +633,6 @@ onMounted(async () => {
     console.log('📦 تم تعيين releaseUuid:', uuid);
   }
   
-  // 🔥🔥🔥 استعادة الصورة من الـ Store أولاً (أولوية قصوى)
   const storeCoverUrl = releaseStore.serverCoverUrl;
   
   if (storeCoverUrl && isRealImage(storeCoverUrl) && !uploadedImage.value && !serverCoverUrl.value) {
@@ -640,7 +645,6 @@ onMounted(async () => {
     }
   }
   
-  // 🔥🔥🔥 استعادة الصورة من localStorage (ثانوية)
   const savedCoverUrl = localStorage.getItem('upload_server_cover_url') || 
                         localStorage.getItem('temp_cover_full_url');
   
@@ -654,7 +658,6 @@ onMounted(async () => {
     }
   }
   
-  // ✅ استخدام serverCoverUrl من props إذا كان موجوداً وحقيقياً
   if (props.serverCoverUrl && isRealImage(props.serverCoverUrl) && !uploadedImage.value) {
     console.log('🖼️ توجد صورة من props.serverCoverUrl:', props.serverCoverUrl);
     uploadedImage.value = props.serverCoverUrl;
@@ -665,12 +668,8 @@ onMounted(async () => {
     }
   }
   
-  // ✅ إذا كان هناك releaseUuid، لا نمسح الصورة
   if (hasValidReleaseId) {
     console.log('📌 يوجد releaseUuid، الحفاظ على الصورة');
-    // لا نمسح الصورة
-    
-    // ✅ إذا كان هناك صورة في الـ Store، استخدمها
     if (releaseStore.serverCoverUrl && isRealImage(releaseStore.serverCoverUrl) && !uploadedImage.value) {
       uploadedImage.value = releaseStore.serverCoverUrl;
       serverCoverUrl.value = releaseStore.serverCoverUrl;
@@ -686,7 +685,6 @@ onMounted(async () => {
     return;
   }
   
-  // 🔥 استرجاع الصورة من localStorage (مرة أخرى للتأكيد) - فقط إذا لم تكن موجودة
   if (!uploadedImage.value && !serverCoverUrl.value) {
     const tempCoverFullUrl = localStorage.getItem('temp_cover_full_url');
     if (tempCoverFullUrl) {
@@ -726,7 +724,6 @@ onMounted(async () => {
           fillReleaseData(release);
           isReleaseCreated.value = true;
           
-          // 🔥 إعادة تعيين حالة العودة من Songs بعد تحميل البيانات
           setTimeout(() => {
             resetReturningFromSongs();
           }, 500);
@@ -755,7 +752,6 @@ onMounted(async () => {
   
   if (releaseStore.currentReleaseId && !releaseUuid.value) {
     console.log('🆕 إنشاء Release جديد - لا نجلب بيانات قديمة');
-    // ✅ لا نمسح الصورة إذا كانت موجودة
     isLoading.value = false;
     isDataLoaded.value = true;
     return;
@@ -774,7 +770,6 @@ onMounted(async () => {
         fillReleaseData(release);
         isReleaseCreated.value = true;
         
-        // 🔥 إعادة تعيين حالة العودة من Songs بعد تحميل البيانات
         setTimeout(() => {
           resetReturningFromSongs();
         }, 500);
@@ -803,7 +798,6 @@ onMounted(async () => {
         fillReleaseData(release);
         isReleaseCreated.value = true;
         
-        // 🔥 إعادة تعيين حالة العودة من Songs بعد تحميل البيانات
         setTimeout(() => {
           resetReturningFromSongs();
         }, 500);
@@ -832,7 +826,6 @@ watch(
       uploadedImage.value = newUrl;
       serverCoverUrl.value = newUrl;
       
-      // ✅ تحديث _startComplete
       if (releaseStore && !releaseStore._startComplete) {
         releaseStore.setStartComplete(true);
       }
@@ -842,9 +835,16 @@ watch(
 );
 
 onUnmounted(() => {
+  // ✅ نُفرّغ أي حفظ Release مؤجّل قبل التدمير كي لا تُفقَد قيمة اختيرت للتوّ.
+  flushPendingReleaseSave();
   document.removeEventListener('click', handleGlobalClick);
   document.removeEventListener('click', handleClickOutside);
   document.body.style.overflow = '';
+});
+
+// عند التبديل ضمن keep-alive (إن وُجد) لا يعمل onUnmounted، فنُفرّغ هنا أيضاً.
+onDeactivated(() => {
+  flushPendingReleaseSave();
 });
 
 // ========== دوال إعادة التعيين ==========
@@ -889,8 +889,15 @@ const determineMetasPage = (release) => {
     console.warn('⚠️ No release data for determineMetasPage');
     return 'right';
   }
+
+  // ✏️ المستخدم قادم من Korrektur لتصحيح حقل بعينه، فلا نقفز به إلى آخر
+  //    صفحة لمجرّد امتلاء الحقول (hasAdvancedData).
+  const ct = releaseStore.editTarget;
+  if (ct && ct.step === 2 && ct.view) {
+    console.log('✏️ صفحة الهدف:', ct.view);
+    return ct.view;
+  }
   
-  // 🔥 أولاً: التحقق من وجود بيانات متقدمة (NewRight2)
   const hasAdvancedData = release.label || 
                          release.production_year || 
                          release.c_line_name || 
@@ -903,7 +910,6 @@ const determineMetasPage = (release) => {
     return 'newRight2';
   }
   
-  // 🔥 ثانياً: التحقق من وجود بيانات السعر والنوع (NewRight)
   const hasPricingData = release.release_price || 
                         release.price_per_song || 
                         release.main_genre || 
@@ -914,27 +920,23 @@ const determineMetasPage = (release) => {
     return 'newRight';
   }
   
-  // 🔥 ثالثاً: محاولة الحصول على الصفحة من query
   let savedPage = route.query.lastPage || null;
   
-  // 🔥 رابعاً: إذا لم تكن في query، استخدم metasPage من الـ Store
   if (!savedPage) {
     savedPage = releaseStore.metasPage || null;
     console.log('📌 metasPage from Store:', savedPage);
   }
   
-  // 🔥 خامساً: إذا كان هناك savedPage، استخدمه
   if (savedPage) {
     console.log(`📌 استعادة آخر صفحة محفوظة: ${savedPage}`);
     return savedPage;
   }
   
-  // 🔥 الصفحة الافتراضية
   console.log('📌 الصفحة الافتراضية → Right');
   return 'right';
 };
 
-// ========== 🔥 updateStoreMetasData المعدلة ==========
+// ========== 🔥 updateStoreMetasData ==========
 const updateStoreMetasData = () => {
   const artists = artistInputs.value
     .filter(input => input.searchQuery && input.searchQuery.trim() !== '')
@@ -949,7 +951,6 @@ const updateStoreMetasData = () => {
   
   if (isReturningFromSongs) {
     console.log('🔄 [Parent] عودة من Songs، تحديث metasData فقط دون تغيير isMetasComplete');
-    // ✅ فقط نحدث البيانات في metasData دون تغيير isMetasComplete
     releaseStore.metasData = {
       ...releaseStore.metasData,
       title: searchQuery2.value || '',
@@ -993,14 +994,13 @@ const updateStoreMetasData = () => {
     catalogNumber: catalogNumber.value || ''
   });
   
-  // 🔥 تحديث isMetasComplete في الـ Store - التحقق من وجود songUuid
+  // 🔥 تحديث isMetasComplete في الـ Store
   const hasSongUuid = !!(releaseStore.songUuid || route.params.songUuid || route.query.song);
   
   if (hasSongUuid) {
     console.log('🎵 [Parent] يوجد songUuid، الحفاظ على isMetasComplete:', releaseStore.isMetasComplete);
   } else {
     const isComplete = hasTitle && hasArtists && hasReleaseDate;
-    // ✅ فقط إذا كانت القيمة مختلفة، نقوم بالتحديث
     if (releaseStore.isMetasComplete !== isComplete) {
       releaseStore.setMetasComplete(isComplete);
       console.log('📌 Store: isMetasComplete set to', isComplete);
@@ -1010,7 +1010,7 @@ const updateStoreMetasData = () => {
     console.log('📌 Data:', { hasTitle, hasArtists, hasReleaseDate });
   }
   
-  // 🔥 تحديث حالة الأغاني من draftRelease (الذي يأتي من UploadPNG)
+  // 🔥 تحديث حالة الأغاني من draftRelease
   if (draftRelease?.value?.songs) {
     const songs = draftRelease.value.songs;
     const allSongsComplete = songs.every(song => {
@@ -1030,7 +1030,7 @@ const updateStoreMetasData = () => {
   }
 };
 
-// ========== 🔥 fillReleaseData (المعدلة) ==========
+// ========== 🔥 fillReleaseData ==========
 const fillReleaseData = (release) => {
   if (!release) {
     console.warn('⚠️ لا توجد بيانات لملءها');
@@ -1039,6 +1039,13 @@ const fillReleaseData = (release) => {
   
   console.log('📝 ملء البيانات من الـ Release:', release.uuid);
   
+  // ✅ حفظ حالة isMetasComplete و isSongsComplete الحالية
+  const currentMetasComplete = releaseStore.isMetasComplete;
+  const currentSongsComplete = releaseStore.isSongsComplete;
+  
+  // ✅ تعيين _isReturningFromSongs = true لمنع تغيير isMetasComplete
+  releaseStore._isReturningFromSongs = true;
+  
   // 🔥 تعيين releaseUuid
   releaseUuid.value = release.uuid;
   releaseStore.setReleaseType(release.release_type);
@@ -1046,11 +1053,9 @@ const fillReleaseData = (release) => {
   isReleaseCreated.value = true;
 
   // ========== 1. تعبئة البيانات الأساسية ==========
-  // 🔥 العنوان (title)
   searchQuery2.value = release.title || '';
   isForm2Selected.value = searchQuery2.value.trim() !== '';
   
-  // 🔥 العنوان الفرعي (subtitle)
   searchQuery3.value = release.subtitle || '';
   if (searchQuery3.value.trim() !== '') {
     isForm3Active.value = true;
@@ -1060,7 +1065,6 @@ const fillReleaseData = (release) => {
     isForm3Selected.value = false;
   }
   
-  // 🔥 تاريخ الإصدار (release_date)
   if (release.release_date) {
     const dateObj = dayjs(release.release_date);
     if (dateObj.isValid()) {
@@ -1072,41 +1076,34 @@ const fillReleaseData = (release) => {
     isForm4Selected.value = false;
   }
   
-  // 🔥 السعر (release_price)
-  releasePrice.value = release.release_price || '';
+  // ✅ نعتمد قيمة الخادم أولاً، وإن غابت في هذا الردّ (استجابة جزئية / سباق تحميل)
+  //    نرجع لقيمة الـ store المحفوظة كي لا تظهر 0,00 EUR رغم وجود سعر على الخادم.
+  releasePrice.value = release.release_price ?? releaseStore.metasData?.releasePrice ?? '';
   isReleasePriceSelected.value = releasePrice.value !== '' && releasePrice.value !== null && releasePrice.value !== undefined;
-  
-  // 🔥 سعر الأغنية (price_per_song)
-  songPrice.value = release.price_per_song || '';
+
+  songPrice.value = release.price_per_song ?? releaseStore.metasData?.songPrice ?? '';
   isSongPriceSelected.value = songPrice.value !== '' && songPrice.value !== null && songPrice.value !== undefined;
   
-  // 🔥 النوع الرئيسي (main_genre)
   mainGenre.value = release.main_genre || '';
   isMainGenreSelected.value = mainGenre.value.trim() !== '';
   
-  // 🔥 النوع الفرعي (sub_genre)
   subGenre.value = release.sub_genre || '';
   isSubGenreSelected.value = subGenre.value.trim() !== '';
   
-  // 🔥 التسمية (label)
   labelName.value = release.label || '';
   isForm8Selected.value = labelName.value.trim() !== '';
   
-  // 🔥 سنة الإنتاج (production_year)
   productionYear.value = release.production_year || '';
   isForm9Selected.value = productionYear.value.trim() !== '';
   
-  // 🔥 C Line
   cLineYear.value = release.c_line_year || '';
   cLineName.value = release.c_line_name || '';
   isForm10Selected.value = cLineYear.value.trim() !== '' && cLineName.value.trim() !== '';
   
-  // 🔥 P Line
   pLineYear.value = release.p_line_year || '';
   pLineName.value = release.p_line_name || '';
   isForm11Selected.value = pLineYear.value.trim() !== '' && pLineName.value.trim() !== '';
   
-  // 🔥 GTIN
   gtin.value = release.GTIN || '';
   if (gtin.value.trim() !== '') {
     isForm6Active.value = true;
@@ -1116,7 +1113,6 @@ const fillReleaseData = (release) => {
     isForm6Selected.value = false;
   }
   
-  // 🔥 Catalog Number
   catalogNumber.value = release.catalog_number || '';
   if (catalogNumber.value.trim() !== '') {
     isForm7Active.value = true;
@@ -1126,7 +1122,7 @@ const fillReleaseData = (release) => {
     isForm7Selected.value = false;
   }
   
-  // ========== 2. تعبئة الفنانين (artists) ==========
+  // ========== 2. تعبئة الفنانين ==========
   if (release.artists && Array.isArray(release.artists) && release.artists.length > 0) {
     const validArtists = release.artists.filter(a => a && a.trim() !== '');
     if (validArtists.length > 0) {
@@ -1180,11 +1176,10 @@ const fillReleaseData = (release) => {
     }
   }
 
-  // ========== 5. تحديث الـ Store باستخدام updateStoreMetasData ==========
-  // ✅ استدعاء updateStoreMetasData بدلاً من تعيين isMetasComplete مباشرة
+  // ========== 5. تحديث الـ Store ==========
   updateStoreMetasData();
 
-  // ========== 6. تحديد الصفحة المناسبة في Metas ==========
+  // ========== 6. تحديد الصفحة ==========
   const targetPage = determineMetasPage(release);
   console.log(`📌 الصفحة المستهدفة في Metas: ${targetPage}`);
   
@@ -1221,15 +1216,40 @@ const fillReleaseData = (release) => {
 
   console.log('✅ تم ملء البيانات بنجاح. UUID:', releaseUuid.value);
   
-  // 🔥 إعادة تعيين حالة العودة من Songs
-  setTimeout(() => {
-    resetReturningFromSongs();
-  }, 300);
+  // ✅ استعادة isMetasComplete و isSongsComplete إذا كانت true
+  if (currentMetasComplete) {
+    releaseStore.isMetasComplete = true;
+    console.log('📌 [Parent] تم استعادة isMetasComplete إلى true');
+  }
+  if (currentSongsComplete) {
+    releaseStore.isSongsComplete = true;
+    console.log('📌 [Parent] تم استعادة isSongsComplete إلى true');
+  }
   
+  // ✅ إعادة تعيين _isReturningFromSongs بعد فترة
   setTimeout(() => {
-    updatePreviousValues();
-    console.log('📝 Initial previous values set');
+    releaseStore._isReturningFromSongs = false;
+    releaseStore.resetReturningFromSongs();
+    console.log('🔄 [Parent] reset _isReturningFromSongs');
   }, 500);
+  
+  // ✅ نلتقط previousValues فوراً (بشكل متزامن) من حالة الخادم — أي القيم التي
+  //    عبّأناها للتوّ من كائن release أعلاه — قبل أن يعبّئ NewRight2Section قيمه
+  //    الافتراضية (بعد 300ms). هكذا يعكس previousValues حالة الخادم الحقيقية لا
+  //    القيم المعبّأة محلياً، فلا تُقنَّع تغييراتها لاحقاً.
+  updatePreviousValues();
+  console.log('📝 Initial previous values set (server state)');
+
+  // ✅ بعد انتهاء نافذة _isReturningFromSongs (500ms) — التي تمنع updateRelease في
+  //    المراقب — نُطلق updateRelease لإرسال أي قيم عبّأها NewRight2Section تلقائياً
+  //    (C-Line / P-Line / Produktionsjahr / Label) ولم تُرسَل بسبب تلك النافذة.
+  //    إن لم يوجد فرق عن حالة الخادم فلن يُرسَل شيء.
+  setTimeout(() => {
+    if (releaseUuid.value && !props.skipCreation) {
+      console.log('📤 [fillReleaseData] إطلاق updateRelease لإرسال القيم المعبّأة تلقائياً');
+      updateRelease();
+    }
+  }, 700);
 };
 
 const hasAnyRequiredField = computed(() => {
@@ -1243,14 +1263,13 @@ const hasAnyRequiredField = computed(() => {
   return hasTitle || hasArtist || hasDate || hasSubtitle;
 });
 
-// ========== 🔥 createReleaseOnFirstInput المعدلة ==========
+// ========== 🔥 createReleaseOnFirstInput ==========
 const createReleaseOnFirstInput = async () => {
   if (isEditMode.value) {
     console.log('ℹ️ وضع التعديل - لا ننشئ Release جديد');
     return;
   }
   
-  // 🔥🔥🔥 إذا كان هناك releaseUuid بالفعل، لا ننشئ Release جديد
   if (releaseUuid.value || releaseStore.currentReleaseId || props.releaseUuid) {
     console.log('ℹ️ يوجد Release بالفعل (UUID:', releaseUuid.value || releaseStore.currentReleaseId || props.releaseUuid, ') - لا ننشئ Release جديد');
     return;
@@ -1294,9 +1313,8 @@ const createReleaseOnFirstInput = async () => {
   }
 };
 
-// ========== 🔥 دالة createReleaseWithAllData المعدلة ==========
+// ========== 🔥 دالة createReleaseWithAllData ==========
 const createReleaseWithAllData = async (coverFile = null) => {
-  // ✅ منع الإنشاء المتكرر
   if (isCreatingRelease.value) {
     console.log('⏳ جاري إنشاء Release بالفعل');
     return false;
@@ -1307,10 +1325,8 @@ const createReleaseWithAllData = async (coverFile = null) => {
     return false;
   }
   
-  // 🔥🔥🔥 إذا كان هناك releaseUuid بالفعل، لا ننشئ Release جديد
   if (releaseUuid.value || releaseStore.currentReleaseId || props.releaseUuid) {
     console.log('ℹ️ يوجد Release بالفعل (UUID:', releaseUuid.value || releaseStore.currentReleaseId || props.releaseUuid, ') - تحديث الصورة فقط');
-    // ✅ إذا كان هناك ملف، قم بتحديث الصورة فقط
     const file = coverFile || pendingCoverFile.value;
     if (file) {
       await uploadCoverImage(file);
@@ -1499,7 +1515,6 @@ const createReleaseWithAllData = async (coverFile = null) => {
       releaseStore.setCurrentReleaseId(newReleaseUuid);
       isReleaseCreated.value = true;
       
-      // استعادة البيانات
       artistInputs.value = currentArtistInputs;
       searchQuery2.value = currentSearchQuery2;
       searchQuery3.value = currentSearchQuery3;
@@ -1517,14 +1532,12 @@ const createReleaseWithAllData = async (coverFile = null) => {
       gtin.value = currentGtin;
       catalogNumber.value = currentCatalogNumber;
       
-      // 🔥 تحديث الصورة من الاستجابة
       if (response.data.data.cover) {
         const coverPath = response.data.data.cover;
         const coverUrl = coverPath.startsWith('http') ? coverPath : `${STORAGE_URL}/${coverPath}`;
         serverCoverUrl.value = coverUrl;
         uploadedImage.value = coverUrl;
         
-        // ✅ تحديث serverCoverUrl في الـ Store
         releaseStore.setServerCoverUrl(coverUrl);
         
         localStorage.setItem('temp_cover_url', coverPath);
@@ -1532,7 +1545,6 @@ const createReleaseWithAllData = async (coverFile = null) => {
         localStorage.setItem('upload_server_cover_url', coverUrl);
         console.log('💾 تم حفظ الصورة في localStorage');
         
-        // ✅ تحديث _startComplete
         if (releaseStore && !releaseStore._startComplete) {
           releaseStore.setStartComplete(true);
         }
@@ -1541,7 +1553,6 @@ const createReleaseWithAllData = async (coverFile = null) => {
         await uploadCoverImage(fileToUpload);
       }
       
-      // ✅ تأكد من تحديث metasData في الـ Store
       const artistsListForStore = currentArtistInputs
         .filter(input => input.searchQuery && input.searchQuery.trim() !== '')
         .map(input => input.searchQuery.trim());
@@ -1565,24 +1576,17 @@ const createReleaseWithAllData = async (coverFile = null) => {
         catalogNumber: currentCatalogNumber || ''
       });
       
-      // 🔥 تحديث الـ Store
       updateStoreMetasData();
       
-      // 🔥🔥🔥 تعيين currentStep إلى 2 في الـ Store
       releaseStore.setCurrentStep(2);
       console.log('📌 [Parent] تم تعيين currentStep إلى 2');
       
-      // 🔥🔥🔥 تعيين isMetasComplete إلى true (لأن الصورة موجودة)
       releaseStore.setMetasComplete(true);
       console.log('📌 [Parent] تم تعيين isMetasComplete إلى true');
       
-      // 🔥🔥🔥🔥🔥 استدعاء determineStepFromRelease مع updateCurrentStep = false
-      // لمنع تغيير currentStep إلى 1 (لأن البيانات غير مكتملة)
-      // هذا يحل مشكلة الارتفاع المفاجئ والوميض عند الانتقال إلى Metas
       releaseStore.determineStepFromRelease(response.data.data, false);
       console.log('📌 [Parent] تم استدعاء determineStepFromRelease مع updateCurrentStep = false');
       
-      // 🔥 تحديث الـ URL مع step=2
       const currentPath = route.path;
       const newPath = `/releases/${newReleaseUuid}/edit`;
       
@@ -1594,7 +1598,6 @@ const createReleaseWithAllData = async (coverFile = null) => {
         console.log('🔗 تم تحديث الرابط إلى:', newPath, 'مع step=2');
       }
       
-      // 🔥 إرسال الأحداث إلى المكون الأب (UploadPNG)
       emit('release-created', {
         releaseId: newReleaseUuid,
         coverUrl: response.data.data?.cover || null
@@ -1753,6 +1756,8 @@ const updateRelease = debounce(async () => {
     hasChanges = true;
   }
 
+  // ✅ نرسل النوع كما هو (بما فيه الفارغ) — لأن مصدر التفريغ العَرَضي (مراقب immediate
+  //    في NewRightSection) أُزيل، وصار التفريغ الفارغ لا يحدث إلا بمسح المستخدم المقصود.
   if (currentData.main_genre !== previousValues.value.main_genre) {
     payload.main_genre = currentData.main_genre || null;
     hasChanges = true;
@@ -1830,18 +1835,111 @@ const updateRelease = debounce(async () => {
       params: { _method: 'PATCH' }
     });
     console.log('✅ Release updated successfully:', response.data);
-    
-    updatePreviousValues();
-    
+
+    // ✅ نُحدّث previousValues من لقطة currentData التي بُني منها الـ payload — لا من
+    //    القيم الحيّة الحالية. السبب: قد يغيّر المستخدم حقلاً (مثل price_per_song) بعد
+    //    بناء الـ payload وقبل وصول الرد؛ فقراءة القيم الحيّة كانت تُسجّل تلك القيمة
+    //    كأنها محفوظة رغم أنها لم تُرسَل، فيُقنَّع التغيير ولا يُرسَل أبداً.
+    previousValues.value = { ...currentData };
+    console.log('📝 Updated previous values (from sent snapshot):', currentData);
+
     emit('release-updated', {
       releaseId: releaseUuid.value,
       data: response.data?.data || payload
     });
-    
+
+    // ✅ نشر الحقول المشتركة (production_year / C-Line / P-Line) إلى كل أغاني الـ Release
+    //    فور تغييرها على مستوى الـ Release — لأن الأغاني تُنشأ بدونها وتفقد
+    //    production_year خصوصاً. نمرّر فقط الحقول التي تغيّرت فعلاً في هذا الطلب.
+    const songFields = {};
+    if (payload.production_year !== undefined && payload.production_year !== null) {
+      songFields.production_year = payload.production_year;
+    }
+    if (payload.c_line_name !== undefined && payload.c_line_name) {
+      songFields.c_line = [payload.c_line_name];
+    }
+    if (payload.p_line_name !== undefined && payload.p_line_name) {
+      songFields.p_line = [{ name: payload.p_line_name }];
+    }
+    if (Object.keys(songFields).length > 0) {
+      propagateSharedFieldsToSongs(songFields);
+    }
+
   } catch (err) {
     console.error('❌ Update failed:', err.response?.data || err);
   }
 }, 2000);
+
+// ✅ ينشر الحقول المشتركة بين الـ Release والأغاني إلى كل أغاني الـ Release.
+//    fields: { production_year?: number, c_line?: string[], p_line?: [{name}] }
+//    نجلب الأغاني الحالية، ونُحدّث فقط ما اختلف فعلاً في كل أغنية — مع إرسال لقطة
+//    كاملة لكائن authors/contributors (لأن الـ backend يستبدلهما بالكامل) حفاظاً
+//    على بقية الحقول (composer / lyricist / verlog / artist / producer ...).
+const propagateSharedFieldsToSongs = async (fields) => {
+  if (!releaseUuid.value || !fields || Object.keys(fields).length === 0) return;
+
+  try {
+    const res = await apiRequest.get(`/releases/${releaseUuid.value}/songs`);
+    const songs = res.data?.data || res.data || [];
+    if (!Array.isArray(songs) || songs.length === 0) return;
+
+    for (const song of songs) {
+      if (!song?.uuid) continue;
+      const songPayload = {};
+
+      if ('production_year' in fields) {
+        const cur = song.production_year != null && song.production_year !== ''
+          ? parseInt(song.production_year, 10) : null;
+        if (cur !== fields.production_year) {
+          songPayload.production_year = fields.production_year;
+        }
+      }
+
+      if ('c_line' in fields) {
+        const curCLine = Array.isArray(song.authors?.c_line) ? song.authors.c_line : [];
+        if (JSON.stringify(curCLine) !== JSON.stringify(fields.c_line)) {
+          songPayload.authors = {
+            composer: song.authors?.composer || [],
+            lyricist: song.authors?.lyricist || [],
+            verlog: song.authors?.verlog || [],
+            c_line: fields.c_line
+          };
+        }
+      }
+
+      if ('p_line' in fields) {
+        const curPLine = Array.isArray(song.contributors?.p_line) ? song.contributors.p_line : [];
+        if (JSON.stringify(curPLine) !== JSON.stringify(fields.p_line)) {
+          songPayload.contributors = {
+            artist: song.contributors?.artist || [],
+            feature: song.contributors?.feature || [],
+            p_line: fields.p_line,
+            producer: song.contributors?.producer || [],
+            other_contributors: song.contributors?.other_contributors || []
+          };
+        }
+      }
+
+      if (Object.keys(songPayload).length === 0) continue;
+
+      try {
+        await apiRequest.put(`/releases/${releaseUuid.value}/songs/${song.uuid}`, songPayload);
+        console.log(`✅ [propagate] تم تحديث الأغنية ${song.uuid}:`, songPayload);
+      } catch (e) {
+        console.warn(`⚠️ [propagate] فشل تحديث الأغنية ${song.uuid}:`, e?.response?.data || e);
+      }
+    }
+  } catch (e) {
+    console.warn('⚠️ [propagate] فشل جلب الأغاني للنشر:', e?.response?.data || e);
+  }
+};
+
+// ✅ يُنفّذ أي حفظ Release مؤجّل فوراً (يُستدعى قبل الانتقال أو عند إزالة/تعطيل المكوّن).
+const flushPendingReleaseSave = () => {
+  if (updateRelease && typeof updateRelease.flush === 'function') {
+    updateRelease.flush();
+  }
+};
 
 // ========== دوال الفنانين ==========
 const addArtistInput = () => {
@@ -1969,36 +2067,48 @@ const updateForm7Selected = () => {
   isForm7Selected.value = isForm7Active.value && catalogNumber.value.trim() !== '';
 };
 
-const handleDateSelect = (formattedDate) => {
-  if (!formattedDate || typeof formattedDate !== 'string') {
+const parseFlexibleDate = (str) => {
+  if (!str || typeof str !== 'string') return null;
+  const s = str.trim();
+  if (/^\d{4}-\d{1,2}-\d{1,2}/.test(s)) {
+    const d = dayjs(s);
+    return d.isValid() ? d : null;
+  }
+  const parts = s.split(/[./]/);
+  if (parts.length !== 3) return null;
+  let [day, month, year] = parts.map(p => parseInt(p, 10));
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+  if (year < 100) year = 2000 + year;
+  const d = dayjs(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+  return d.isValid() ? d : null;
+};
+
+const handleDateSelect = (rawDate) => {
+  if (!rawDate || typeof rawDate !== 'string') {
     return;
   }
 
-  console.log('📅 Parent: استلام تاريخ من الكالندر:', formattedDate);
-  
-  selectedDate.value = formattedDate.trim();
+  console.log('📅 Parent: استلام تاريخ من الكالندر:', rawDate);
+
+  const parsed = parseFlexibleDate(rawDate);
+  if (!parsed) {
+    return;
+  }
+
+  const formattedDate = parsed.format('DD/MM/YY');
+  selectedDate.value = formattedDate;
   isForm4Selected.value = true;
 
-  const selected = dayjs(formattedDate, 'DD/MM/YY');
-  if (!selected.isValid()) {
-    return;
-  }
-
-  const fullYear = selected.year() < 100 ? selected.year() + 2000 : selected.year();
-  const correctedSelected = dayjs(`${fullYear}-${selected.month() + 1}-${selected.date()}`);
-
   const todayStart = dayjs().startOf('day');
-  const selectedStart = correctedSelected.startOf('day');
-
-  const diffInDays = selectedStart.diff(todayStart, 'day');
+  const diffInDays = parsed.startOf('day').diff(todayStart, 'day');
   daysDifference.value = diffInDays;
 
   showPopup.value = diffInDays >= 0 && diffInDays < 14;
 
   isCalendarVisible.value = false;
   isInputFocused.value = false;
-  
-  console.log('🔒 تم إغلاق الكالندر بعد اختيار التاريخ');
+
+  console.log('🔒 تم إغلاق الكالندر بعد اختيار التاريخ. الصيغة الموحّدة:', formattedDate);
 };
 
 // ========== دوال التنقل ==========
@@ -2008,12 +2118,10 @@ const handleButtonArrowClick = () => {
     return;
   }
   
-  // ✅ التحقق من وجود songUuid قبل حفظ الصفحة
   const hasSongUuid = !!(releaseStore.songUuid || route.params.songUuid || route.query.song);
   
   if (isEditMode.value) {
     console.log('✏️ وضع التعديل - تخطي إنشاء Release');
-    // 🔥 حفظ الصفحة الحالية في الـ Store
     if (showNewRight2.value) {
       releaseStore.setMetasPage('newRight2');
     } else if (showNewRight.value) {
@@ -2028,7 +2136,6 @@ const handleButtonArrowClick = () => {
   if (!isReleaseCreated.value && !releaseUuid.value) {
     createReleaseWithAllData().then(success => {
       if (success) {
-        // 🔥 حفظ الصفحة الحالية في الـ Store
         if (showNewRight2.value) {
           releaseStore.setMetasPage('newRight2');
         } else if (showNewRight.value) {
@@ -2042,7 +2149,6 @@ const handleButtonArrowClick = () => {
     return;
   }
   
-  // 🔥 حفظ الصفحة الحالية في الـ Store
   if (showNewRight2.value) {
     releaseStore.setMetasPage('newRight2');
   } else if (showNewRight.value) {
@@ -2058,7 +2164,6 @@ const handleButtonArrowTopClick = () => {
   console.log('🔼 الزر العلوي - الرجوع للخلف');
   
   if (showFinalPage.value) {
-    // 🔥 حفظ الصفحة في الـ Store
     releaseStore.setMetasPage('newRight2');
     
     showFinalPage.value = false;
@@ -2073,20 +2178,21 @@ const handleButtonArrowTopClick = () => {
     }, 500);
     
   } else if (showNewRight2.value) {
-    // 🔥 حفظ الصفحة في الـ Store
     releaseStore.setMetasPage('newRight');
-    
+
+    // Suppress RightSection during the gap where both flags are false.
+    isSectionTransitioning.value = true;
     showNewRight2.value = false;
     isNewRight2Visible.value = false;
     isNewFormsVisible.value = false;
     emit('update:showNewRight2', false);
-    
+
     setTimeout(() => {
       showNewRight.value = true;
+      isSectionTransitioning.value = false;
     }, 500);
-    
+
   } else if (showNewRight.value) {
-    // 🔥 حفظ الصفحة في الـ Store
     releaseStore.setMetasPage('right');
     
     showNewRight.value = false;
@@ -2100,7 +2206,6 @@ const handleButtonArrowTopClick = () => {
 
 const proceedWithNavigation = () => {
   if (showNewRight2.value) {
-    // 🔥 حفظ الصفحة في الـ Store
     releaseStore.setMetasPage('newRight2');
     
     isNewRight2Visible.value = false;
@@ -2114,7 +2219,6 @@ const proceedWithNavigation = () => {
       }, 1500);
     }, 500);
   } else if (showNewRight.value) {
-    // 🔥 حفظ الصفحة في الـ Store
     releaseStore.setMetasPage('newRight');
     
     isSlidingOut.value = true;
@@ -2131,7 +2235,6 @@ const proceedWithNavigation = () => {
       }, 500);
     }, 500);
   } else {
-    // 🔥 حفظ الصفحة في الـ Store
     releaseStore.setMetasPage('right');
     
     isSlidingUp.value = true;
@@ -2277,28 +2380,14 @@ watch(searchQuery3, (newVal) => {
 const currentDate = dayjs();
 
 watch(selectedDate, (newDate) => {
-  if (!newDate?.trim()) {
+  const parsed = parseFlexibleDate(newDate);
+  if (!parsed) {
     showPopup.value = false;
     return;
   }
 
-  let [day, month, yearShort] = newDate.split('/');
-  day = parseInt(day);
-  month = parseInt(month);
-  yearShort = parseInt(yearShort);
-
-  const year = yearShort < 100 ? 2000 + yearShort : yearShort;
-  const selected = dayjs(`${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`);
-
-  if (!selected.isValid()) {
-    showPopup.value = false;
-    return;
-  }
-
-  const todayStart = currentDate.startOf('day');
-  const selectedStart = selected.startOf('day');
-
-  const diffInDays = selectedStart.diff(todayStart, 'day');
+  const todayStart = dayjs().startOf('day');
+  const diffInDays = parsed.startOf('day').diff(todayStart, 'day');
   daysDifference.value = diffInDays;
 
   showPopup.value = diffInDays >= 0 && diffInDays < 14;
@@ -2321,14 +2410,12 @@ watch(serverCoverUrl, (newUrl) => {
   }
 });
 
-// تأكد من أن watch التالي موجود بالفعل:
 watch([showNewRight, showNewRight2, showFinalPage], ([newRight, newRight2, final]) => {
   if (final) {
     console.log('📌 في FinalPage، لا نحفظ الصفحة');
     return;
   }
   
-  // 🔥 حفظ الصفحة في الـ Store
   if (newRight2) {
     releaseStore.setMetasPage('newRight2');
     console.log('💾 حفظ آخر صفحة في Store: newRight2');
@@ -2341,14 +2428,12 @@ watch([showNewRight, showNewRight2, showFinalPage], ([newRight, newRight2, final
   }
 }, { immediate: true, deep: true });
 
-// ========== 🔥 مراقبة التغييرات في الح fields (المعدلة) ==========
+// ========== 🔥 مراقبة التغييرات في الحقول ==========
 watch(
   [searchQuery2, searchQuery3, selectedDate, artistInputs, releasePrice, songPrice, mainGenre, subGenre, labelName, productionYear, cLineYear, cLineName, pLineYear, pLineName, gtin, catalogNumber],
   () => {
-    // 🔥 التحقق من حالة العودة من Songs
     if (releaseStore._isReturningFromSongs) {
       console.log('🔄 [Parent] عودة من Songs، تحديث metasData فقط');
-      // تحديث metasData دون تغيير isMetasComplete
       const artists = artistInputs.value
         .filter(input => input.searchQuery && input.searchQuery.trim() !== '')
         .map(input => input.searchQuery.trim());
@@ -2481,15 +2566,9 @@ defineExpose({
   isNewFormsVisible
 });
 </script>
+
 <template>
-  <!-- 🔥 عرض شاشة التحميل -->
-  <div v-if="isLoading" class="loading-container">
-    <!-- <div class="spinner"></div> -->
-    <!-- <span class="loading-text">Lade Metas Daten...</span> -->
-  </div>
-  
-  <!-- 🔥 عرض المحتوى بعد تحميل البيانات -->
-  <div v-else class="main" :class="{ 'height-auto': currentStep === 2, 'height-full': currentStep !== 2 }">
+  <div class="main" :class="{ 'height-auto': currentStep === 2, 'height-full': currentStep !== 2, 'is-loading': isLoading }">
     <div class="upload"
          :class="{ 
            'show-right': showNewRight || showNewRight2,
@@ -2516,7 +2595,6 @@ defineExpose({
           />
         </div>
         
-        <!-- 🔥 استخدام v-show بدلاً من v-if مع transition -->
         <transition name="form-left-transition">
           <FormLeft 
             v-show="showNewRight2 && isNewFormsVisible && !showFinalPage" 
@@ -2556,8 +2634,8 @@ defineExpose({
       <!-- Right Sections -->
       <div class="right-sections-wrapper">
         <!-- RightSection -->
-        <RightSection 
-          v-if="!showNewRight && !showNewRight2 && !showFinalPage" 
+        <RightSection
+          v-if="!showNewRight && !showNewRight2 && !showFinalPage && isDataLoaded && !isSectionTransitioning"
           key="right"
           :artistInputs="artistInputs"
           :showSearchResults="showSearchResults" 
@@ -2729,42 +2807,16 @@ defineExpose({
 </template>
 
 <style lang="scss" scoped>
-/* ===== أنماط شاشة التحميل ===== */
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  height: 88vh;
-  min-height: 100%;
-  gap: 20px;
-  border-radius: 20px;
-  // background: var(--Main-Colors-Slate, #26282D);
+.main.is-loading {
+  pointer-events: none;
+  opacity: 0.45;
+  transition: opacity 0.3s ease;
 }
 
-.loading-container .spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid rgba(255, 255, 255, 0.1);
-  border-top-color: var(--Strawberry, #D15);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+.main:not(.is-loading) {
+  transition: opacity 0.3s ease;
 }
 
-.loading-container .loading-text {
-  color: var(--Main-Colors-Dove, #6A6C6D);
-  font-family: Heebo;
-  font-size: 18px;
-  font-weight: 300;
-  letter-spacing: 0.5px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* ===== باقي الأنماط ===== */
 .main {
   height: auto;
   min-height: auto;
@@ -2812,7 +2864,6 @@ defineExpose({
   min-height: auto !important;
 }
 
-/* ===== 🔥 الأقسام الداخلية ===== */
 .left-section,
 .right-section,
 .right2-section {
@@ -2826,67 +2877,8 @@ defineExpose({
   position: relative;
 }
 
-/* ===== 🔥 ImageUpload Wrapper ===== */
-.image-upload-wrapper {
-  flex: 0 0 auto;
-  /* 🔥 الأبعاد الأساسية - شاشات أقل من 1440px */
-  width: clamp(310px, 25vw, 310px);
-  max-width: 310px;
-  height: clamp(310px, 25vw, 310px);
-  max-height: 310px;
-  aspect-ratio: 1/1;
-}
-
-/* 🔥 جعل ImageUpload يأخذ 100% من الـ wrapper */
-.image-upload-wrapper :deep(.cards-upload-file) {
-  width: 100% !important;
-  height: 100% !important;
-  min-width: unset !important;
-  max-width: unset !important;
-  min-height: unset !important;
-  max-height: unset !important;
-  aspect-ratio: 1/1;
-}
-
-/* ===== Responsive - شاشات 1440-1599px: من 310px إلى 366px ===== */
-@media (min-width: 1440px) and (max-width: 1599px) {
-  .image-upload-wrapper {
-    width: clamp(310px, calc(310px + (366 - 310) * ((100vw - 1440px) / (1599 - 1440))), 366px);
-    height: clamp(310px, calc(310px + (366 - 310) * ((100vw - 1440px) / (1599 - 1440))), 366px);
-    max-width: 366px;
-    max-height: 366px;
-  }
-}
-
-/* ===== Responsive - شاشات 1600-2074px: من 366px إلى 520px ===== */
-@media (min-width: 1600px) and (max-width: 2074px) {
-  .image-upload-wrapper {
-    width: clamp(366px, calc(366px + (520 - 366) * ((100vw - 1600px) / (2074 - 1600))), 520px);
-    height: clamp(366px, calc(366px + (520 - 366) * ((100vw - 1600px) / (2074 - 1600))), 520px);
-    max-width: 520px;
-    max-height: 520px;
-  }
-}
-
-/* ===== Responsive - شاشات 2075-2560px: من 378px إلى 503px ===== */
-@media (min-width: 2075px) and (max-width: 2560px) {
-  .image-upload-wrapper {
-    width: clamp(378px, calc(378px + (503 - 378) * ((100vw - 2075px) / (2560 - 2075))), 503px);
-    height: clamp(378px, calc(378px + (503 - 378) * ((100vw - 2075px) / (2560 - 2075))), 503px);
-    max-width: 503px;
-    max-height: 503px;
-  }
-}
-
-/* ===== Responsive - شاشات أكبر من 2560px ===== */
-@media (min-width: 2561px) {
-  .image-upload-wrapper {
-    width: 503px;
-    height: 503px;
-    max-width: 503px;
-    max-height: 503px;
-  }
-}
+/* قياسات .image-upload-wrapper في src/assets/main.scss — مشتركة مع
+   الخطوة 1 (UploadComponent.vue) فلا يختلف حجم الصندوق بين الخطوتين. */
 
 .right-section,
 .right2-section {
@@ -2894,7 +2886,6 @@ defineExpose({
   min-height: 0;
 }
 
-/* زر حذف الصورة */
 .remove-cover {
   position: absolute;
   top: 12px;
@@ -2922,7 +2913,6 @@ defineExpose({
   stroke: white;
 }
 
-/* زر السهم العلوي */
 .button-arrow-top {
   display: flex;
   justify-content: center;
@@ -2947,7 +2937,6 @@ defineExpose({
   opacity: 1;
 }
 
-/* زر السهم السفلي */
 .button-arrow {
   display: flex;
   justify-content: center;
@@ -2997,7 +2986,6 @@ defineExpose({
   background: var(--dark-red);
 }
 
-/* Responsive */
 @media (min-width:1440px) and (max-width:1599px) {
   .upload { gap: 110px; }
 }
@@ -3013,5 +3001,4 @@ defineExpose({
 .right-sections-wrapper {
   flex: 1;
 }
-
 </style>

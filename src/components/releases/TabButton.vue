@@ -150,6 +150,15 @@ export default {
     right: -20px;
 }
 
+/* أول تاب (Titelliste): لا معنى للزاوية اليسرى في بداية الشريط — نُخفيها دائماً
+   في كل الحالات (الافتراضية / hover / active). التحديد (0,4,0) يتغلّب على قواعد
+   الإظهار (0,3,0). */
+.tab-btn:first-child .left-corner,
+.tab-btn:first-child.active .left-corner,
+.tab-btn:first-child:hover .left-corner {
+    display: none !important;
+}
+
 .right-corner .rectangle3 {
     width: 20px;
     height: 20px;

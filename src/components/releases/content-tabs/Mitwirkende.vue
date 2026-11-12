@@ -19,7 +19,7 @@
           <!-- السطر الأول: البيانات الأساسية -->
           <div class="line1">
             <div class="value weight-3">{{ index + 1 }}</div>
-            <div class="value">{{ song.title || 'Unbenannter Titel' }}</div>
+            <div class="value">{{ toTitleCase(song.title || '—') }}</div>
             
             <!-- Artists (متعدد) -->
             <div class="value artists-list">
@@ -76,6 +76,7 @@
 </template>
 
 <script setup>
+import { toTitleCase } from '@/utils/formatText';
 import { computed } from 'vue';
 
 const props = defineProps({
@@ -93,12 +94,13 @@ const songs = computed(() => {
 <style lang="scss" scoped>
 .Content-Box {
   display: flex;
-  height: 100%;
   padding: 20px;
   align-items: flex-start;
   gap: 20px;
+  flex: 1 0 0;
   align-self: stretch;
-  border-radius: 20px;
+  /* ✅ نفس Titelliste: الزاوية العلوية اليسرى قائمة لتتّصل بالتبويب النشط (بلا قفزة) */
+  border-radius:  20px;
   background: var(--secondary);
   overflow-x: auto;
 }
@@ -107,7 +109,7 @@ const songs = computed(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 20px;
+  gap: 12px; /* ✅ نفس Titelliste — يوحّد تباعد الصفوف فلا تقفز عند التنقّل */
   flex: 1 0 0;
   min-width: min-content;
 }
@@ -137,12 +139,15 @@ const songs = computed(() => {
 .value {
   color: #FFF;
   font-family: Heebo;
-  font-size: 16px;
+  font-size: 18px;
   font-style: normal;
-  font-weight: 700;
-  line-height: 1.2;
+  font-weight: 700; /* ✅ نفس Titelliste (روح واحدة) */
+  /* 24px = ارتفاع صف Titelliste (زرّ Anhören). هناك القيمة 14.4px متوسّطة داخل
+     صفّ 24px فمركز النصّ عند 12px؛ هنا الصفّ مُحاذى للأعلى (flex-start)، فصندوق
+     24px يضع المركز عند 12px أيضاً — فلا يقفز العنوان والرقم بين التابات. */
+  line-height: 24px;
   letter-spacing: 0.9px;
-  opacity: 1;
+  opacity: 0.7;
 }
 
 .head-title:nth-child(1),
@@ -153,7 +158,11 @@ const songs = computed(() => {
 .head-title:nth-child(2),
 .value:nth-child(2) {
   flex: 1 0 0;
-  min-width: 200px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  // overflow: hidden;
+  letter-spacing: 0.9px;
 }
 
 .artists-list,
@@ -177,22 +186,22 @@ const songs = computed(() => {
   text-overflow: ellipsis;
   color: #FFF;
   font-family: Heebo;
-  font-size: 15px;
+  font-size: 18px; /* موحّد مع Titelliste / Urheber */
   font-weight: 300;
-  line-height: 1.4;
+  line-height: 24px; /* بدل 1.4 (25.2px) — كلّ صفّ 24px كما في Titelliste */
 }
 
 .percentage {
   color: var(--Strawberry, #D15);
   font-weight: 700;
   margin-left: 4px;
-  font-size: 13px;
+  font-size: inherit; /* نفس حجم الاسم — التمييز باللون والوزن */
 }
 
 .line {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   align-self: stretch;
 }
@@ -201,7 +210,7 @@ const songs = computed(() => {
 .line2 {
   display: flex;
   justify-content: flex-end;
-  align-items: flex-start;
+  // align-items: center;
   gap: 20px;
   align-self: stretch;
 }
@@ -238,7 +247,21 @@ const songs = computed(() => {
   }
 
   .value {
-    font-size: 15px;
+    font-size: 16px;
+  }
+
+  /* نفس Titelliste في هذا المدى — وإلا تختلف الترويسة 14px مقابل 11.2px */
+  .head-title {
+    line-height: 1;
+  }
+
+  .head-title:nth-child(2),
+  .value:nth-child(2) {
+    flex: 1 0 0;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    // overflow: hidden;
   }
   
   .artists-list > div,
@@ -246,7 +269,7 @@ const songs = computed(() => {
   .producers-list > div,
   .others-list > div,
   .p-line-list > div {
-    font-size: 14px;
+    font-size: 16px;
   }
 }
 </style>

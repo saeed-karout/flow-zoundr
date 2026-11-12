@@ -49,7 +49,7 @@
             </div>
           </div>
         </div>
-        <QuestionModal ref="questionModal" modal-id="questionModal" reference="FAQ_RIGHTS" />
+        <QuestionModal ref="questionModal" modal-id="questionModal" reference="FAQ_FLOW" />
       </div>
     </div>
   </main>

@@ -9,7 +9,9 @@ import authHeader from '@/services/auth-header';
 import { user_api_url } from '@/zoundr/constants';
 
 let broadcastChannel = null;
-if (typeof window !== 'undefined') {
+// سفاري لم يدعم BroadcastChannel قبل 15.4، والاستدعاء المباشر يرمي
+// ReferenceError عند تحميل الوحدة فيسقط التطبيق كلّه.
+if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
   broadcastChannel = new BroadcastChannel('schutzen_session_channel');
 }
 

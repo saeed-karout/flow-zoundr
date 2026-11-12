@@ -249,6 +249,7 @@ const handleImageError = (event) => {
   width: 100%;
   max-width: 100%;
   min-height: 281px;
+  height: 100%;
 }
 
 .section {
@@ -264,6 +265,8 @@ const handleImageError = (event) => {
   position: relative;
   width: 100%;
   max-width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .section .p {
@@ -275,7 +278,7 @@ const handleImageError = (event) => {
   line-height: 0.6;
   letter-spacing: 0.9px;
   text-transform: uppercase;
-  padding-top: 3px;
+  flex-shrink: 0;
 }
 
 .top-song {
@@ -288,12 +291,16 @@ const handleImageError = (event) => {
   border-radius: 20px;
   flex-wrap: nowrap;
   min-width: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .stores-container {
   display: flex;
   gap: 20px;
   flex-wrap: nowrap;
+  height: 100%;
+  align-items: stretch;
 }
 
 .top-song::-webkit-scrollbar {
@@ -316,7 +323,7 @@ const handleImageError = (event) => {
 .music-title {
   display: flex;
   width: 207px;
-  height: 207px;
+  height: 100%;
   justify-content: space-between;
   align-items: flex-end;
   border-radius: 20px;
@@ -325,6 +332,8 @@ const handleImageError = (event) => {
   isolation: isolate;
   flex-shrink: 0;
   background: linear-gradient(135deg, rgba(0, 0, 0, 0.5), transparent);
+  min-height: 207px;
+  min-width: 207px;
 }
 
 .background-layer {
@@ -360,10 +369,10 @@ const handleImageError = (event) => {
 }
 
 .store-image-wrapper {
-  width: 80px;
-  height: 80px;
+  width: 120px;
+  height: 120px;
   position: absolute;
-  right: 40px;
+  right: 50px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 0;
@@ -443,33 +452,59 @@ const handleImageError = (event) => {
 }
 
 .title .sub-title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  color: #FFF;
+  /* line-height: 0.8 يجعل صندوق السطر 14.4px بينما صندوق المحرف 18px،
+     فيفيض 1.8px فوق وتحت ويقصّه overflow: hidden. نوسّع صندوق القصّ
+     بـ padding ونلغي أثره بـ margin سالب مساوٍ: المقاس الخارجي لا يتغيّر،
+     والـ gap في flexbox يُقاس بين الصناديق الخارجية — فالمسافات ثابتة تماماً. */
+  padding-block: 6px;
+  margin-block: -6px;
+  /* سطر واحد مع ... — nowrap أوثق من -webkit-line-clamp
+     الذي لا يقصّ في Chromium دون overflow: hidden. */
+  display: block;
+  align-self: stretch;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
   text-overflow: ellipsis;
-  font-family: Heebo;
-  font-size: 18px;
-  font-style: normal;
-  font-weight: 700;
-  line-height: 0.6;
-  text-transform: uppercase;
+  
+color: var(--Main-Colors-White, #FFF);
+leading-trim: both;
+text-edge: cap;
+font-family: Heebo;
+font-size: 18px;
+font-style: normal;
+font-weight: 700;
+line-height: 0.8;
+text-transform: uppercase;
+  opacity: 0.7;
   transition: opacity 0.3s ease;
-  z-index: 150;
-  opacity: .7;
 }
 
 .info .p {
+  /* سطر واحد مع قصّ بـ ... للنص الطويل.
+     الـ line-height أصغر من 1 فيفيض المحرف خارج صندوق المحتوى،
+     وـ overflow: hidden وحده كان سيقصّ أعلى الحروف وأسفلها؛
+     لذلك نوسّع صندوق القصّ بـ padding ونلغي أثره بـ margin سالب
+     — فلا يتغيّر المقاس النهائي ولا الـ gap بين العناصر. */
+  display: block;
   align-self: stretch;
-  color: #FFF;
-  font-family: Heebo;
-  font-size: 14px;
-  font-style: normal;
-  font-weight: 300;
-  line-height: 0.6;
-  padding-top: 2px;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  // padding-top: 8px;
+  // padding-bottom: 6px;
+ color: var(--Main-Colors-White, #FFF);
+leading-trim: both;
+text-edge: cap;
+font-family: Heebo;
+font-size: 14px;
+font-style: normal;
+font-weight: 300;
+line-height: 1;
+align-self: stretch;
+  opacity: 0.7;
   transition: opacity 0.3s ease;
-  z-index: 150;
-  opacity: .7;
 }
 
 .music-title:hover .sub-title,
@@ -518,45 +553,11 @@ const handleImageError = (event) => {
 }
 
 /* ========== تعديلات Responsive ========== */
-@media (max-width: 1599px) {
-  .music-title {
-    width: 160px;
-    height: 160px;
-  }
-  
-  .store-image-wrapper {
-    width: 60px;
-    height: 60px;
-    right: 30px;
-  }
-  
-  .title .sub-title {
-    font-size: 14px;
-  }
-  
-  .info .p {
-    font-size: 12px;
-  }
-}
-
 @media (min-width: 2075px) and (max-width: 2560px) {
-  .music-title {
-    width: 250px;
-    height: 250px;
-  }
-  
   .store-image-wrapper {
-    width: 150px;
-    height: 150px;
-    right: 50px;
-  }
-  
-  .title .sub-title {
-    font-size: 22px;
-  }
-  
-  .info .p {
-    font-size: 16px;
+    width: 140px;
+    height: 140px;
+    right: 34px;
   }
 }
 </style>

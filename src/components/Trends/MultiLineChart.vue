@@ -10,7 +10,7 @@
       
       <!-- Chart with multiple lines -->
       <div  class="chart-wrapper" ref="chartWrapperRef">
-        <div class="chart-container" ref="chartContainerRef">
+        <div v-if="hasData" class="chart-container" ref="chartContainerRef">
           <svg 
             class="multi-line-svg" 
             :viewBox="`0 0 ${svgWidth} ${svgHeight}`"
@@ -52,7 +52,7 @@
         </div>
         
         <!-- X-axis labels -->
-        <div class="chart-labels">
+        <div v-if="hasData" class="chart-labels">
           <div 
             v-for="(item, index) in displayedLabels" 
             :key="index"
@@ -172,7 +172,10 @@ let resizeObserver = null;
 // SVG dimensions
 const svgWidth = ref(100);
 const svgHeight = ref(100);
-const padding = { left: 0, right: 0, top: 8, bottom: 40 };
+// تسميات المحور السيني تُرسم في .chart-labels خارج الـ SVG لا داخله،
+// فـ bottom: 40 كان يحجز 40px فارغة تحت المنحنى وـ top: 8 تترك فجوة فوقه.
+// الـ SVG عليه overflow: visible فلا يُقصّ نصف الخطّ عند الحافتين.
+const padding = { left: 0, right: 0, top: 0, bottom: 0 };
 
 // Tooltip state
 const tooltip = ref({
@@ -227,6 +230,9 @@ const totalValue = computed(() => {
   });
   return total;
 });
+
+// بلا بيانات لا نرسم خطوطاً مسطّحة ولا محور تواريخ فارغاً — يبقى الرقم (0) وحده.
+const hasData = computed(() => storeKeys.value.length > 0 && totalValue.value > 0);
 
 const chartLabels = computed(() => {
   return chartData.value.dates;
@@ -488,16 +494,31 @@ const handleResize = () => {
   updateSvgDimensions();
 };
 
-onMounted(() => {
-  fetchData();
-  window.addEventListener('resize', handleResize);
-  
-  if (chartContainerRef.value) {
+// الحاوية تُنشأ فقط عند وجود بيانات، فقد تكون غائبة وقت التركيب.
+const observeContainer = () => {
+  if (!chartContainerRef.value) return;
+  if (!resizeObserver) {
     resizeObserver = new ResizeObserver(() => {
       updateSvgDimensions();
     });
-    resizeObserver.observe(chartContainerRef.value);
   }
+  resizeObserver.disconnect();
+  resizeObserver.observe(chartContainerRef.value);
+};
+
+// عند وصول البيانات تظهر الحاوية → نربط المراقب ونقيس أبعادها.
+watch(hasData, (value) => {
+  if (!value) return;
+  nextTick(() => {
+    observeContainer();
+    updateSvgDimensions();
+  });
+});
+
+onMounted(() => {
+  fetchData();
+  window.addEventListener('resize', handleResize);
+  observeContainer();
 });
 
 onUnmounted(() => {
@@ -551,6 +572,7 @@ onUnmounted(() => {
   width: 100%;
   flex: 1;
   min-height: 0;
+  gap: 24px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -590,7 +612,7 @@ onUnmounted(() => {
   // transform: translateX(-50%);
   color: #FFF;
   font-family: Heebo;
-  font-size: 10px;
+  font-size: 16px;
   font-weight: 300;
   opacity: 0.7;
   white-space: nowrap;
@@ -746,6 +768,10 @@ onUnmounted(() => {
   .multi-line-chart-box .number {
     font-size: 150px;
     letter-spacing: 7px;
+  }
+
+  .chart-label{
+    font-size: 14px;
   }
 }
 

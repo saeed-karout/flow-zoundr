@@ -34,8 +34,20 @@
     "vuedraggable": "^2.24.3",
     "wavesurfer.js": "^7.10.3"
   },
+  "browserslist": [
+    "> 0.5%",
+    "last 2 versions",
+    "chrome >= 87",
+    "firefox >= 78",
+    "safari >= 14",
+    "edge >= 88",
+    "not dead",
+    "not op_mini all"
+  ],
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
+    "autoprefixer": "^10.6.1",
+    "postcss": "^8.5.28",
     "sass": "^1.83.4",
     "sass-loader": "^16.0.4",
     "vite": "^6.0.11",

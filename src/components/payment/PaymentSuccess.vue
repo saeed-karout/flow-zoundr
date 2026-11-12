@@ -1,5 +1,6 @@
 <template>
   <div class="payment-success-wrapper">
+    
     <!-- شاشة الانتظار -->
     <div class="progress-request-popup">
       <div class="box-popup">

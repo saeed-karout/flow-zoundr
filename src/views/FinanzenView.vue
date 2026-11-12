@@ -207,7 +207,7 @@ main {
   align-items: flex-start;
   align-self: stretch;
   flex: 1;
-  min-height: 484px;
+  min-height: 488px;
   overflow: hidden;
   // gap: 20px;
 }

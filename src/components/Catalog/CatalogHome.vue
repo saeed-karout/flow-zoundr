@@ -141,7 +141,7 @@ const navigateToRoute = (title) => {
   router.push(`/catalog/${path}`);
 };
 
-// ── نص الـ subtitle مع مراعاة المفرد والجمع في الألمانية ──
+// ── نص الـ subtitle مع مراعاة المفرد والجمع ──
 const getSubtitleUnit = (title, count) => {
   const map = {
     Releases: {
@@ -157,14 +157,15 @@ const getSubtitleUnit = (title, count) => {
       plural: "Korrekturen"
     },
     Takedowns: {
-      singular: "Veranstaltung",
-      plural: "Veranstaltungen"
+      singular: "Takedown",      
+      plural: "Takedowns"        
     }
   };
   
   const unit = map[title];
   if (!unit) return "";
   
+  // المفرد فقط عند 1؛ أما 0 و2 فأكثر فتُستخدم صيغة الجمع (0 Veröffentlichungen).
   return count === 1 ? unit.singular : unit.plural;
 };
 

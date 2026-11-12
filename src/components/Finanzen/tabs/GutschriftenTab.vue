@@ -51,6 +51,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { formatDateDe } from '@/utils/date';
 import apiRequest from '@/lib/apiRequest';
 
 // ========== Props ==========
@@ -75,19 +76,7 @@ let fetchTimeout = null;
 let scrollTimeout = null;
 
 // ========== Utility Functions ==========
-const formatDate = (date) => {
-  if (!date) return '-';
-  try {
-    const d = new Date(date);
-    return d.toLocaleDateString('de-DE', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
-  } catch {
-    return date;
-  }
-};
+const formatDate = (date) => formatDateDe(date) || '-';
 
 const formatCurrency = (amount) => {
   if (!amount && amount !== 0) return '0,00 EUR';

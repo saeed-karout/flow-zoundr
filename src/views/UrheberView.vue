@@ -1217,6 +1217,12 @@ button.schutzen-cancel-btn:hover, .schutzen-save-btns:hover {
   touch-action: pan-x;
 }
 
+/* إخفاء شريط التمرير في فايرفوكس أيضاً — ::-webkit-scrollbar خاصّ بكروم وسفاري. */
+.schutzen-saved {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
 .schutzen-saved::-webkit-scrollbar {
   height: 0px;
 }

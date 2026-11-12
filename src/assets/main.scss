@@ -134,3 +134,182 @@ a{
 .leaflet-interactive:focus {
   outline: none !important;
 }
+
+
+
+
+/* ✅ منع ظهور أي Tooltip في كامل الصفحة */
+:global(*) {
+  &[title],
+  &[data-tip],
+  &[data-tooltip] {
+    &::before,
+    &::after {
+      display: none !important;
+      content: none !important;
+    }
+  }
+}
+
+:global(.tooltip),
+:global([role="tooltip"]),
+:global(.v-popper),
+:global(.v-popper__popper),
+:global(.tippy-box),
+:global(.tippy-content),
+:global(.el-tooltip__popper),
+:global(.p-tooltip),
+:global(.prime-tooltip),
+:global(.v-tooltip) {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+/* منع أي أداة تلميح من الظهور عند التحويم */
+:global([title]),
+:global([data-tooltip]),
+:global([data-tip]) {
+  &:hover {
+    &::before,
+    &::after {
+      display: none !important;
+      content: none !important;
+    }
+  }
+}
+
+/* منع ظهور tooltip من أي مكتبة خارجية */
+:global(.v-popper--theme-tooltip),
+:global(.v-popper--theme-dropdown),
+:global(.tippy),
+:global(.tippy-popper),
+:global(.popper),
+:global(.el-popper),
+:global(.p-overlay),
+:global(.p-tooltip-text) {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* منع ظهور أي عنصر منبثق صغير عند التحويم */
+:global(.hover-tooltip),
+:global(.hover-tip) {
+  display: none !important;
+}
+
+/* منع ظهور tooltip من أي مصدر آخر */
+:global(.tooltip-inner),
+:global(.tooltip-arrow) {
+  display: none !important;
+}
+
+/* منع ظهور tooltip من مكتبة PrimeVue أو Vuetify */
+:global(.p-tooltip),
+:global(.v-tooltip) {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+/* منع ظهور tooltip من أي عنصر يحوي هذه الصفات */
+:global(*[data-balloon]),
+:global(*[data-balloon-pos]) {
+  &::before,
+  &::after {
+    display: none !important;
+    content: none !important;
+  }
+}
+
+/* منع ظهور أي عنصر عائم صغير */
+:global(.floating),
+:global(.floating-ui) {
+  display: none !important;
+}
+
+/* ✏️ حقل مطلوب تصحيحه (status: correction) — يُضاف الصنف من useCorrections.
+   outline لا border: لا يزيح التخطيط ولا يغيّر مقاس الحقل، ويظهر فوق أيّ خلفية. */
+.is-correction {
+    /* outline-offset سالب → يُرسم داخل صندوق العنصر نفسه، فلا يقصّه
+       overflow: hidden في أيّ سلف ولا يُقطع عند حافة الحقل أو شريط التمرير. */
+    /* !important لازم: مكوّنات التدفّق تضع outline: none على الإدخالات
+       بمحدّد محصور (.section-input .input-field[data-v-…]) أقوى من صنف عام. */
+    outline: 2px solid var(--Strawberry, #D15) !important;
+    outline-offset: -2px !important;
+    border-radius: 5px;
+    /* الحقل المعطّل مُعتّم (opacity: .5) فلا يبهت معه التحديد. */
+    opacity: 1 !important;
+}
+
+/* شفافية السلف تسري على الابن مهما فعلنا فيه، وحاوية GTIN / Katalognummer
+   تُعتّم قبل تفعيل المفتاح — فنرفع التعتيم عند وجود حقل مطلوب تصحيحه. */
+.section-input:has(.is-correction) {
+    opacity: 1 !important;
+}
+
+/* ===== غلاف بطاقة الغلاف (COVER) — مصدر واحد للقياسات =====
+   يُستعمل في الخطوة 1 (UploadComponent.vue) والخطوة 2 / Metas
+   (Upload1Components/Parent.vue). كان لكلّ منهما سلّم قياسات خاصّ به فاختلف
+   حجم الصندوق بين الخطوتين (مثلاً 437px مقابل 503px فوق 2075px). القياسات
+   هنا عامّة لا محصورة، فيستحيل أن تفترقا. */
+.image-upload-wrapper {
+    flex: 0 0 auto;
+    width: clamp(310px, 25vw, 310px);
+    max-width: 310px;
+    height: clamp(310px, 25vw, 310px);
+    max-height: 310px;
+    aspect-ratio: 1/1;
+}
+
+/* البطاقة داخله تملأه تماماً مهما كانت قياساتها الذاتية. */
+.image-upload-wrapper .cards-upload-file {
+    width: 100% !important;
+    height: 100% !important;
+    min-width: unset !important;
+    max-width: unset !important;
+    min-height: unset !important;
+    max-height: unset !important;
+    aspect-ratio: 1/1;
+}
+
+@media (min-width: 1440px) and (max-width: 1599px) {
+    .image-upload-wrapper {
+        width: clamp(310px, calc(310px + (366 - 310) * ((100vw - 1440px) / (1599 - 1440))), 366px);
+        height: clamp(310px, calc(310px + (366 - 310) * ((100vw - 1440px) / (1599 - 1440))), 366px);
+        max-width: 366px;
+        max-height: 366px;
+    }
+}
+
+@media (min-width: 1600px) and (max-width: 2074px) {
+    .image-upload-wrapper {
+        width: clamp(366px, calc(366px + (520 - 366) * ((100vw - 1600px) / (2074 - 1600))), 520px);
+        height: clamp(366px, calc(366px + (520 - 366) * ((100vw - 1600px) / (2074 - 1600))), 520px);
+        max-width: 520px;
+        max-height: 520px;
+    }
+}
+
+@media (min-width: 2075px) and (max-width: 2560px) {
+    .image-upload-wrapper {
+        width: clamp(378px, calc(378px + (503 - 378) * ((100vw - 2075px) / (2560 - 2075))), 503px);
+        height: clamp(378px, calc(378px + (503 - 378) * ((100vw - 2075px) / (2560 - 2075))), 503px);
+        max-width: 503px;
+        max-height: 503px;
+    }
+}
+
+@media (min-width: 2561px) {
+    .image-upload-wrapper {
+        width: 503px;
+        height: 503px;
+        max-width: 503px;
+        max-height: 503px;
+    }
+}

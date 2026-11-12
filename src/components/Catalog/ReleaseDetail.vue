@@ -1,13 +1,15 @@
 <template>
   <main>
-    <div class="main">
-      <div class="section-primary">
-        
-        <div class="content-small" v-if="loading">
-          <div class="loading">Loading release details...</div>
-        </div>
+    <!-- الانتظار يغطّي الصفحة كلّها: التبويبات ولوحتها كانت تُرسم فارغة
+         (release = null) بينما الجزء العلويّ وحده يُظهر الدوّارة. -->
+    <div class="page-loading" v-if="loading">
+      <div class="spinner"></div>
+    </div>
 
-        <template v-else-if="error">
+    <div class="main" v-else>
+      <div class="section-primary">
+
+        <template v-if="error">
           <div class="error">errors : {{ error }}</div>
         </template>
 
@@ -16,32 +18,33 @@
 
          
           <div class="HeadLine-small">
-            <div class="title">{{ release.title || 'unTitle' }}</div>
-            <div class="subtitle">{{ release.subtitle || 'There is no description' }}</div>
+            <div class="title">{{ toTitleCase(artistName) }}</div>
+            <div class="subtitle">{{ toTitleCase(release.title || '—') }}</div>
             <div class="info-bar">
               <div class="status-pill" :class="getReleasePillClass(release.release_status)">
-                {{ getReleasePillLabel(release.release_status) }}
+                {{ toTitleCase(getReleasePillLabel(release.release_status)) }}
               </div>
               <div class="Buttons">
-                <div class="buttonCom">Trends</div>
-                <div class="buttonCom">Labelcopy</div>
-                <div class="buttonCom" @click="handleTakedown">Takedown</div>
+                <div class="buttonCom" :class="{ 'is-disabled': !isOnline }" :aria-disabled="!isOnline">Trends</div>
+                <div class="buttonCom" :class="{ 'is-disabled': !isOnline }" :aria-disabled="!isOnline" @click="handleLabelcopy">Labelcopy</div>
+                <div class="buttonCom" :class="{ 'is-disabled': !isOnline }" :aria-disabled="!isOnline" @click="handleTakedown">Takedown</div>
               </div>
             </div>
           </div>
 
           <div class="information">
             <div class="HeadLine">
-              <div class="title">{{ release.title || 'un title' }}</div>
-              <div class="subtitle">{{ release.subtitle || 'There is no description' }}</div>
+              <div class="title">{{ toTitleCase(artistName) }}</div>
+              <div class="subtitle">{{ toTitleCase(release.title || '—') }}</div>
               <div class="info-bar">
                 <div class="status-pill" :class="getReleasePillClass(release.release_status)">
-                  {{ getReleasePillLabel(release.release_status) }}
+                  {{ toTitleCase(getReleasePillLabel(release.release_status)) }}
                 </div>
                 <div class="Buttons">
-                  <router-link to="/trends" class="buttonCom">Trends</router-link>
-                  <div class="buttonCom">Labelcopy</div>
-                  <div class="buttonCom" @click="handleTakedown">Takedown</div>
+                  <router-link v-if="isOnline" to="/trends" class="buttonCom">Trends</router-link>
+                  <div v-else class="buttonCom is-disabled" aria-disabled="true">Trends</div>
+                  <div class="buttonCom" :class="{ 'is-disabled': !isOnline }" :aria-disabled="!isOnline" @click="handleLabelcopy">Labelcopy</div>
+                  <div class="buttonCom" :class="{ 'is-disabled': !isOnline }" :aria-disabled="!isOnline" @click="handleTakedown">Takedown</div>
                 </div>
               </div>
             </div>
@@ -50,63 +53,63 @@
               <div class="column1">
                 <div class="line">
                   <div class="key">Label</div>
-                  <div class="value">{{ release.label || 'undefined' }}</div>
+                  <div class="value">{{ toTitleCase(release.label || '—') }}</div>
                 </div>
                 <div class="line">
                   <div class="key">KAT.#</div>
-                  <div class="value">{{ release.catalog_number || 'undefined' }}</div>
+                  <div class="value">{{ toTitleCase(release.catalog_number || '—') }}</div>
                 </div>
                 <div class="line">
                   <div class="key">GTIN</div>
-                  <div class="value">{{ release.GTIN || 'undefined' }}</div>
+                  <div class="value">{{ toTitleCase(release.GTIN || '—') }}</div>
                 </div>
                 <div class="line">
                   <div class="key">C-Line</div>
-                  <div class="value">{{ release.c_line_name || 'undefined' }}</div>
+                  <div class="value">{{ toTitleCase(release.c_line_name || '—') }}</div>
                 </div>
                 <div class="line">
                   <div class="key">P-Line</div>
-                  <div class="value">{{ release.p_line_name || 'undefined' }}</div>
+                  <div class="value">{{ toTitleCase(release.p_line_name || '—') }}</div>
                 </div>
                 
                 <div class="line">
                   <div class="key">Jahr</div>
-                  <div class="value">{{ release.production_year || 'undefined' }}</div>
+                  <div class="value">{{ toTitleCase(release.production_year || '—') }}</div>
                 </div>
                 <div class="line">
                   <div class="key">Preis</div>
-                  <div class="value">{{ release.release_price ? release.release_price + ' EUR' : 'undefined' }}</div>
+                  <div class="value">{{ toTitleCase(release.release_price ? release.release_price + ' EUR' : '—') }}</div>
                 </div>
               </div>
 
               <div class="column2">
                 <div class="line">
                   <div class="key">Releaseart</div>
-                  <div class="value">{{ release.release_type || 'undefined' }}</div>
+                  <div class="value">{{ toTitleCase(release.release_type || '—') }}</div>
                 </div>
                 <div class="line">
                   <div class="key">Laufzeit</div>
-                  <div class="value">{{ release.total_duration || 'unavailable' }}</div>
+                  <div class="value">{{ toTitleCase(totalDuration) }}</div>
                 </div>
                 <div class="line">
                   <div class="key">Genre</div>
-                  <div class="value">{{ release.main_genre || 'undefined' }}</div>
+                  <div class="value">{{ toTitleCase(release.main_genre || '—') }}</div>
                 </div>
                 <div class="line">
                   <div class="key">Explicit Lyrics</div>
-                  <div class="value">{{ release.explicit ? 'Ja' : 'Nein' }}</div>
+                  <div class="value">{{ toTitleCase(release.explicit ? 'Ja' : 'Nein') }}</div>
                 </div>
                 <div class="line">
                   <div class="key">Veröffentlichung</div>
-                  <div class="value">{{ formatDate(release.release_date) || 'undefined' }}</div>
+                  <div class="value">{{ toTitleCase(formatDate(release.release_date) || '—') }}</div>
                 </div>
                 <div class="line">
                   <div class="key">Erstellungsdatum</div>
-                  <div class="value">{{ formatDate(release.created_at) || 'undefined' }}</div>
+                  <div class="value">{{ toTitleCase(formatDate(release.created_at) || '—') }}</div>
                 </div>
                 <div class="line">
                   <div class="key">Audio Qualität</div>
-                  <div class="value">{{ release.audio_quality || 'undefined' }}</div>
+                  <div class="value">{{ toTitleCase(release.audio_quality || '—') }}</div>
                 </div>
               </div>
 
@@ -114,21 +117,21 @@
 
                 <div class="line">
                   <div class="key">Jahr</div>
-                  <div class="value">{{ release.production_year || 'undefined' }}</div>
+                  <div class="value">{{ toTitleCase(release.production_year || '—') }}</div>
                 </div>
                 <div class="line">
                   <div class="key">Preis</div>
-                  <div class="value">{{ release.release_price ? release.release_price + ' EUR' : 'undefined' }}</div>
+                  <div class="value">{{ toTitleCase(release.release_price ? release.release_price + ' EUR' : '—') }}</div>
                 </div>
 
                 <div class="line">
                   <div class="key">Erstellungsdatum</div>
-                  <div class="value">{{ release.created_at }}</div>
+                  <div class="value">{{ toTitleCase(release.created_at || '—') }}</div>
                 </div>
 
                 <div class="line">
                   <div class="key">Audio Qualität</div>
-                  <div class="value">{{ release.audio_quality || 'undefined' }}</div>
+                  <div class="value">{{ toTitleCase(release.audio_quality || '—') }}</div>
                 </div>
               </div>
             </div>
@@ -143,7 +146,7 @@
             <TabButton v-for="tab in tabs" :key="tab" :tab-name="tab" :is-active="activeTab === tab"
               @set-active="setActiveTab" />
           </div>
-          <div class="Content-Box">
+          <div class="tab-panel">
             <component :is="currentTabComponent" :release="release" />
           </div>
         </div>
@@ -153,6 +156,8 @@
 </template>
 
 <script setup>
+import { toTitleCase } from '@/utils/formatText';
+import { formatDateDe } from '@/utils/date';
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import apiRequest from '@/lib/apiRequest'
@@ -170,12 +175,14 @@ import router from '@/router'
 const route = useRoute()
 
 const release = ref(null)
+// أزرار Trends / Labelcopy / Takedown متاحة فقط لـ release منشور (release_status: "online").
+const isOnline = computed(() => String(release.value?.release_status || '').toLowerCase().trim() === 'online')
 const loading = ref(true)
 const error = ref(null)
 const takedownLoading = ref(false)
 const activeTab = ref('Titelliste')
 
-const tabs = ['Titelliste', 'Urheber', 'Mitwirkende', 'Deals', 'Services', 'Gebiete']
+const tabs = ['Titelliste', 'Urheber', 'Mitwirkende',  'Services', 'Gebiete']
 
 
 // لون ونص الـ pill حسب الحالة
@@ -192,7 +199,7 @@ const getReleasePillClass = (status) => {
 }
 
 const getReleasePillLabel = (status) => {
-  if (!status) return 'undefined'
+  if (!status) return '—'
 
   const map = {
     online: 'Online',
@@ -205,6 +212,7 @@ const getReleasePillLabel = (status) => {
 
 
 const handleTakedown = async () => {
+  if (!isOnline.value) return
   const uuid = route.params.uuid
   if (!uuid) {
     console.error('No release UUID found')
@@ -252,6 +260,75 @@ const currentTabComponent = computed(() => {
   return map[activeTab.value] || Titelliste
 })
 
+// ========== اسم الفنّان ==========
+//   artists تصل من الـ API كمصفوفة نصوص، مثل: ["Phillip Phillips"].
+const artistName = computed(() => {
+  const artists = release.value?.artists;
+  if (Array.isArray(artists) && artists.length) {
+    return artists
+      .map(a => (typeof a === 'string' ? a : a?.name))
+      .filter(a => a && String(a).trim() !== '')
+      .join(', ') || '—';
+  }
+  if (typeof artists === 'string' && artists.trim() !== '') return artists;
+  return '—';
+});
+
+// ========== مدة الإصدار ==========
+//   الـ API لا يُرجع total_duration، لكن كل أغنية تحمل duration بالثواني،
+//   فنجمعها. وإن لم تتوفر أي مدة نعرض نص الحالة الفارغة.
+const totalDuration = computed(() => {
+  const direct = release.value?.total_duration;
+  if (direct) return direct;
+
+  const songs = release.value?.songs || [];
+  const seconds = songs.reduce((sum, song) => sum + (Number(song?.duration) || 0), 0);
+  if (!seconds) return '—';
+
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const sec = Math.floor(seconds % 60);
+  const pad = (n) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+});
+
+// ========== Labelcopy: تنزيل PDF ==========
+//   ⚠️ ملف الـ formular لم يصل بعد. الآلية جاهزة هنا وتقرأ من مصدر واحد:
+//   غيّر LABELCOPY_PDF_URL إلى مسار الملف في public/ أو إلى مسار API عند وصوله.
+const LABELCOPY_PDF_URL = '/labelcopy/labelcopy.pdf';
+
+const labelcopyLoading = ref(false);
+
+const handleLabelcopy = async () => {
+  if (!isOnline.value) return;
+  if (labelcopyLoading.value) return;
+  labelcopyLoading.value = true;
+
+  try {
+    const response = await fetch(LABELCOPY_PDF_URL);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    // اسم الملف من عنوان الإصدار مع تنظيف المحارف غير المسموحة في أنظمة الملفات.
+    const safeTitle = String(release.value?.title || 'release').replace(/[\/:*?"<>|]/g, '_');
+    link.download = `Labelcopy - ${safeTitle}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(objectUrl);
+    console.log('✅ [Labelcopy] تم التنزيل');
+  } catch (err) {
+    console.error(`❌ [Labelcopy] تعذّر تنزيل الـ PDF من ${LABELCOPY_PDF_URL}:`, err);
+  } finally {
+    labelcopyLoading.value = false;
+  }
+};
+
 const coverStyle = computed(() => {
   if (!release.value?.cover) return {}
   return {
@@ -287,11 +364,7 @@ const fetchRelease = async () => {
   }
 }
 
-const formatDate = (dateStr) => {
-  if (!dateStr) return null
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
+const formatDate = (dateStr) => formatDateDe(dateStr)
 
 const getStatusClass = (status) => {
   const map = {
@@ -327,12 +400,32 @@ main {
   position: relative;
 }
 
-.loading,
 .error {
   padding: 60px;
   text-align: center;
   font-size: 1.3rem;
   color: #aaa;
+}
+
+/* أيقونة انتظار بدل نصّ التحميل — نفس دوّارة الكاتالوج، في وسط الصفحة. */
+.page-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-loading .spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--Strawberry, #D15);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .error {
@@ -488,6 +581,18 @@ main {
   cursor: pointer;
 }
 
+/* معطّل ما دام release_status ليس online: بهتان، ومؤشّر not-allowed، ولا تلوين hover.
+   (بلا pointer-events: none حتى يظهر المؤشّر — النقر محجوب في الدوالّ.) */
+.Buttons .buttonCom.is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.Buttons .buttonCom.is-disabled:hover {
+  background-color: var(--secondary);
+  cursor: not-allowed;
+}
+
 .ContextBox {
   display: flex;
   height: auto;
@@ -552,18 +657,23 @@ main {
 
 .section-secondary {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 20px;
-  flex: 1 0 0;
+  flex: 1 1 0;
   align-self: stretch;
+  /* مهم للسماح للأبناء بالانكماش داخل الفليكس حتى يعمل السكرول بدل تمدد المحتوى */
+  min-height: 0;
+  /* بدون overflow:hidden هنا — وإلا تُقصّ زوايا أزرار التبويبات (.Tabs).
+     التمرير والقصّ يحدثان داخل .tab-panel فقط. */
 }
 
 .Tab-content {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  flex: 1 0 0;
+  flex: 1 1 0;
   height: 100%;
+  min-height: 0;
 }
 
 .Tab-content .Tabs {
@@ -743,9 +853,34 @@ main {
   background: var(--secondary);
 }
 
-.Content-Box {
+/* لوحة التبويب: تملأ المساحة المتبقية بعد أزرار التبويبات وتُحدّد ارتفاعاً ثابتاً
+   (عبر flex) كي يعمل السكرول داخلها. سُمّيت باسم فريد لتجنّب التصادم مع class
+   "Content-Box" المستخدَم أيضاً كجذر لكل مكوّن تبويب. */
+.tab-panel {
+  flex: 1 1 0;
+  min-height: 0;
   width: 100%;
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* توحيد كل التبويبات: جذر كل تبويب (يحمل class="Content-Box") يملأ اللوحة بنفس
+   الارتفاع ويمرّر عند تجاوز المحتوى. التحديد (0,2,0) أعلى من أنماط التبويب
+   الداخلية (0,1,0) فيتغلّب عليها مهما كان ترتيب التحميل. */
+.tab-panel > :deep(.Content-Box) {
+  flex: 1 1 auto;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.tab-panel > :deep(.Content-Box)::-webkit-scrollbar {
+  display: none;
 }
 
 /* استجابة للشاشات بين 1440px و 1599px */
@@ -925,7 +1060,6 @@ main {
 /* تحسين عند الـ hover (اختياري لكن يعطي تجربة أفضل) */
 .info-bar:hover .status-pill,
 .HeadLine-small:hover .status-pill {
-  transform: scale(1.05);
   transition: transform 0.2s ease;
 }
 </style>

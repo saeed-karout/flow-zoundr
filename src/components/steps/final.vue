@@ -2,7 +2,7 @@
 import { useDataStore } from '@/stores/data';
 import { useReleaseStore } from '@/stores/release';
 import { mapState } from 'pinia';
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue';
 
 export default {
   name: 'SchutzenThankYou',
@@ -43,22 +43,102 @@ export default {
       return `${storageUrl}/covers/${cover}`;
     });
 
+    // مدة بقاء كلّ خطوة قبل الانتقال إلى التالية (مللي ثانية).
+    // الخطوة 3 أخيرة فلا مدة لها. كان setInterval واحد بـ 3000 يفرض نفس المدة
+    // على الجميع، فاستُبدل بـ setTimeout متسلسل تأخذ كلّ خطوة فيه مدتها.
+    const STEP_DURATIONS = { 1: 3000, 2: 5000 };
+
     const startStepTransition = () => {
       if (stepTimer) {
         clearTimeout(stepTimer);
       }
 
-      stepTimer = setInterval(() => {
-        currentStep.value++;
-        if (currentStep.value > 3) {
-          currentStep.value = 3;
-          clearInterval(stepTimer);
+      const scheduleNext = () => {
+        const duration = STEP_DURATIONS[currentStep.value];
+        if (!duration) return;            // آخر خطوة
+        stepTimer = setTimeout(() => {
+          currentStep.value = Math.min(currentStep.value + 1, 3);
+          scheduleNext();
+        }, duration);
+      };
+
+      scheduleNext();
+    };
+
+    // ✅ لا يبدأ عدّ الثلاث ثوانٍ إلا عندما تظهر البطاقة فعلاً على الشاشة.
+    //
+    //    لماذا لم يكفِ window.load ولا requestAnimationFrame: التطبيق SPA يمرّ بمصادقة
+    //    Keycloak قبل تركيب المكوّن، فعند التحديث يكون readyState قد صار complete أصلاً
+    //    وينطلق المؤقّت فوراً بينما الواجهة لم تُعرَض بعد. IntersectionObserver يقيس الأمر
+    //    مباشرة: هل العنصر داخل إطار العرض ومرئي؟ ونضيف إليه شرط أن تكون
+    //    اللسانة ظاهرة (لا في خلفية المتصفّح).
+    const topContainerRef = ref(null);
+    let visibilityObserver = null;
+    let onVisibilityChange = null;
+
+    const beginAfterPaint = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          startStepTransition();
+        });
+      });
+    };
+
+    const cleanupStartWatchers = () => {
+      if (visibilityObserver) {
+        visibilityObserver.disconnect();
+        visibilityObserver = null;
+      }
+      if (onVisibilityChange) {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+        onVisibilityChange = null;
+      }
+    };
+
+    const scheduleStepStart = () => {
+      const tryBegin = () => {
+        if (document.visibilityState !== 'visible') return false;
+        cleanupStartWatchers();
+        beginAfterPaint();
+        return true;
+      };
+
+      nextTick(() => {
+        const el = topContainerRef.value;
+
+        // متصفّح بلا IntersectionObserver → نكتفي بإطاري رسم.
+        if (!el || typeof IntersectionObserver === 'undefined') {
+          beginAfterPaint();
+          return;
         }
-      }, 3000);
+
+        // إن كانت اللسانة مخفيّة ننتظر عودتها قبل أن نبدأ.
+        onVisibilityChange = () => {
+          if (document.visibilityState === 'visible' && visibilityObserver === null) {
+            tryBegin();
+          }
+        };
+        document.addEventListener('visibilitychange', onVisibilityChange);
+
+        visibilityObserver = new IntersectionObserver((entries) => {
+          if (entries.some(e => e.isIntersecting && e.intersectionRatio > 0)) {
+            if (document.visibilityState === 'visible') {
+              tryBegin();
+            } else {
+              // العنصر مرئي لكن اللسانة في الخلفية → نترك مستمع visibilitychange يتولّى الأمر.
+              visibilityObserver.disconnect();
+              visibilityObserver = null;
+            }
+          }
+        }, { threshold: 0.01 });
+
+        visibilityObserver.observe(el);
+      });
     };
 
     onMounted(() => {
-      startStepTransition();
+      currentStep.value = 1;
+      scheduleStepStart();
       localStorage.setItem('paymentStatus', '0');
       
       // 🔥 استرجاع صورة الغلاف من localStorage
@@ -84,11 +164,13 @@ export default {
 
     onUnmounted(() => {
       if (stepTimer) {
-        clearInterval(stepTimer);
+        clearTimeout(stepTimer);
       }
+      cleanupStartWatchers();
     });
 
     return {
+      topContainerRef,
       currentStep,
       coverImage,
       getCoverImageUrl,
@@ -100,14 +182,14 @@ export default {
 <template>
   <main>
     <div class="final-container">
-      <div class="top-container">
+      <div class="top-container" ref="topContainerRef">
         <div class="final-title">
           <h1>VIELEN DANK!</h1>
         </div>
 
         <!-- Step 1 -->
         <div v-if="currentStep === 1" class="step step-1" :class="{ 'fade-in': currentStep === 1 }">
-          <p>Su hast die Vorbereitungen für Deinen Release abgeschlossen.</p>
+          <p style="width: 313px; line-height: normal;">Du hast die Vorbereitungen für Deinen Release abgeschlossen.</p>
         </div>
 
         <!-- Step 2 -->
@@ -123,7 +205,7 @@ export default {
         <!-- Step 3 -->
         <div v-else-if="currentStep === 3" class="step step-3" :class="{ 'fade-in': currentStep === 3 }">
           <div class="step3">
-            <p>Was möchtest du als nächstes tun?</p>
+            <p>Was möchtest Du als nächstes tun?</p>
             <div class="cta-step3">
               <router-link to="/create-release" class="btn1-step3">
                 <span>Neuen Release Anlegen</span>
@@ -140,14 +222,11 @@ export default {
           class="img-cover" 
           :style="getCoverImageUrl ? { backgroundImage: `url(${getCoverImageUrl})` } : {}"
         >
-          <!-- عرض نص placeholder إذا لم توجد صورة -->
-          <span v-if="!getCoverImageUrl" class="placeholder-text">Cover</span>
+         
         </div>
       </div>
       
-      <div class="final-bg">
-        <img src="/img/thanks/thanks.png" alt="Certificate Illustration" />
-      </div>
+      <div class="final-bg" role="img" aria-label="Certificate Illustration"></div>
     </div>
   </main>
 </template>
@@ -190,12 +269,19 @@ p {
   transform: translateY(0);
 }
 
+/* ✅ تباعد الأسطر داخل الخطوة الثانية (القاعدة العامة p تضبطه على 1). */
+.step-2 p {
+  line-height: normal;
+  letter-spacing: 0.9px;
+}
+
 .step2 {
   display: flex;
   width: 431px;
   flex-direction: column;
   align-items: flex-start;
   gap: 32px;
+  
 }
 
 .step3 {
@@ -331,21 +417,21 @@ main {
   text-transform: uppercase;
 }
 
+/* الصورة خلفيةٌ من طبقتين: التلاشي فوق والصورة تحته.
+   القياس: 1534×498 على شاشة 1920 (وهو عرض عمود المحتوى كاملاً)، ولأنّ النسبة
+   محفوظة بـ aspect-ratio يتقلّص الإطار بها نفسها على بقيّة الشاشات.
+   خارج التدفّق وملتصقة بالأسفل، فتمتدّ خلف .top-container بلا قصّ ولا دفع. */
 .final-bg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
-  height: 326px;
-  flex-shrink: 0;
-  background: linear-gradient(180deg, rgba(27, 28, 32, 0) 78.51%, var(--primary) 100%);
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  z-index: 1;
-}
-
-.final-bg img {
-  max-width: 100%;
-  height: auto;
-  display: block;
+  aspect-ratio: 1534 / 498;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(27, 28, 32, 0.00) 40%, var(--Main-Colors-Slate-Dark, #1B1C20) 100%),
+              url('/img/thanks/thanks2.webp') center top / 100% auto no-repeat;
 }
 
 /* Animation for step transitions */

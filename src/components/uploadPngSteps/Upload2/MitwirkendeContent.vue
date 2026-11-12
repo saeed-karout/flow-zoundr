@@ -2,7 +2,7 @@
   <div class="tab-content">
     <div class="frame">
       <!-- Artist -->
-      <div class="section">
+      <div class="section" :class="{ 'is-correction': isSongCorrected('contributors') }">
         <div class="title">Artist</div>
         <div
           v-for="(input, index) in artistInputs"
@@ -10,7 +10,7 @@
           class="form-field"
           :class="{ 
             'is-hovered': input.isHovered, 
-            'has-checkmark': isValidName(input.name)
+            'has-checkmark': hasNonEmptyValue(input.name)
           }"
           @mouseenter="input.isHovered = true"
           @mouseleave="input.isHovered = false"
@@ -30,7 +30,7 @@
           </div>
           
           <div
-            v-if="index === 0 && input.isHovered && !input.isSearching"
+            v-if="index === 0 && input.isHovered && !input.isSearching && artistInputs.length < 2"
             class="plus-icon"
             @click="addArtistInput"
           >
@@ -57,7 +57,11 @@
           </div>
           <div v-else class="spacer-empty"></div>
           
-          <div v-if="showSearchResults === index && (input.searchQuery || input.isFocused)" class="search-result">
+          <div 
+  v-if="showSearchResults === index && (input.searchQuery || input.isFocused)" 
+  class="search-result" 
+  :style="{ width: hasMinusIcon ? 'calc(100% - 41px)' : 'calc(100% + 5px)' }"
+>
             <div v-if="input.isSearching" class="search-loading">
               <div class="spinner"></div>
               <span>Suche...</span>
@@ -107,7 +111,7 @@
       </div>
 
       <!-- Feature مع وظيفة البحث -->
-      <div class="section feature-section" :class="{ active: isFeatureActive }">
+      <div class="section feature-section" :class="{ active: isFeatureActive, 'is-correction': isSongCorrected('contributors') }">
         <div class="top-line">
           <div class="title">Feature</div>
           <div class="btn-switch" @click="toggleFeature">
@@ -141,7 +145,7 @@
           </div>
           
           <div
-            v-if="index === 0 && input.isHovered && isFeatureActive && !input.isSearching"
+            v-if="index === 0 && input.isHovered && isFeatureActive && !input.isSearching && featureInputs.length < 2"
             class="plus-icon"
             @click="addFeatureInput"
           >
@@ -168,7 +172,11 @@
           </div>
           <div v-else class="spacer-empty"></div>
           
-          <div v-if="showFeatureSearchResults === index && (input.searchQuery || input.isFocused) && isFeatureActive" class="search-result">
+          <div 
+  v-if="showFeatureSearchResults === index && (input.searchQuery || input.isFocused) && isFeatureActive" 
+  class="search-result" 
+  :style="{ width: hasMinusIcon ? 'calc(100% - 41px)' : 'calc(100% + 5px)' }"
+>
             <div v-if="input.isSearching" class="search-loading">
               <div class="spinner"></div>
               <span>Suche...</span>
@@ -221,7 +229,7 @@
     <div class="frame1">
       <div class="section-frame">
         <!-- P-Line -->
-        <div class="section">
+        <div class="section" :class="{ 'is-correction': isSongCorrected('contributors') }">
           <div class="title">P-Line</div>
           <div
             v-for="(input, index) in pLineInputs"
@@ -242,7 +250,7 @@
               @input="updatePLineValue(index)"
             />
             
-            <div v-if="isValidName(input.name)" class="checkmark">
+            <div v-if="hasNonEmptyValue(input.name)" class="checkmark">
               <img src="@/assets/icons/y.png" class="icon-y" alt="checkmark" />
             </div>
             
@@ -266,7 +274,7 @@
         </div>
 
         <!-- Produzent -->
-        <div class="section">
+        <div class="section" :class="{ 'is-correction': isSongCorrected('contributors') }">
           <div class="title">Produzent</div>
           <div
             v-for="(input, index) in produzentInputs"
@@ -274,7 +282,7 @@
             class="form-field"
             :class="{ 
               'is-hovered': input.isHovered, 
-              'has-checkmark': isValidName(input.name)
+              'has-checkmark': hasNonEmptyValue(input.name)
             }"
             @mouseenter="input.isHovered = true"
             @mouseleave="input.isHovered = false"
@@ -287,12 +295,12 @@
               @input="updateProduzentValue(index)"
             />
             
-            <div v-if="isValidName(input.name)" class="checkmark">
+            <div v-if="hasNonEmptyValue(input.name)" class="checkmark">
               <img src="@/assets/icons/y.png" class="icon-y" alt="checkmark" />
             </div>
             
             <div
-              v-if="index === 0 && isValidName(input.name) && input.isHovered"
+              v-if="index === 0 && hasNonEmptyValue(input.name) && input.isHovered && produzentInputs.length < 2"
               class="plus-icon"
               @click="addProduzentInput"
             >
@@ -324,7 +332,7 @@
 
       <div class="section-frame">
         <!-- Jahr der Produktion -->
-        <div class="section">
+        <div class="section" :class="{ 'is-correction': isSongCorrected('production_year') }">
           <div class="title">Jahr der Produktion</div>
           <div
             class="form-field"
@@ -357,7 +365,7 @@
     </div>
 
     <div class="frame2">
-      <div class="section weitere-section" :class="{ active: isWeitereActive }">
+      <div class="section weitere-section" :class="{ active: isWeitereActive, 'is-correction': isSongCorrected('contributors') }">
         <div class="top-line">
           <div class="title">Weitere Mitwirkende</div>
           <div class="btn-switch" @click="toggleWeitere">
@@ -390,7 +398,7 @@
                     :disabled="!isWeitereActive"
                   />
                 </div>
-                <div class="dropdown" v-show="input.isRoleDropdownOpen && isWeitereActive" @click.stop">
+                <div class="dropdown" v-show="input.isRoleDropdownOpen && isWeitereActive" @click.stop>
                   <div 
                     class="option" 
                     v-for="role in filteredRoles(input.searchQuery)" 
@@ -412,7 +420,7 @@
               </div>
             </div>
 
-            <!-- ✅ form-field-name مع has-spacer -->
+            <!-- form-field-name مع has-spacer -->
             <div
               class="form-field-name"
               :class="{ 
@@ -468,7 +476,8 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted, computed, nextTick } from 'vue';
+import { ref, watch, onMounted, onUnmounted, onDeactivated, computed, nextTick } from 'vue';
+import { useCorrections } from '@/composables/useCorrections';
 import iconPlay from '@/assets/icons/play.png';
 import { debounce } from '@/utils/debounce';
 import apiRequest from '@/lib/apiRequest';
@@ -502,6 +511,9 @@ const props = defineProps({
   }
 });
 
+// حقول مطلوب تصحيحها (Korrektur) → بوردر أحمر.
+const { isSongCorrected } = useCorrections(() => props.currentSong?.uuid);
+
 const emit = defineEmits(['openVideoPopup', 'save-song', 'update:form-data']);
 
 const releaseStore = useReleaseStore();
@@ -513,6 +525,7 @@ const isLoadingRoles = ref(false);
 // ─── حالة حفظ البيانات ───
 const isSaving = ref(false);
 const saveQueue = ref([]);
+let savingTimeout = null;
 
 // ─── حالة البحث عن الفنانين ───
 const searchArtistsResults = ref([]);
@@ -607,10 +620,25 @@ const fetchRoles = async () => {
   try {
     const response = await apiRequest.get('/roles');
     const data = response.data || {};
-    rolesOptions.value = Object.entries(data).map(([id, name]) => ({
-      id: id,
-      name: name
-    }));
+    
+    // ✅ التعامل مع البيانات كمصفوفة
+    if (Array.isArray(data)) {
+      rolesOptions.value = data;
+    } else if (data.data && Array.isArray(data.data)) {
+      rolesOptions.value = data.data;
+    } else if (typeof data === 'object') {
+      // تحويل الكائن إلى مصفوفة مع الاحتفاظ بالمفتاح كـ id
+      rolesOptions.value = Object.entries(data).map(([key, value]) => {
+        if (typeof value === 'object' && value !== null) {
+          return { id: key, ...value };
+        }
+        return { id: key, name: value };
+      });
+    } else {
+      rolesOptions.value = [];
+    }
+    
+    console.log('📌 [MitwirkendeContent] Roles loaded:', rolesOptions.value.length);
   } catch (error) {
     console.error('❌ فشل جلب الأدوار:', error);
     rolesOptions.value = [];
@@ -620,13 +648,34 @@ const fetchRoles = async () => {
 };
 
 // ─── تصفية الأدوار ───
+// ─── تصفية الأدوار ───
 const filteredRoles = (searchQuery) => {
-  if (!searchQuery) return rolesOptions.value;
-  const query = searchQuery.toLowerCase();
-  return rolesOptions.value.filter(role => 
-    role.name.toLowerCase().includes(query)
-  );
+  if (!rolesOptions.value || rolesOptions.value.length === 0) return [];
+  if (!searchQuery || searchQuery.trim() === '') return rolesOptions.value;
+  
+  const query = searchQuery.toLowerCase().trim();
+  return rolesOptions.value.filter(role => {
+    const name = role.name?.toLowerCase() || '';
+    return name.includes(query);
+  });
 };
+// ─── التحقق من وجود عناصر إضافية (minus-icon) في Artist أو Feature ───
+const hasMinusIcon = computed(() => {
+  // التحقق من Artist: يوجد أكثر من عنصر واحد
+  const hasArtistMinus = artistInputs.value.length > 1;
+  
+  // التحقق من Feature: يوجد أكثر من عنصر واحد والـ Feature مفعل
+  const hasFeatureMinus = featureInputs.value.length > 1 && isFeatureActive.value;
+  
+  return hasArtistMinus || hasFeatureMinus;
+});
+// ─── التحقق من وجود كلمة "minas" في Artist أو Feature ───
+const hasMinas = computed(() => {
+  const allArtistNames = artistInputs.value.map(i => i.name?.toLowerCase() || '');
+  const allFeatureNames = featureInputs.value.map(i => i.name?.toLowerCase() || '');
+  const allNames = [...allArtistNames, ...allFeatureNames];
+  return allNames.some(name => name.includes('minas'));
+});
 
 // ─── تهيئة البيانات المحلية ───
 const artistInputs = ref([{ name: '', isHovered: false, isSearching: false, isFocused: false, searchQuery: '' }]);
@@ -666,6 +715,18 @@ const previousValues = ref({
 // ─── علامات لمنع التحديثات المتكررة ───
 const isUpdatingFromUser = ref(false);
 const isUpdatingFromProps = ref(false);
+
+// ─── حارس التعديلات غير المحفوظة ───
+// نفس منطق UrheberContent: يبقى true من أول ضغطة مفتاح حتى نجاح الحفظ وخلوّ قائمة
+// الانتظار، فيمنع updateFromProps ودوال المزامنة من الكتابة فوق ما يكتبه المستخدم
+// أثناء دورة الحفظ أو أثناء تصفير/إعادة تحميل currentSong بفعل التنقل. أما
+// isUpdatingFromUser القديم فكان يُصفّى بعد 300ms (أقصر من debounce=800ms) فلا يحمي.
+const hasUnsavedEdits = ref(false);
+const lastLoadedUuid = ref(null);
+
+const markEdited = () => {
+  hasUnsavedEdits.value = true;
+};
 
 // ─── الحصول على صورة الفنان ───
 const getArtistImage = (artist) => {
@@ -722,6 +783,7 @@ const handleArtistFocus = (index) => {
 // ─── معالجة إدخال النص (Artist) ───
 const handleArtistInput = (index, query) => {
   if (artistInputs.value[index]) {
+    markEdited();
     artistInputs.value[index].searchQuery = query || '';
     artistInputs.value[index].name = query || '';
     artistInputs.value[index].isSearching = true;
@@ -732,6 +794,10 @@ const handleArtistInput = (index, query) => {
       searchArtistsResults.value = [];
       artistInputs.value[index].isSearching = false;
     }
+    // ✅ نحفظ الاسم المكتوب مباشرةً (مثل Komponist) حتى دون اختيار من نتائج البحث،
+    //   وإلا كان الفنان المُدخَل لا يُرسَل إطلاقاً إن لم ينقر المستخدم على نتيجة.
+    debouncedSendUpdate();
+    setTimeout(() => emitTabCompletion(), 300);
   }
 };
 
@@ -800,6 +866,7 @@ const handleFeatureFocus = (index) => {
 const handleFeatureInput = (index, query) => {
   if (!isFeatureActive.value) return;
   if (featureInputs.value[index]) {
+    markEdited();
     featureInputs.value[index].searchQuery = query || '';
     featureInputs.value[index].name = query || '';
     featureInputs.value[index].isSearching = true;
@@ -810,6 +877,9 @@ const handleFeatureInput = (index, query) => {
       featureSearchResults.value = [];
       featureInputs.value[index].isSearching = false;
     }
+    // ✅ نحفظ اسم الـ Feature المكتوب مباشرةً حتى دون اختيار من نتائج البحث.
+    debouncedSendUpdate();
+    setTimeout(() => emitTabCompletion(), 300);
   }
 };
 
@@ -827,41 +897,6 @@ const handleFeatureBlur = (index) => {
   }, 300);
 };
 
-// ─── مراقبة تغييرات releasePLine ───
-watch(() => props.releasePLine, (newPLine) => {
-  if (newPLine && newPLine.trim() !== '') {
-    const currentValues = pLineInputs.value.map(i => i.name);
-    const releasePLineValue = newPLine.trim();
-    
-    if (!currentValues.includes(releasePLineValue)) {
-      pLineInputs.value = [{ name: releasePLineValue, isHovered: false }];
-      previousValues.value.p_line = [{ name: releasePLineValue }];
-      
-      setTimeout(() => {
-        emitTabCompletion();
-      }, 100);
-    }
-  }
-}, { immediate: true });
-
-// ─── مراقبة فورية لـ releaseProductionYear ───
-watch(() => props.releaseProductionYear, (newYear) => {
-  if (newYear && newYear.trim() !== '') {
-    const year = newYear.trim();
-    if (/^\d{4}$/.test(year)) {
-      if (productionYear.value !== year) {
-        productionYear.value = year;
-        productionYearValid.value = true;
-        previousValues.value.production_year = parseInt(year, 10);
-        
-        setTimeout(() => {
-          emitTabCompletion();
-        }, 100);
-      }
-    }
-  }
-}, { immediate: true });
-
 // ─── تهيئة P-Line من الـ Release ───
 const initializePLineFromRelease = () => {
   if (props.releasePLine && props.releasePLine.trim() !== '') {
@@ -870,19 +905,39 @@ const initializePLineFromRelease = () => {
     
     if (!currentValues.includes(releasePLineValue)) {
       pLineInputs.value = [{ name: releasePLineValue, isHovered: false }];
-      previousValues.value.p_line = [{ name: releasePLineValue }];
+
+      // ✅ previousValues يجب أن يعكس ما لدى الخادم لا ما عبّأناه للتوّ. كان تسجيل
+      //    القيمة المُعبّأة تلقائياً هنا يُلغي كشف التغيير في sendUpdate فلا تُحفظ أبداً.
+      const songPLine = props.currentSong?.contributors?.p_line?.[0]?.name?.trim() || '';
+      previousValues.value.p_line = songPLine ? [{ name: songPLine }] : [];
+
+      if (songPLine !== releasePLineValue && props.currentSong?.uuid && !isSaving.value) {
+        console.log('💾 [MitwirkendeContent] P-Line مُعبّأة تلقائياً → حفظها:', releasePLineValue);
+        debouncedSendUpdate();
+      }
     }
   }
 };
 
 // ─── تهيئة Jahr der Produktion من الـ Release ───
 const initializeProductionYearFromRelease = () => {
-  if (props.releaseProductionYear && props.releaseProductionYear.trim() !== '') {
-    const year = props.releaseProductionYear.trim();
+  const yearStr = String(props.releaseProductionYear || '');
+  if (yearStr.trim() !== '') {
+    const year = yearStr.trim();
     if (/^\d{4}$/.test(year)) {
       productionYear.value = year;
       productionYearValid.value = true;
-      previousValues.value.production_year = parseInt(year, 10);
+
+      // ✅ نفس القاعدة: previousValues = قيمة الخادم، ثم نحفظ إن اختلفت.
+      const songYear = props.currentSong?.production_year != null
+        ? parseInt(props.currentSong.production_year, 10)
+        : null;
+      previousValues.value.production_year = songYear;
+
+      if (songYear !== parseInt(year, 10) && props.currentSong?.uuid && !isSaving.value) {
+        console.log('💾 [MitwirkendeContent] Produktionsjahr مُعبّأ تلقائياً → حفظه:', year);
+        debouncedSendUpdate();
+      }
     }
   }
 };
@@ -891,53 +946,36 @@ const initializeProductionYearFromRelease = () => {
 const isTabComplete = (tabId) => {
   if (tabId !== 'mitwirkende') return true;
   
-  // ✅ التحقق من Artist
-  const hasArtist = artistInputs.value.some(input => 
-    input.name && input.name.trim() !== '' && isValidName(input.name)
-  );
-  
-  // ✅ التحقق من Feature (إذا كان مفعلاً)
+  const hasArtist = artistInputs.value.length > 0 && artistInputs.value.every(input => isValidName(input.name));
+
   let hasFeature = true;
   if (isFeatureActive.value) {
-    hasFeature = featureInputs.value.some(input => 
-      input.name && input.name.trim() !== '' && isValidName(input.name)
-    );
+    hasFeature = featureInputs.value.length > 0 && featureInputs.value.every(input => isValidName(input.name));
   }
-  
-  // ✅ التحقق من P-Line
-  const hasPLine = pLineInputs.value.some(input => 
-    input.name && input.name.trim() !== '' && isValidName(input.name)
-  );
-  
-  // ✅ التحقق من Produzent - اختياري
-  let hasProducer = true;
-  const hasAnyProducerData = produzentInputs.value.some(input => 
-    input.name && input.name.trim() !== ''
-  );
-  if (hasAnyProducerData) {
-    hasProducer = produzentInputs.value.some(input => 
-      input.name && input.name.trim() !== '' && isValidName(input.name)
-    );
-  }
-  
-  // ✅ التحقق من Weitere Mitwirkende (إذا كان مفعلاً)
+
+  const hasPLine = pLineInputs.value.length > 0 && pLineInputs.value.every(input => hasNonEmptyValue(input.name));
+
+  const hasProducer = produzentInputs.value.length > 0 && produzentInputs.value.every(input => hasNonEmptyValue(input.name));
+
   let hasWeitere = true;
   if (isWeitereActive.value) {
-    hasWeitere = weitereInputs.value.some(input => 
-      input.role && input.role.trim() !== '' && 
-      input.name && input.name.trim() !== '' && isValidName(input.name)
+    hasWeitere = weitereInputs.value.length > 0 && weitereInputs.value.every(input =>
+      input.role && input.role.trim() !== '' && isValidName(input.name)
     );
   }
   
-  const isComplete = hasArtist && hasFeature && hasPLine && hasProducer && hasWeitere;
-  
+  const hasProductionYear = productionYearValid.value;
+
+  const isComplete = hasArtist && hasFeature && hasPLine && hasProducer && hasWeitere && hasProductionYear;
+
   console.log(`📌 [MitwirkendeContent] isTabComplete: ${isComplete}`);
   console.log(`   - Artist valid: ${hasArtist}`);
   console.log(`   - Feature valid: ${hasFeature}`);
   console.log(`   - P-Line valid: ${hasPLine}`);
   console.log(`   - Produzent valid: ${hasProducer}`);
   console.log(`   - Weitere valid: ${hasWeitere}`);
-  
+  console.log(`   - ProductionYear valid: ${hasProductionYear}`);
+
   return isComplete;
 };
 
@@ -951,6 +989,10 @@ const isValidName = (value) => {
   
   // ✅ يجب أن يكون على الأقل 4 أحرف (مع أو بدون مسافة)
   return lettersOnly.length >= 4;
+};
+
+const hasNonEmptyValue = (value) => {
+  return Boolean(value && value.trim() !== '');
 };
 
 // ========== دالة إرسال تحديث الاكتمال ==========
@@ -1019,15 +1061,24 @@ const handleClickOutside = (event) => {
   }
 };
 
-// ─── تحديث البيانات من props ───
+// استبدل دالة updateFromProps الحالية بهذه النسخة المحسنة
 const updateFromProps = () => {
   if (isUpdatingFromUser.value) {
     return;
   }
 
+  // ✅ لا نكتب فوق حقول يعدّلها المستخدم حالياً ولم تُحفَظ بعد.
+  if (hasUnsavedEdits.value) {
+    console.log('⏭️ MitwirkendeContent: تخطي updateFromProps (توجد تعديلات غير محفوظة)');
+    return;
+  }
+
   isUpdatingFromProps.value = true;
+  lastLoadedUuid.value = props.currentSong?.uuid || lastLoadedUuid.value;
   let hasArtistChanges = false;
   let hasWeitereChanges = false;
+  let hasPLineChanges = false;
+  let hasProductionYearChanges = false;
 
   // Artist
   if (props.releaseArtists && props.releaseArtists.length > 0) {
@@ -1047,7 +1098,17 @@ const updateFromProps = () => {
         : [{ name: '', isHovered: false, isSearching: false, isFocused: false, searchQuery: '' }];
       hasArtistChanges = true;
     }
-    previousValues.value.artist = artistArray.map(name => ({ name: name }));
+
+    // ✅ previousValues = قائمة فنّاني الأغنية على الخادم، لا قائمة الـ Release المُعبّأة.
+    const songArtists = Array.isArray(props.currentSong?.contributors?.artist)
+      ? props.currentSong.contributors.artist
+          .map(a => ({ name: (a?.name || '').trim() }))
+          .filter(a => a.name !== '')
+      : [];
+    previousValues.value.artist = songArtists;
+
+    const filledArtists = artistArray.map(name => ({ name: String(name || '').trim() }));
+    if (JSON.stringify(songArtists) !== JSON.stringify(filledArtists)) hasArtistChanges = true;
   } else {
     artistInputs.value = [{ name: '', isHovered: false, isSearching: false, isFocused: false, searchQuery: '' }];
     previousValues.value.artist = [];
@@ -1082,35 +1143,32 @@ const updateFromProps = () => {
     previousValues.value.feature = [];
   }
 
-  // P-Line
-  if (props.releasePLine && props.releasePLine.trim() !== '') {
-    const currentValues = pLineInputs.value.map(i => i.name);
-    const releasePLineValue = props.releasePLine.trim();
-    
-    if (!currentValues.includes(releasePLineValue)) {
-      pLineInputs.value = [{ name: releasePLineValue, isHovered: false }];
-      previousValues.value.p_line = [{ name: releasePLineValue }];
-    }
-  }
+  // ✅ P-Line - تحسين التحديث
+  const pLineFromRelease = props.releasePLine?.trim() || '';
+  const pLineFromSong = props.currentSong?.contributors?.p_line?.[0]?.name?.trim() || '';
+  const finalPLine = pLineFromSong || pLineFromRelease;
   
-  if (props.currentSong?.contributors?.p_line) {
-    const pLineArray = Array.isArray(props.currentSong.contributors.p_line) 
-      ? props.currentSong.contributors.p_line 
-      : [];
-    
-    const currentNames = pLineInputs.value.map(i => i.name);
-    const newNames = pLineArray.map(i => i.name);
-    
-    if (JSON.stringify(currentNames) !== JSON.stringify(newNames)) {
-      pLineInputs.value = pLineArray.length > 0 
-        ? pLineArray.map(item => ({ 
-            name: item.name || '', 
-            isHovered: false 
-          }))
-        : [{ name: '', isHovered: false }];
+  if (finalPLine) {
+    const currentValues = pLineInputs.value.map(i => i.name);
+    if (!currentValues.includes(finalPLine)) {
+      pLineInputs.value = [{ name: finalPLine, isHovered: false }];
+
+      // ✅ previousValues = قيمة الخادم. كان تسجيل finalPLine هنا يجعل contributorsChanged
+      //    تساوي false داخل sendUpdate، فيخرج بـ "لا توجد تغييرات" رغم استدعائه.
+      const songPLine = props.currentSong?.contributors?.p_line?.[0]?.name?.trim() || '';
+      previousValues.value.p_line = songPLine ? [{ name: songPLine }] : [];
+      hasPLineChanges = true;
+      console.log('📌 [MitwirkendeContent] P-Line updated in updateFromProps:', finalPLine);
     }
-    
-    previousValues.value.p_line = JSON.parse(JSON.stringify(pLineArray));
+  } else {
+    // إذا كانت P-Line فارغة
+    const hasData = pLineInputs.value.some(i => i.name && i.name.trim() !== '');
+    if (hasData) {
+      pLineInputs.value = [{ name: '', isHovered: false }];
+      previousValues.value.p_line = [];
+      hasPLineChanges = true;
+      console.log('📌 [MitwirkendeContent] P-Line cleared in updateFromProps');
+    }
   }
 
   // Producer
@@ -1138,14 +1196,18 @@ const updateFromProps = () => {
   }
 
   // Production Year
-  if (props.releaseProductionYear && props.releaseProductionYear.trim() !== '') {
-    const year = props.releaseProductionYear.trim();
-    if (/^\d{4}$/.test(year)) {
-      if (productionYear.value !== year) {
-        productionYear.value = year;
-        productionYearValid.value = true;
-        previousValues.value.production_year = parseInt(year, 10);
-      }
+  const yearFromRelease = String(props.releaseProductionYear || '').trim();
+  if (yearFromRelease !== '' && /^\d{4}$/.test(yearFromRelease)) {
+    if (productionYear.value !== yearFromRelease) {
+      productionYear.value = yearFromRelease;
+      productionYearValid.value = true;
+
+      // ✅ previousValues = قيمة الخادم (لا القيمة المُعبّأة) كي يكتشف sendUpdate الفرق.
+      const songYear = props.currentSong?.production_year != null
+        ? parseInt(props.currentSong.production_year, 10)
+        : null;
+      previousValues.value.production_year = songYear;
+      if (songYear !== parseInt(yearFromRelease, 10)) hasProductionYearChanges = true;
     }
   }
   
@@ -1207,7 +1269,7 @@ const updateFromProps = () => {
   isUpdatingFromProps.value = false;
   
   // ✅ إرسال التحديث إذا كانت هناك تغييرات
-  if (hasArtistChanges || hasWeitereChanges) {
+  if (hasArtistChanges || hasWeitereChanges || hasPLineChanges || hasProductionYearChanges) {
     debouncedSendUpdate();
   }
   
@@ -1228,37 +1290,35 @@ const processSaveQueue = () => {
   
   const payload = { contributors: {} };
   let hasChanges = false;
-  
-  if (JSON.stringify(latestSave.artist) !== JSON.stringify(previousValues.value.artist)) {
-    payload.contributors['artist'] = latestSave.artist;
+  const prev = previousValues.value;
+
+  // ✅ اكتشاف أي تغيير فعلي في أي حقل من حقول المساهمين
+  const contributorsChanged =
+    JSON.stringify(latestSave.artist) !== JSON.stringify(prev.artist || []) ||
+    JSON.stringify(latestSave.feature) !== JSON.stringify(prev.feature || []) ||
+    JSON.stringify(latestSave.pLine) !== JSON.stringify(prev.p_line || []) ||
+    JSON.stringify(latestSave.producer) !== JSON.stringify(prev.producer || []) ||
+    JSON.stringify(latestSave.other) !== JSON.stringify(prev.other_contributors || []);
+
+  // ✅ ✅ ✅ نُرسل لقطة كاملة لكل حقول المساهمين عند أي تغيير (نفس منطق sendUpdate)
+  //     لتجنّب حذف الحقول غير المتغيّرة (مثل Produzent) بسبب الاستبدال الكامل في الـ backend.
+  if (contributorsChanged) {
     hasChanges = true;
+    // ✅ لقطة كاملة دائماً (نفس منطق sendUpdate) — الـ backend يستبدل contributors بالكامل.
+    payload.contributors = {
+      artist: latestSave.artist,
+      feature: latestSave.feature,
+      p_line: latestSave.pLine,
+      producer: latestSave.producer,
+      other_contributors: latestSave.other
+    };
   }
-  
-  if (JSON.stringify(latestSave.feature) !== JSON.stringify(previousValues.value.feature)) {
-    payload.contributors['feature'] = latestSave.feature;
-    hasChanges = true;
-  }
-  
-  if (JSON.stringify(latestSave.pLine) !== JSON.stringify(previousValues.value.p_line)) {
-    payload.contributors['p_line'] = latestSave.pLine;
-    hasChanges = true;
-  }
-  
-  if (JSON.stringify(latestSave.producer) !== JSON.stringify(previousValues.value.producer)) {
-    payload.contributors['producer'] = latestSave.producer;
-    hasChanges = true;
-  }
-  
-  if (latestSave.productionYear !== previousValues.value.production_year) {
+
+  if (latestSave.productionYear !== prev.production_year) {
     payload['production_year'] = latestSave.productionYear;
     hasChanges = true;
   }
-  
-  if (JSON.stringify(latestSave.other) !== JSON.stringify(previousValues.value.other_contributors)) {
-    payload.contributors['other_contributors'] = latestSave.other;
-    hasChanges = true;
-  }
-  
+
   if (!hasChanges) {
     isSaving.value = false;
     return;
@@ -1276,7 +1336,17 @@ const processSaveQueue = () => {
     production_year: latestSave.productionYear,
     other_contributors: JSON.parse(JSON.stringify(latestSave.other))
   };
-  
+
+  isSaving.value = true;
+  if (savingTimeout) clearTimeout(savingTimeout);
+  savingTimeout = setTimeout(() => {
+    if (isSaving.value) {
+      console.warn('⚠️ [MitwirkendeContent] isSaving stuck after queue processing, resetting');
+      isSaving.value = false;
+      if (saveQueue.value.length > 0) processSaveQueue();
+    }
+  }, 10000);
+
   emit('save-song', payload);
 };
 
@@ -1295,10 +1365,10 @@ const sendUpdate = () => {
         .filter(input => input.name && input.name.trim() !== '' && isValidName(input.name))
         .map(input => ({ name: input.name.trim() })),
       pLine: pLineInputs.value
-        .filter(input => input.name && input.name.trim() !== '' && isValidName(input.name))
+        .filter(input => hasNonEmptyValue(input.name))
         .map(input => ({ name: input.name.trim() })),
       producer: produzentInputs.value
-        .filter(input => input.name && input.name.trim() !== '' && isValidName(input.name))
+        .filter(input => hasNonEmptyValue(input.name))
         .map(input => ({ name: input.name.trim() })),
       productionYear: productionYearValid.value ? parseInt(productionYear.value, 10) : null,
       other: weitereInputs.value
@@ -1326,11 +1396,11 @@ const sendUpdate = () => {
     .map(input => ({ name: input.name.trim() }));
   
   const currentPLine = pLineInputs.value
-    .filter(input => input.name && input.name.trim() !== '' && isValidName(input.name))
+    .filter(input => hasNonEmptyValue(input.name))
     .map(input => ({ name: input.name.trim() }));
   
   const currentProducer = produzentInputs.value
-    .filter(input => input.name && input.name.trim() !== '' && isValidName(input.name))
+    .filter(input => hasNonEmptyValue(input.name))
     .map(input => ({ name: input.name.trim() }));
   
   const currentProductionYear = productionYearValid.value ? parseInt(productionYear.value, 10) : null;
@@ -1344,41 +1414,35 @@ const sendUpdate = () => {
 
   const payload = { contributors: {} };
   let hasChanges = false;
+  const prev = previousValues.value;
 
-  // ✅ إرسال artist دائماً إذا كانت هناك بيانات
-  if (currentArtist.length > 0) {
-    payload.contributors['artist'] = currentArtist;
+  // ✅ اكتشاف أي تغيير فعلي في أي حقل من حقول المساهمين
+  const contributorsChanged =
+    JSON.stringify(currentArtist) !== JSON.stringify(prev.artist || []) ||
+    JSON.stringify(currentFeature) !== JSON.stringify(prev.feature || []) ||
+    JSON.stringify(currentPLine) !== JSON.stringify(prev.p_line || []) ||
+    JSON.stringify(currentProducer) !== JSON.stringify(prev.producer || []) ||
+    JSON.stringify(currentOther) !== JSON.stringify(prev.other_contributors || []);
+
+  // ✅ ✅ ✅ عند وجود أي تغيير، نُرسل لقطة كاملة لكل حقول المساهمين.
+  //     السبب: الـ backend يستبدل كائن contributors بالكامل، فإرسال جزء منه فقط
+  //     كان يحذف بقية الحقول (خاصةً Produzent وFeature وP-Line) عند تعديل حقل آخر.
+  if (contributorsChanged) {
     hasChanges = true;
+    // ✅ نُرسل لقطة كاملة لكل الحقول دائماً (بما فيها الفارغة) لأن الـ backend يستبدل كائن
+    //   contributors بالكامل. الإدراج الشرطي القديم كان يحذف حقلاً فارغاً حالياً، لكنه أيضاً
+    //   كان مصدر ارتباك؛ اللقطة الكاملة تضمن حفظ كل ما أدخله المستخدم دون فقدان أي حقل.
+    payload.contributors = {
+      artist: currentArtist,
+      feature: currentFeature,
+      p_line: currentPLine,
+      producer: currentProducer,
+      other_contributors: currentOther
+    };
   }
 
-  if (JSON.stringify(currentFeature) !== JSON.stringify(previousValues.value.feature)) {
-    payload.contributors['feature'] = currentFeature;
-    hasChanges = true;
-  }
-
-  if (JSON.stringify(currentPLine) !== JSON.stringify(previousValues.value.p_line)) {
-    payload.contributors['p_line'] = currentPLine;
-    hasChanges = true;
-  }
-
-  if (JSON.stringify(currentProducer) !== JSON.stringify(previousValues.value.producer)) {
-    payload.contributors['producer'] = currentProducer;
-    hasChanges = true;
-  }
-
-  if (currentProductionYear !== previousValues.value.production_year) {
+  if (currentProductionYear !== prev.production_year) {
     payload['production_year'] = currentProductionYear;
-    hasChanges = true;
-  }
-
-  if (currentOther.length > 0) {
-    if (JSON.stringify(currentOther) !== JSON.stringify(previousValues.value.other_contributors) || 
-        previousValues.value.other_contributors.length === 0) {
-      payload.contributors['other_contributors'] = currentOther;
-      hasChanges = true;
-    }
-  } else if (previousValues.value.other_contributors.length > 0 && currentOther.length === 0) {
-    payload.contributors['other_contributors'] = [];
     hasChanges = true;
   }
 
@@ -1415,25 +1479,42 @@ const sendUpdate = () => {
   }
 
   isSaving.value = true;
+  if (savingTimeout) clearTimeout(savingTimeout);
+  savingTimeout = setTimeout(() => {
+    if (isSaving.value) {
+      console.warn('⚠️ [MitwirkendeContent] isSaving stuck for 10s, force resetting');
+      isSaving.value = false;
+      if (saveQueue.value.length > 0) processSaveQueue();
+    }
+  }, 10000);
+
   emit('save-song', payload);
 };
 
 // ─── دالة معالجة نجاح الحفظ ───
 const handleSaveComplete = (event) => {
   const { success, songUuid, error } = event.detail || {};
-  
+
+  if (savingTimeout) {
+    clearTimeout(savingTimeout);
+    savingTimeout = null;
+  }
+
   if (success) {
     console.log('✅ MitwirkendeContent: تم استلام إشارة نجاح الحفظ للأغنية:', songUuid);
   } else {
     console.warn('⚠️ MitwirkendeContent: فشل الحفظ:', error);
   }
-  
+
   isSaving.value = false;
-  
+
   setTimeout(() => {
     if (saveQueue.value.length > 0) {
       console.log(`📦 MitwirkendeContent: معالجة ${saveQueue.value.length} عناصر في قائمة الانتظار`);
       processSaveQueue();
+    } else if (success) {
+      // ✅ حُفظ كل شيء ولا يوجد ما ينتظر → المحلي = الخادم، فنسقط حارس التعديلات بأمان.
+      hasUnsavedEdits.value = false;
     }
   }, 200);
 };
@@ -1441,15 +1522,78 @@ const handleSaveComplete = (event) => {
 // ✅ تعريف debouncedSendUpdate قبل أي watch يستخدمها
 const debouncedSendUpdate = debounce(() => {
   sendUpdate();
-}, 1200);
+}, 800);
+const syncPLineFromSources = () => {
+  // لا نضع hasUnsavedEdits هنا: هذه الدالة تخصّ autofill حقل P-Line فقط، وحظرها عند تعديل
+  //   حقل آخر (Artist/Producer) كان يمنع تعبئة P-Line من الـ Release فتظهر فارغة.
+  if (isUpdatingFromUser.value) return;
 
+  const pLineFromSong = props.currentSong?.contributors?.p_line?.[0]?.name?.trim() || '';
+  const pLineFromRelease = props.releasePLine?.trim() || '';
+  const isPLineFromSong = Boolean(pLineFromSong);
+  const finalPLine = pLineFromSong || pLineFromRelease;
+
+  if (finalPLine) {
+    const currentValues = pLineInputs.value.map(i => i.name);
+    if (!currentValues.includes(finalPLine)) {
+      pLineInputs.value = [{ name: finalPLine, isHovered: false }];
+      previousValues.value.p_line = isPLineFromSong ? [{ name: finalPLine }] : [];
+      console.log('📌 [MitwirkendeContent] P-Line synced:', finalPLine);
+      emitTabCompletion();
+      if (!isSaving.value) {
+        debouncedSendUpdate();
+      }
+    }
+    if (!isPLineFromSong && previousValues.value.p_line.length > 0) {
+      previousValues.value.p_line = [];
+      if (!isSaving.value) {
+        debouncedSendUpdate();
+      }
+    }
+  } else {
+    const hasData = pLineInputs.value.some(i => i.name && i.name.trim() !== '');
+    if (hasData) {
+      pLineInputs.value = [{ name: '', isHovered: false }];
+      previousValues.value.p_line = [];
+      console.log('📌 [MitwirkendeContent] P-Line cleared');
+      emitTabCompletion();
+    }
+  }
+};
+
+watch(() => props.releasePLine, () => {
+  syncPLineFromSources();
+}, { immediate: true });
+
+// ─── مراقبة تغييرات currentSong لتحديث P-Line ───
+watch(() => props.currentSong?.contributors?.p_line, () => {
+  syncPLineFromSources();
+}, { deep: true, immediate: true });
+
+watch(() => props.currentSong?.contributors?.producer, (newProducer) => {
+  if (isUpdatingFromUser.value || hasUnsavedEdits.value) return;
+
+  const producerArray = Array.isArray(newProducer) ? newProducer : [];
+  const newNames = producerArray.map(item => item?.name || '');
+  const currentNames = produzentInputs.value.map(input => input.name);
+
+  if (JSON.stringify(currentNames) !== JSON.stringify(newNames)) {
+    produzentInputs.value = producerArray.length > 0
+      ? producerArray.map(item => ({ name: item.name || '', isHovered: false }))
+      : [{ name: '', isHovered: false }];
+    previousValues.value.producer = JSON.parse(JSON.stringify(producerArray));
+    emitTabCompletion();
+  } else {
+    previousValues.value.producer = JSON.parse(JSON.stringify(producerArray));
+  }
+}, { deep: true, immediate: true });
 // ─── مراقبة تغييرات releaseArtists وإرسالها تلقائياً ───
 watch(() => props.releaseArtists, (newArtists, oldArtists) => {
   if (JSON.stringify(newArtists) === JSON.stringify(oldArtists) && oldArtists) {
     return;
   }
-  
-  if (isUpdatingFromUser.value) {
+
+  if (isUpdatingFromUser.value || hasUnsavedEdits.value) {
     return;
   }
   
@@ -1488,26 +1632,25 @@ watch(() => props.releaseArtists, (newArtists, oldArtists) => {
   updateFromProps();
 }, { deep: true, immediate: true });
 
-// ─── مراقبة تغييرات releasePLine ───
-watch(() => props.releasePLine, (newPLine) => {
-  if (newPLine && newPLine.trim() !== '') {
-    const currentValues = pLineInputs.value.map(i => i.name);
-    if (!currentValues.includes(newPLine.trim())) {
-      pLineInputs.value = [{ name: newPLine.trim(), isHovered: false }];
-      previousValues.value.p_line = [{ name: newPLine.trim() }];
-      emitTabCompletion();
-    }
-  }
-}, { immediate: true });
-
 // ─── مراقبة تغييرات releaseProductionYear ───
 watch(() => props.releaseProductionYear, (newYear) => {
-  if (newYear && newYear.trim() !== '' && /^\d{4}$/.test(newYear.trim())) {
-    const year = newYear.trim();
+  const yearStr = String(newYear || '');
+  if (yearStr.trim() !== '' && /^\d{4}$/.test(yearStr.trim())) {
+    const year = yearStr.trim();
     if (productionYear.value !== year) {
       productionYear.value = year;
       productionYearValid.value = true;
-      previousValues.value.production_year = parseInt(year, 10);
+
+      // ✅ Auto-save the auto-filled year to the song, unless the song already
+      //    has it. Marking previousValues as saved (as before) prevented sendUpdate
+      //    from ever persisting the auto-filled value.
+      const songHasYear = String(props.currentSong?.production_year || '') === year;
+      if (!songHasYear && props.currentSong?.uuid) {
+        previousValues.value.production_year = null; // force change detection
+        if (!isSaving.value) debouncedSendUpdate();
+      } else {
+        previousValues.value.production_year = parseInt(year, 10);
+      }
       emitTabCompletion();
     }
   }
@@ -1538,12 +1681,19 @@ watch(() => props.currentSong, (newSong, oldSong) => {
   if (isUpdatingFromUser.value) {
     return;
   }
-  
-  if (newSong?.uuid === oldSong?.uuid && oldSong) {
+
+  const newUuid = newSong?.uuid || null;
+
+  // ✅ نفس منطق Urheber: نقارن بآخر uuid حُمّل فعلاً لكشف "إعادة تحميل نفس الأغنية"
+  //    (بعد تصفير currentSong إلى null بفعل التنقل) وتخطّيها كي لا تُمسح تعديلات
+  //    المستخدم غير المحفوظة.
+  if (newUuid && newUuid === lastLoadedUuid.value) {
     return;
   }
-  
+
   if (newSong?.uuid) {
+    // تبديل فعلي لأغنية أخرى → نُحمّلها ونُسقط حارس التعديلات القديمة.
+    hasUnsavedEdits.value = false;
     // ✅ تحديث previousValues
     if (newSong.contributors?.artist) {
       previousValues.value.artist = JSON.parse(JSON.stringify(newSong.contributors.artist));
@@ -1576,6 +1726,7 @@ watch(() => props.currentSong, (newSong, oldSong) => {
 
 // ─── دوال إدارة Artist ───
 const updateArtistValue = (index) => {
+  markEdited();
   debouncedSendUpdate();
   setTimeout(() => emitTabCompletion(), 300);
 };
@@ -1597,26 +1748,7 @@ const addArtistInput = () => {
 const removeArtistInput = (index) => {
   if (artistInputs.value.length > 1) {
     artistInputs.value.splice(index, 1);
-    
-    nextTick(() => {
-      if (artistInputs.value[index]) {
-        artistInputs.value[index].isHovered = true;
-        artistInputs.value.forEach((item, i) => {
-          if (i !== index) {
-            item.isHovered = false;
-          }
-        });
-      } else if (artistInputs.value.length > 0) {
-        const lastIndex = artistInputs.value.length - 1;
-        artistInputs.value[lastIndex].isHovered = true;
-        artistInputs.value.forEach((item, i) => {
-          if (i !== lastIndex) {
-            item.isHovered = false;
-          }
-        });
-      }
-    });
-    
+    artistInputs.value.forEach(item => { item.isHovered = false; });
     if (!isSaving.value) {
       debouncedSendUpdate();
     }
@@ -1626,6 +1758,7 @@ const removeArtistInput = (index) => {
 
 // ─── دوال إدارة Feature ───
 const updateFeatureValue = (index) => {
+  markEdited();
   debouncedSendUpdate();
   setTimeout(() => emitTabCompletion(), 300);
 };
@@ -1647,26 +1780,7 @@ const addFeatureInput = () => {
 const removeFeatureInput = (index) => {
   if (featureInputs.value.length > 1) {
     featureInputs.value.splice(index, 1);
-    
-    nextTick(() => {
-      if (featureInputs.value[index]) {
-        featureInputs.value[index].isHovered = true;
-        featureInputs.value.forEach((item, i) => {
-          if (i !== index) {
-            item.isHovered = false;
-          }
-        });
-      } else if (featureInputs.value.length > 0) {
-        const lastIndex = featureInputs.value.length - 1;
-        featureInputs.value[lastIndex].isHovered = true;
-        featureInputs.value.forEach((item, i) => {
-          if (i !== lastIndex) {
-            item.isHovered = false;
-          }
-        });
-      }
-    });
-    
+    featureInputs.value.forEach(item => { item.isHovered = false; });
     if (!isSaving.value) {
       debouncedSendUpdate();
     }
@@ -1675,6 +1789,7 @@ const removeFeatureInput = (index) => {
 };
 
 const toggleFeature = () => {
+  markEdited();
   isFeatureActive.value = !isFeatureActive.value;
   if (!isFeatureActive.value) {
     featureInputs.value = [{ name: '', isHovered: false, isSearching: false, isFocused: false, searchQuery: '' }];
@@ -1687,6 +1802,7 @@ const toggleFeature = () => {
 
 // ─── دوال إدارة P-Line ───
 const updatePLineValue = (index) => {
+  markEdited();
   debouncedSendUpdate();
   setTimeout(() => emitTabCompletion(), 300);
 };
@@ -1694,26 +1810,7 @@ const updatePLineValue = (index) => {
 const removePLineInput = (index) => {
   if (pLineInputs.value.length > 1) {
     pLineInputs.value.splice(index, 1);
-    
-    nextTick(() => {
-      if (pLineInputs.value[index]) {
-        pLineInputs.value[index].isHovered = true;
-        pLineInputs.value.forEach((item, i) => {
-          if (i !== index) {
-            item.isHovered = false;
-          }
-        });
-      } else if (pLineInputs.value.length > 0) {
-        const lastIndex = pLineInputs.value.length - 1;
-        pLineInputs.value[lastIndex].isHovered = true;
-        pLineInputs.value.forEach((item, i) => {
-          if (i !== lastIndex) {
-            item.isHovered = false;
-          }
-        });
-      }
-    });
-    
+    pLineInputs.value.forEach(item => { item.isHovered = false; });
     if (!isSaving.value) {
       debouncedSendUpdate();
     }
@@ -1723,6 +1820,7 @@ const removePLineInput = (index) => {
 
 // ─── دوال إدارة Produzent ───
 const updateProduzentValue = (index) => {
+  markEdited();
   debouncedSendUpdate();
   setTimeout(() => emitTabCompletion(), 300);
 };
@@ -1738,26 +1836,7 @@ const addProduzentInput = () => {
 const removeProduzentInput = (index) => {
   if (produzentInputs.value.length > 1) {
     produzentInputs.value.splice(index, 1);
-    
-    nextTick(() => {
-      if (produzentInputs.value[index]) {
-        produzentInputs.value[index].isHovered = true;
-        produzentInputs.value.forEach((item, i) => {
-          if (i !== index) {
-            item.isHovered = false;
-          }
-        });
-      } else if (produzentInputs.value.length > 0) {
-        const lastIndex = produzentInputs.value.length - 1;
-        produzentInputs.value[lastIndex].isHovered = true;
-        produzentInputs.value.forEach((item, i) => {
-          if (i !== lastIndex) {
-            item.isHovered = false;
-          }
-        });
-      }
-    });
-    
+    produzentInputs.value.forEach(item => { item.isHovered = false; });
     if (!isSaving.value) {
       debouncedSendUpdate();
     }
@@ -1767,13 +1846,16 @@ const removeProduzentInput = (index) => {
 
 // ─── دوال إدارة Production Year ───
 const updateProductionYear = () => {
+  markEdited();
   productionYearValid.value = validateYear(productionYear.value);
   debouncedSendUpdate();
+  setTimeout(() => emitTabCompletion(), 300);
 };
 
 // ─── دوال إدارة Weitere Mitwirkende ───
 const updateWeitereValue = (index) => {
   console.log('📤 [MitwirkendeContent] updateWeitereValue called, index:', index);
+  markEdited();
   isUpdatingFromUser.value = true;
   
   // ✅ تأكد من وجود بيانات صالحة
@@ -1823,26 +1905,7 @@ const removeWeitereInput = (index) => {
   isUpdatingFromUser.value = true;
   if (weitereInputs.value.length > 1) {
     weitereInputs.value.splice(index, 1);
-    
-    nextTick(() => {
-      if (weitereInputs.value[index]) {
-        weitereInputs.value[index].isHovered = true;
-        weitereInputs.value.forEach((item, i) => {
-          if (i !== index) {
-            item.isHovered = false;
-          }
-        });
-      } else if (weitereInputs.value.length > 0) {
-        const lastIndex = weitereInputs.value.length - 1;
-        weitereInputs.value[lastIndex].isHovered = true;
-        weitereInputs.value.forEach((item, i) => {
-          if (i !== lastIndex) {
-            item.isHovered = false;
-          }
-        });
-      }
-    });
-    
+    weitereInputs.value.forEach(item => { item.isHovered = false; });
     if (!isSaving.value) {
       debouncedSendUpdate();
     }
@@ -1854,6 +1917,7 @@ const removeWeitereInput = (index) => {
 };
 
 const toggleWeitere = () => {
+  markEdited();
   isUpdatingFromUser.value = true;
   isWeitereActive.value = !isWeitereActive.value;
   if (!isWeitereActive.value) {
@@ -1904,6 +1968,7 @@ const handleSearchInput = (index, value) => {
 
 const selectRoleOption = (index, role) => {
   console.log('📤 [MitwirkendeContent] selectRoleOption called, index:', index, 'role:', role);
+  markEdited();
   isUpdatingFromUser.value = true;
   
   weitereInputs.value[index].role = role;
@@ -1919,117 +1984,6 @@ const selectRoleOption = (index, role) => {
   }, 300);
 };
 
-// ─── مراقبة تغييرات releaseArtists ───
-watch(() => props.releaseArtists, (newArtists, oldArtists) => {
-  if (JSON.stringify(newArtists) === JSON.stringify(oldArtists) && oldArtists) {
-    return;
-  }
-  
-  if (isUpdatingFromUser.value) {
-    return;
-  }
-  
-  updateFromProps();
-}, { deep: true, immediate: true });
-
-// ─── مراقبة تغييرات releasePLine ───
-watch(() => props.releasePLine, (newPLine) => {
-  if (newPLine && newPLine.trim() !== '') {
-    const currentValues = pLineInputs.value.map(i => i.name);
-    if (!currentValues.includes(newPLine.trim())) {
-      pLineInputs.value = [{ name: newPLine.trim(), isHovered: false }];
-      previousValues.value.p_line = [{ name: newPLine.trim() }];
-      emitTabCompletion();
-    }
-  }
-}, { immediate: true });
-
-// ─── مراقبة تغييرات releaseProductionYear ───
-watch(() => props.releaseProductionYear, (newYear) => {
-  if (newYear && newYear.trim() !== '' && /^\d{4}$/.test(newYear.trim())) {
-    const year = newYear.trim();
-    if (productionYear.value !== year) {
-      productionYear.value = year;
-      productionYearValid.value = true;
-      previousValues.value.production_year = parseInt(year, 10);
-      emitTabCompletion();
-    }
-  }
-}, { immediate: true });
-
-// ─── مراقبة تغييرات currentSong ───
-watch(() => props.currentSong, (newSong, oldSong) => {
-  if (isUpdatingFromUser.value) {
-    return;
-  }
-  
-  if (newSong?.uuid === oldSong?.uuid && oldSong) {
-    return;
-  }
-  
-  if (newSong?.uuid) {
-    if (newSong.contributors?.artist) {
-      previousValues.value.artist = JSON.parse(JSON.stringify(newSong.contributors.artist));
-    }
-    if (newSong.contributors?.feature) {
-      previousValues.value.feature = JSON.parse(JSON.stringify(newSong.contributors.feature));
-    }
-    if (newSong.contributors?.p_line) {
-      previousValues.value.p_line = JSON.parse(JSON.stringify(newSong.contributors.p_line));
-    }
-    if (newSong.contributors?.producer) {
-      previousValues.value.producer = JSON.parse(JSON.stringify(newSong.contributors.producer));
-    }
-    if (newSong.contributors?.other_contributors) {
-      previousValues.value.other_contributors = JSON.parse(JSON.stringify(newSong.contributors.other_contributors));
-    }
-    if (newSong.production_year) {
-      previousValues.value.production_year = newSong.production_year;
-    }
-    updateFromProps();
-  }
-}, { deep: true, immediate: true });
-
-// ─── مراقبة تغييرات currentSong وإرسال البيانات ───
-watch(() => props.currentSong, (newSong, oldSong) => {
-  if (isUpdatingFromUser.value) {
-    return;
-  }
-  
-  if (newSong?.uuid === oldSong?.uuid && oldSong) {
-    return;
-  }
-  
-  if (newSong?.uuid) {
-    // ✅ تحديث previousValues
-    if (newSong.contributors?.artist) {
-      previousValues.value.artist = JSON.parse(JSON.stringify(newSong.contributors.artist));
-    }
-    if (newSong.contributors?.feature) {
-      previousValues.value.feature = JSON.parse(JSON.stringify(newSong.contributors.feature));
-    }
-    if (newSong.contributors?.p_line) {
-      previousValues.value.p_line = JSON.parse(JSON.stringify(newSong.contributors.p_line));
-    }
-    if (newSong.contributors?.producer) {
-      previousValues.value.producer = JSON.parse(JSON.stringify(newSong.contributors.producer));
-    }
-    if (newSong.contributors?.other_contributors) {
-      previousValues.value.other_contributors = JSON.parse(JSON.stringify(newSong.contributors.other_contributors));
-    }
-    if (newSong.production_year) {
-      previousValues.value.production_year = newSong.production_year;
-    }
-    
-    updateFromProps();
-    
-    // ✅ ✅ ✅ إرسال البيانات بعد التحديث
-    nextTick(() => {
-      debouncedSendUpdate();
-      console.log('📤 [MitwirkendeContent] إرسال البيانات بعد تحديث currentSong');
-    });
-  }
-}, { deep: true, immediate: true });
 
 // ─── دورة الحياة ───
 onMounted(() => {
@@ -2064,10 +2018,11 @@ onMounted(() => {
     }
     
     // ✅ إرسال البيانات الأخرى إذا كانت موجودة
-    const hasOtherData = 
+    const hasOtherData =
       pLineInputs.value.some(i => i.name && i.name.trim() !== '') ||
       produzentInputs.value.some(i => i.name && i.name.trim() !== '') ||
-      (isWeitereActive.value && weitereInputs.value.some(i => i.role && i.role.trim() !== '' && i.name && i.name.trim() !== ''));
+      (isWeitereActive.value && weitereInputs.value.some(i => i.role && i.role.trim() !== '' && i.name && i.name.trim() !== '')) ||
+      productionYearValid.value;
     
     if (hasOtherData) {
       debouncedSendUpdate();
@@ -2076,19 +2031,37 @@ onMounted(() => {
   });
 });
 
+// ✅ نُفرّغ أي حفظ مؤجّل عالق قبل مغادرة التاب أو تدميره. Infos1 يلفّ التابات بـ
+//   <keep-alive> فالتبديل لا يُطلق onUnmounted بل onDeactivated فقط — وبدون التفريغ هنا
+//   تُفقَد القيم المُلصَقة بسرعة إن انتقل المستخدم قبل انتهاء مهلة الـ debounce.
+const flushPendingSave = () => {
+  if (debouncedSendUpdate.flush) {
+    debouncedSendUpdate.flush();
+  } else if (debouncedSendUpdate.cancel) {
+    debouncedSendUpdate.cancel();
+    sendUpdate();
+  }
+  if (saveQueue.value.length > 0) {
+    isSaving.value = false;
+    processSaveQueue();
+  }
+};
+
+onDeactivated(() => {
+  console.log('💤 MitwirkendeContent: deactivated (keep-alive) → flush الحفظ المؤجّل');
+  flushPendingSave();
+});
+
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside);
   window.removeEventListener('save-song-complete', handleSaveComplete);
-  
-  if (debouncedSendUpdate.cancel) {
-    debouncedSendUpdate.cancel();
+
+  if (savingTimeout) {
+    clearTimeout(savingTimeout);
+    savingTimeout = null;
   }
-  
-  if (saveQueue.value.length > 0) {
-    if (!isSaving.value) {
-      processSaveQueue();
-    }
-  }
+
+  flushPendingSave();
 });
 
 defineExpose({
@@ -2111,14 +2084,14 @@ defineExpose({
 .frame1 {
   display: flex;
   align-items: flex-start;
-  gap: 20px;
+  gap: 32px;
   align-self: stretch;
 }
 
 .frame{
   display: flex;
   align-items: start;
-  gap: 20px;
+  gap: 32px;
   align-self: stretch;
   width: 100%;
 }
@@ -2206,7 +2179,7 @@ defineExpose({
 
 .form-field .checkmark {
   position: absolute;
-  right: 60px;
+  right: 48px;
   top: 50%;
   transform: translateY(-50%);
 }
@@ -2216,11 +2189,28 @@ defineExpose({
 }
 
 .form-field .plus-icon,
-.form-field .minus-icon,
-.form-field-bottom .plus-icon,
-.form-field-bottom .minus-icon {
+.form-field .minus-icon {
   position: absolute;
-  right: 85px;
+  right: 75px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  display: flex;
+  background: #fff;
+  cursor: pointer;
+  border-radius: 50%;
+  color: var(--primary);
+  transition: opacity 0.3s ease-in-out;
+  opacity: 0;
+  z-index: 5;
+}
+
+
+.form-field-bottom .plus-icon,
+.form-field-bottom .minus-icon{
+  position: absolute;
+  right: 78px;
   top: 50%;
   transform: translateY(-50%);
   width: 18px;
@@ -2257,27 +2247,39 @@ defineExpose({
   height: 18px;
 }
 
-.form-field .spacer,
-.form-field-bottom .spacer {
-  display: flex;
-  width: 40px;
+.form-field .spacer{
+   display: flex;
+  width: 34px;
   height: 46px;
   padding: 9px 10px;
   align-items: center;
   border-radius: 5px;
   position: relative;
   cursor: pointer;
-  flex-shrink: 0;
 }
 
-.form-field .spacer-empty {
-  display: flex;
-  width: 40px;
+.form-field-bottom .spacer{
+   display: flex;
+  width: 36px;
   height: 46px;
   padding: 9px 10px;
   align-items: center;
   border-radius: 5px;
   position: relative;
+  cursor: pointer;
+  max-width: 40px;
+}
+
+.form-field .spacer-empty,
+.form-field-bottom .spacer-empty {
+  display: flex;
+  width: 36px;
+  height: 46px;
+  padding: 9px 10px;
+  align-items: center;
+  border-radius: 5px;
+  position: relative;
+  flex-shrink: 0;
 }
 
 .form-field .spacer .play,
@@ -2295,10 +2297,14 @@ defineExpose({
   transition: opacity 0.3s ease, right 0.3s ease;
 }
 
-.form-field .spacer .play.visible,
-.form-field-bottom .spacer .play.visible {
+.form-field .spacer .play.visible{
   opacity: 1;
-  right: -5px;
+  right: -10px;
+}
+
+.form-field-bottom .spacer .play.visible {
+    opacity: 1;
+  right: -8px;
 }
 
 .form-field .spacer .play .icon,
@@ -2327,8 +2333,8 @@ defineExpose({
 /* ========== top-line و btn-switch ========== */
 .top-line {
   display: flex;
-  height: 20px;
-  padding-right: 43px;
+  height: 20.5px;
+  padding-right: 37px;
   justify-content: space-between;
   align-items: center;
   align-self: stretch;
@@ -2393,12 +2399,12 @@ defineExpose({
   width: 100%;
   gap: 10px;
   flex-direction: column;
-  overflow-y: auto;
+  // overflow-y: auto;
   flex: 1;
   min-height: 0;
   scrollbar-width: none;
   padding-bottom: 10px;
-  padding-right: 4px;
+  // padding-right: 4px;
   overflow-x: visible;
 }
 
@@ -2564,10 +2570,6 @@ defineExpose({
   filter: brightness(0) invert(1);
 }
 
-/* ============================================================ */
-/* ✅ ✅ ✅ القسم المصحح: form-field-name مع has-spacer          */
-/* ============================================================ */
-
 /* ========== form-field-name ========== */
 .form-field-name {
   display: flex;
@@ -2591,41 +2593,38 @@ defineExpose({
   font-family: Heebo;
   font-size: 20px;
   height: 46px;
-  width: calc(100% - 39px);
+  width: calc(100%);
   box-sizing: border-box;
   position: relative;
-  // flex: 1;
   min-width: 0;
   transition: all 0.3s ease;
 }
 
-/* ✅ عرض input-field بدون spacer (العرض الكامل) */
+/* عرض input-field بدون spacer (العرض الكامل) */
 .form-field-name .input-field {
-  border-radius: 5px;
+  border-radius: 0 5px 5px 0;
 }
 
-/* ✅ عند وجود spacer (has-spacer) */
+/* عند وجود spacer (has-spacer) */
 .form-field-name.has-spacer .input-field {
-  border-radius: 5px;
-  width: calc(100% - 34px);
-
+  border-radius: 0 5px 5px 0;
   &:hover{
     border-radius: 5px 0 0 5px;
   }
 }
 
-/* ✅ عند وجود checkmark فقط */
+/* عند وجود checkmark فقط */
 .form-field-name.has-checkmark .input-field {
   padding-right: 40px;
 }
 
-/* ✅ عند وجود checkmark و spacer معاً */
+/* عند وجود checkmark و spacer معاً */
 .form-field-name.has-checkmark.has-spacer .input-field {
   padding-right: 40px;
   width: 100%;
 }
 
-/* ✅ icon داخل input-field (مثل checkmark) */
+/* icon داخل input-field (مثل checkmark) */
 .form-field-name .checkmark {
   position: absolute;
   right: 12px;
@@ -2639,7 +2638,7 @@ defineExpose({
   width: 18px;
 }
 
-/* ✅ spacer في form-field-name */
+/* spacer في form-field-name */
 .form-field-name .spacer {
   display: flex;
   width: 34px;
@@ -2704,7 +2703,7 @@ defineExpose({
   left: 0;
   right: 0;
   z-index: 100;
-  width: calc(100% + 10px);
+  /* width محذوفة لأنها ستُحدد ديناميكياً */
 }
 
 .search-loading {

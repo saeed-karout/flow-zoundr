@@ -13,6 +13,11 @@
               :placeholder="field.placeholder"
               disabled
             />
+            <!-- قفل على جميع الحقول متى وُجدت أي بيانات فوترة،
+                 حتى الحقول الاختيارية الفارغة — نفس منطق Upload4Component. -->
+            <span class="checkmark" v-if="hasBillingData">
+              <img :src="iconDisabled" alt="Gesperrt" />
+            </span>
           </div>
         </div>
       </div>
@@ -27,6 +32,11 @@
               :placeholder="field.placeholder"
               disabled
             />
+            <!-- قفل على جميع الحقول متى وُجدت أي بيانات فوترة،
+                 حتى الحقول الاختيارية الفارغة — نفس منطق Upload4Component. -->
+            <span class="checkmark" v-if="hasBillingData">
+              <img :src="iconDisabled" alt="Gesperrt" />
+            </span>
           </div>
         </div>
       </div>
@@ -41,6 +51,11 @@
               :placeholder="field.placeholder"
               disabled
             />
+            <!-- قفل على جميع الحقول متى وُجدت أي بيانات فوترة،
+                 حتى الحقول الاختيارية الفارغة — نفس منطق Upload4Component. -->
+            <span class="checkmark" v-if="hasBillingData">
+              <img :src="iconDisabled" alt="Gesperrt" />
+            </span>
           </div>
         </div>
         <div class="CTAs">
@@ -54,8 +69,12 @@
 <script setup>
 import { app_code, user_url } from '@/zoundr/constants';
 import { noSplashScreen } from '@/zoundr/utils';
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { useDataStore } from '@/stores/data'; // Adjust path as needed
+import iconDisabled from '@/assets/icons/Icon_awesome-lock.png';
+
+const router = useRouter();
 
 // Initialize the store
 const dataStore = useDataStore();
@@ -63,40 +82,62 @@ const dataStore = useDataStore();
 // Reactive data object for the form fields
 const data = ref({
   column1: [
-    { label: "Firma", type: "text", placeholder: "Diggie GbR", value: "" },
-    { label: "Strasse + Hausnummer", type: "text", placeholder: "Rudhartstr. 17", value: "" },
-    { label: "E-Mail", type: "text", placeholder: "info@zoundr.com", value: "" },
+    { label: "Firma", type: "text", placeholder: "Firma eingeben", value: "" },
+    { label: "Strasse + Hausnummer", type: "text", placeholder: "Strasse und Hausnummer eingeben", value: "" },
+    { label: "E-Mail", type: "text", placeholder: "E-Mail-Adresse eingeben", value: "" },
   ],
   column2: [
-    { label: "Vorname", type: "text", placeholder: "Emanuel", value: "" },
-    { label: "PLZ", type: "text", placeholder: "80999", value: "" }, // Changed to text to handle null
-    { label: "Telefon", type: "text", placeholder: "+49 129 232 194", value: "" }, // Changed to text
+    { label: "Vorname", type: "text", placeholder: "Vorname eingeben", value: "" },
+    { label: "PLZ", type: "text", placeholder: "PLZ eingeben", value: "" },
+    { label: "Telefon", type: "text", placeholder: "Telefonnummer eingeben", value: "" },
   ],
   column3: [
-    { label: "Name", type: "text", placeholder: "Kellner", value: "" },
-    { label: "ORT", type: "text", placeholder: "München", value: "" },
-    { label: "LAND", type: "text", placeholder: "Deutschland", value: "" },
+    { label: "Name", type: "text", placeholder: "Nachname eingeben", value: "" },
+    { label: "ORT", type: "text", placeholder: "Ort eingeben", value: "" },
+    { label: "LAND", type: "text", placeholder: "Land auswählen", value: "" },
   ],
 });
 
-// Reactive state for enabling/disabling inputs
-const isEditable = ref(false);
+// وجود أي حقل فوترة يقفل النموذج بأكمله — مطابق لـ hasBillingData في Upload4Component.
+const hasBillingData = computed(() => {
+  const u = dataStore.user;
+  if (!u) return false;
+  return !!(u.billing_first_name || u.billing_last_name || u.billing_street_name ||
+            u.billing_street_number || u.billing_postal_code || u.billing_city ||
+            u.billing_country || u.billing_company);
+});
+
+// الـ API يرجّع رمز الدولة بالإنكليزية (germany)، والواجهة ألمانية بالكامل.
+// نفس خريطة countryDisplayName المستعملة في Upload4Component.
+const countryDisplayName = (c) => {
+  if (!c) return "";
+  const normalized = String(c).toLowerCase();
+  if (normalized === 'germany' || normalized === 'de') return 'Deutschland';
+  if (normalized === 'austria' || normalized === 'at') return 'Österreich';
+  if (normalized === 'switzerland' || normalized === 'ch') return 'Schweiz';
+  return c;
+};
 
 // Fetch user data when the component mounts
 onMounted(async () => {
   await dataStore.loadUser();
-  if (dataStore.user) {
-    // Map user data to form fields, handle null values
-    data.value.column1[0].value = dataStore.user.billing_company || "";
-    data.value.column1[1].value = dataStore.user.billing_address || "";
-    data.value.column1[2].value = dataStore.user.billing_email || dataStore.user.email || "";
-    data.value.column2[0].value = dataStore.user.billing_first_name || "";
-    data.value.column2[1].value = dataStore.user.billing_zip || "";
-    data.value.column2[2].value = dataStore.user.billing_phone || "";
-    data.value.column3[0].value = dataStore.user.billing_last_name || "";
-    data.value.column3[1].value = dataStore.user.billing_city || "";
-    data.value.column3[2].value = dataStore.user.billing_country || "";
-  }
+  const u = dataStore.user;
+  if (!u) return;
+
+  // الشارع ورقمه حقلان منفصلان في الـ API ويُعرضان معاً.
+  const street = [u.billing_street_name, u.billing_street_number]
+    .filter(v => v && String(v).trim() !== '')
+    .join(' ');
+
+  data.value.column1[0].value = u.billing_company || "";
+  data.value.column1[1].value = street;
+  data.value.column1[2].value = u.email || "";
+  data.value.column2[0].value = u.billing_first_name || "";
+  data.value.column2[1].value = u.billing_postal_code || "";
+  data.value.column2[2].value = u.phone || "";
+  data.value.column3[0].value = u.billing_last_name || "";
+  data.value.column3[1].value = u.billing_city || "";
+  data.value.column3[2].value = countryDisplayName(u.billing_country);
 });
 
 // Function to toggle edit mode
@@ -166,6 +207,20 @@ const goToProfile = () => {
   align-items: flex-end;
 }
 
+/* ✅ أيقونة القفل — نفس قياس وموضع Upload4Component.
+   .input-container فيه flex مع gap، فتقع الأيقونة يمين الحقل تلقائياً
+   (الإدخال يأخذ flex: 1) دون حاجة إلى وضع مطلق. */
+.checkmark {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.checkmark img {
+  width: 16px;
+  height: auto;
+}
+
 .form-field {
   display: flex;
   flex-direction: column;
@@ -215,7 +270,7 @@ const goToProfile = () => {
 .form-filed::placeholder {
   color: var(--Main-Colors-Slate-Light, #3a3e42);
   font-family: Heebo;
-  font-size: 16px;
+  font-size: 20px;
   font-style: normal;
   font-weight: 400;
   line-height: normal;
