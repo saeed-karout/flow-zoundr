@@ -107,6 +107,7 @@
                         />
                         <input 
                             type="text" 
+                            :class="{ 'is-correction': isCorrected('c_line_name') || isCorrected('c_line_year') }" 
                             class="border-r" 
                             v-model="localCLineName" 
                             placeholder="C-Line Name"
@@ -144,6 +145,7 @@
                         />
                         <input 
                             type="text" 
+                            :class="{ 'is-correction': isCorrected('p_line_name') || isCorrected('p_line_year') }" 
                             class="border-r" 
                             v-model="localPLineName" 
                             placeholder="P-Line Name"
@@ -659,7 +661,7 @@ watch(() => props.isLeaving, (newVal) => {
     font-weight: 700;
     line-height: 0.8;
     max-width: 100%;
-    overflow: hidden;
+    
     text-overflow: ellipsis;
     white-space: nowrap;
 }

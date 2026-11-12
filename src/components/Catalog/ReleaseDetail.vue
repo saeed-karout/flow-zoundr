@@ -292,38 +292,58 @@ const totalDuration = computed(() => {
   return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
 });
 
-// ========== Labelcopy: تنزيل PDF ==========
-//   ⚠️ ملف الـ formular لم يصل بعد. الآلية جاهزة هنا وتقرأ من مصدر واحد:
-//   غيّر LABELCOPY_PDF_URL إلى مسار الملف في public/ أو إلى مسار API عند وصوله.
-const LABELCOPY_PDF_URL = '/labelcopy/labelcopy.pdf';
 
+// ========== Labelcopy: تنزيل PDF عبر blob ==========
+//   GET /releases/{uuid}/labelcopy  → application/pdf
 const labelcopyLoading = ref(false);
 
 const handleLabelcopy = async () => {
   if (!isOnline.value) return;
   if (labelcopyLoading.value) return;
+
+  const uuid = route.params.uuid;
+  if (!uuid) {
+    console.error('No release UUID found');
+    return;
+  }
+
   labelcopyLoading.value = true;
 
   try {
-    const response = await fetch(LABELCOPY_PDF_URL);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const response = await apiRequest.get(`/releases/${uuid}/labelcopy`, {
+      responseType: 'blob',
+      headers: { Accept: 'application/pdf' }
+    });
 
-    const blob = await response.blob();
+    const blob = new Blob([response.data], { type: 'application/pdf' });
     const objectUrl = URL.createObjectURL(blob);
+
+    // اسم الملف: من Content-Disposition إن وُجد، وإلا من عنوان الإصدار
+    const safeTitle = String(release.value?.title || 'release').replace(/[\/:*?"<>|]/g, '_');
+    let fileName = `Labelcopy - ${safeTitle}.pdf`;
+
+    const disposition = response.headers?.['content-disposition'];
+    if (disposition) {
+      const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+      if (match?.[1]) fileName = decodeURIComponent(match[1]);
+    }
 
     const link = document.createElement('a');
     link.href = objectUrl;
-    // اسم الملف من عنوان الإصدار مع تنظيف المحارف غير المسموحة في أنظمة الملفات.
-    const safeTitle = String(release.value?.title || 'release').replace(/[\/:*?"<>|]/g, '_');
-    link.download = `Labelcopy - ${safeTitle}.pdf`;
+    link.download = fileName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
-    URL.revokeObjectURL(objectUrl);
-    console.log('✅ [Labelcopy] تم التنزيل');
+    // تأخير بسيط قبل التحرير لضمان بدء التنزيل في كل المتصفحات
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 500);
   } catch (err) {
-    console.error(`❌ [Labelcopy] تعذّر تنزيل الـ PDF من ${LABELCOPY_PDF_URL}:`, err);
+    // عند responseType: 'blob' يأتي جسم الخطأ (مثل 404) كـ Blob أيضاً
+    if (err?.response?.status === 404) {
+      console.error('Labelcopy nicht gefunden für Release:', uuid);
+    } else {
+      console.error('❌ [Labelcopy] فشل التنزيل:', err);
+    }
   } finally {
     labelcopyLoading.value = false;
   }

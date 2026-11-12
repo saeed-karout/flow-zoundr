@@ -96,7 +96,11 @@
               >
                 <div 
                   class="image" 
-                  :style="{ backgroundImage: release.cover ? `url(${getCoverUrl(release.cover)})` : 'none' }"
+                  :style="{
+                    '--cover-image': release.cover
+                      ? `url(${getCoverUrl(release.cover)})`
+                      : 'none'
+                  }"
                 >
                   <div class="text">
                     <div class="sub-text">
@@ -625,6 +629,7 @@ svg.plus path {
   background: var(--primary) 50% / cover no-repeat;
   flex-shrink: 0;
   filter: saturate(.4);
+  
   cursor: pointer;
   transition: filter 0.3s ease;
 
@@ -644,17 +649,15 @@ svg.plus path {
   flex: 1 0 0;
   align-self: stretch;
   border-radius: 20px;
-  background: url("../assets/icons/dashboard/user/shadows.png") 50% / cover no-repeat,
-    rgba(0, 0, 0, 0.4);
-  background-blend-mode: normal, saturation;
-  cursor: pointer;
-  transition: 0.3s ease;
+  background-image:
+    url("../assets/icons/dashboard/user/shadows.png"),
+    var(--cover-image);
   background-size: cover;
   background-position: center;
-}
-
-.music-card .image:hover {
-  background: url("../assets/icons/dashboard/user/shadows.png") 50% / cover no-repeat;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  transition: 0.3s ease;
+  
 }
 
 .music-card .image:hover .sub-text h1,

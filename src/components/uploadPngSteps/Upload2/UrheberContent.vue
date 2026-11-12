@@ -2,7 +2,7 @@
   <div class="tab-content">
     <div class="frame">
       <!-- Komponist -->
-      <div class="section" :class="{ 'is-correction': isSongCorrected('authors') }">
+      <div class="section" >
         <div class="title">Komponist</div>
         <div
           v-for="(input, index) in komponistInputs"
@@ -18,6 +18,7 @@
           <input
             type="text"
             class="input-field"
+            :class="{ 'is-correction': isSongCorrected('authors') }"
             v-model="input.value"
             placeholder="Vor- und Familienname"
             @input="updateKomponistValue(index, $event.target.value)"
@@ -57,7 +58,7 @@
       </div>
 
       <!-- Textdichter — يُعطَّل عند نوع instrumental (لا نصوص → لا كاتب نصوص) -->
-      <div class="section" :class="{ 'section-disabled': isInstrumental, 'is-correction': isSongCorrected('authors') }">
+      <div class="section" >
         <div class="title">Textdichter</div>
         <div
           v-for="(input, index) in textdichterInputs"
@@ -65,7 +66,8 @@
           class="form-field"
           :class="{
             'is-hovered': input.isHovered,
-            'has-checkmark': isValidName(input.value)
+            'has-checkmark': isValidName(input.value),
+           
           }"
           @mouseenter="input.isHovered = true"
           @mouseleave="input.isHovered = false"
@@ -73,6 +75,8 @@
           <input
             type="text"
             class="input-field"
+            :class="{ 'section-disabled': isInstrumental,
+            'is-correction': isSongCorrected('authors')}"
             v-model="input.value"
             placeholder="Vor- und Familienname"
             :disabled="isInstrumental"
@@ -115,7 +119,7 @@
 
     <div class="frame">
       <!-- Verlag -->
-      <div class="section" :class="{ 'is-correction': isSongCorrected('authors') }">
+      <div class="section" >
         <div class="title">Verlag</div>
         <div
           v-for="(input, index) in verlagInputs"
@@ -133,6 +137,7 @@
             class="input-field"
             v-model="input.value"
             placeholder="Name Verlag"
+            :class="{ 'is-correction': isSongCorrected('authors') }"
             @input="updateVerlagValue(index, $event.target.value)"
           />
           <div v-if="input.value && input.value.trim() !== ''" class="checkmark">
@@ -170,7 +175,7 @@
       </div>
 
       <!-- C-Line -->
-      <div class="section" :class="{ 'is-correction': isSongCorrected('authors') }">
+      <div class="section" >
         <div class="title">C-Line</div>
         <div
           v-for="(input, index) in cLineInputs"
@@ -188,6 +193,7 @@
             class="input-field"
             v-model="input.value"
             placeholder="C-Line"
+            :class="{ 'is-correction': isSongCorrected('authors') }"
             @input="updateCLineValue(index, $event.target.value)"
           />
           <div v-if="input.value && input.value.trim() !== ''" class="checkmark">

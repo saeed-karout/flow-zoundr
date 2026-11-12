@@ -11,6 +11,7 @@
     <img src="@/assets/images/bg-card-release/1-min.png"
          alt="Upload Background"
          class="background-image"
+        
          aria-hidden="true" />
 
     <!-- Dashed border فقط إذا ما فيش صورة أبداً -->
@@ -18,7 +19,7 @@
 
     <!-- الصورة النهائية (من السيرفر أو من الرفع المحلي) -->
     <img v-if="finalImageUrl && !isUploadingActive" :src="finalImageUrl" alt="Cover Image"
-         class="schutzen-upload-icon uploaded-image" aria-hidden="true" />
+         class="schutzen-upload-icon uploaded-image" :class="{ 'is-correction': isCorrected('cover') }" aria-hidden="true" />
 
     <!-- النصوص تظهر دائماً عند hover حتى لو存在 صورة -->
     <span v-if="!finalImageUrl && !isUploadingActive" class="schutzen-file-icon">COVER</span>
@@ -60,6 +61,7 @@
 </template>
 
 <script setup>
+import { useCorrections } from '@/composables/useCorrections';
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import CircleProgress from 'vue3-circle-progress';
 import 'vue3-circle-progress/dist/circle-progress.css';
@@ -70,6 +72,7 @@ const props = defineProps({
   isUploading: { type: Boolean, default: false },
   uploadProgress: { type: Number, default: 0 }
 });
+const { isCorrected } = useCorrections();
 
 const emit = defineEmits(['update:uploadedImage', 'file-selected']);
 

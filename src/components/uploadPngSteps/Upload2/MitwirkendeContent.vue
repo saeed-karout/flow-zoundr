@@ -2,7 +2,7 @@
   <div class="tab-content">
     <div class="frame">
       <!-- Artist -->
-      <div class="section" :class="{ 'is-correction': isSongCorrected('contributors') }">
+      <div class="section" >
         <div class="title">Artist</div>
         <div
           v-for="(input, index) in artistInputs"
@@ -18,6 +18,7 @@
           <input
             type="text"
             class="input-field name-field"
+            :class="{ 'is-correction': isSongCorrected('contributors') }"
             v-model="input.name"
             placeholder="Name"
             @input="handleArtistInput(index, $event.target.value)"
@@ -111,7 +112,7 @@
       </div>
 
       <!-- Feature مع وظيفة البحث -->
-      <div class="section feature-section" :class="{ active: isFeatureActive, 'is-correction': isSongCorrected('contributors') }">
+      <div class="section feature-section" :class="{ active: isFeatureActive,}">
         <div class="top-line">
           <div class="title">Feature</div>
           <div class="btn-switch" @click="toggleFeature">
@@ -132,6 +133,7 @@
           <input
             type="text"
             class="input-field name-field"
+            :class="{ 'is-correction': isSongCorrected('contributors') }"
             v-model="input.name"
             placeholder="Name"
             :disabled="!isFeatureActive"
@@ -229,7 +231,7 @@
     <div class="frame1">
       <div class="section-frame">
         <!-- P-Line -->
-        <div class="section" :class="{ 'is-correction': isSongCorrected('contributors') }">
+        <div class="section" >
           <div class="title">P-Line</div>
           <div
             v-for="(input, index) in pLineInputs"
@@ -245,6 +247,7 @@
             <input
               type="text"
               class="input-field name-field"
+              :class="{ 'is-correction': isSongCorrected('contributors') }"
               v-model="input.name"
               placeholder="P-Line Name"
               @input="updatePLineValue(index)"
@@ -274,7 +277,7 @@
         </div>
 
         <!-- Produzent -->
-        <div class="section" :class="{ 'is-correction': isSongCorrected('contributors') }">
+        <div class="section" >
           <div class="title">Produzent</div>
           <div
             v-for="(input, index) in produzentInputs"
@@ -290,6 +293,7 @@
             <input
               type="text"
               class="input-field name-field"
+              :class="{ 'is-correction': isSongCorrected('contributors') }"
               v-model="input.name"
               placeholder="Name"
               @input="updateProduzentValue(index)"
@@ -332,7 +336,7 @@
 
       <div class="section-frame">
         <!-- Jahr der Produktion -->
-        <div class="section" :class="{ 'is-correction': isSongCorrected('production_year') }">
+        <div class="section">
           <div class="title">Jahr der Produktion</div>
           <div
             class="form-field"
@@ -346,6 +350,7 @@
             <input
               type="text"
               class="input-field"
+               :class="{ 'is-correction': isSongCorrected('production_year') }"
               v-model="productionYear"
               placeholder="2026"
               maxlength="4"
@@ -365,7 +370,7 @@
     </div>
 
     <div class="frame2">
-      <div class="section weitere-section" :class="{ active: isWeitereActive, 'is-correction': isSongCorrected('contributors') }">
+      <div class="section weitere-section" :class="{ active: isWeitereActive, }">
         <div class="top-line">
           <div class="title">Weitere Mitwirkende</div>
           <div class="btn-switch" @click="toggleWeitere">
@@ -379,17 +384,19 @@
             class="form-field-bottom"
             :class="{ 
               'is-hovered': input.isHovered,
-              'has-checkmark': input.role && input.role.trim() !== '' && isValidName(input.name)
+              'has-checkmark': input.role && input.role.trim() !== '' && isValidName(input.name),
+              
             }"
             @mouseenter="input.isHovered = true"
             @mouseleave="input.isHovered = false"
           >
-            <div class="combo-box" :class="{ 'has-checkmark': input.role && input.role.trim() !== '' }">
+            <div class="combo-box" :class="{ 'has-checkmark': input.role && input.role.trim() !== '', }">
               <div class="custom-select" @click.stop="toggleRoleDropdown(index)">
-                <div class="select-trigger" :class="{ 'selected': input.role && input.role.trim() !== '' }" :disabled="!isWeitereActive">
+                <div class="select-trigger" :class="{ 'selected': input.role && input.role.trim() !== '' ,'is-correction': isSongCorrected('contributors')}" :disabled="!isWeitereActive">
                   <input 
                     type="text" 
                     class="search-input-trigger" 
+                    :class="{ }"
                     :value="input.role && input.role.trim() !== '' ? input.role : input.searchQuery"
                     @input="handleSearchInput(index, $event.target.value)"
                     :placeholder="'Rolle suchen...'"
@@ -398,9 +405,10 @@
                     :disabled="!isWeitereActive"
                   />
                 </div>
-                <div class="dropdown" v-show="input.isRoleDropdownOpen && isWeitereActive" @click.stop>
+                <div class="dropdown"  v-show="input.isRoleDropdownOpen && isWeitereActive" @click.stop>
                   <div 
                     class="option" 
+                    
                     v-for="role in filteredRoles(input.searchQuery)" 
                     :key="role.id"
                     @click.stop="selectRoleOption(index, role.name)"
@@ -431,6 +439,7 @@
               <input
                 type="text"
                 class="input-field name-field"
+                   :class="{'is-correction': isSongCorrected('contributors') }"
                 v-model="input.name"
                 placeholder="Name"
                 :disabled="!isWeitereActive"

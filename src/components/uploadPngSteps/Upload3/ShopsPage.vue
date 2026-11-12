@@ -39,12 +39,12 @@
 
       <div class="bottom-shops">
         <!-- Countries to Publish In -->
-        <div class="form-field" :class="{ 'is-correction': isCorrected('countries_included') }">
+        <div class="form-field" >
           <div class="title">In welchen Länder möchtest du veröffentlichen?</div>
           <!-- Auto mode: all countries included -->
           <div v-if="isAllCountriesModeForInclude" class="search-box" @mouseenter="isIncludeHovered = true" @mouseleave="isIncludeHovered = false">
             <div class="section-input has-checkmark enabled">
-              <input type="text" class="input-field" v-model="allCountriesText" @input="handleAllCountriesInput('include')" />
+              <input type="text" class="input-field" :class="{ 'is-correction': isCorrected('countries_included') }" v-model="allCountriesText" @input="handleAllCountriesInput('include')" />
               <div v-if="allCountriesText" class="checkmark">
                 <img src="/icon/y.png" class="icon-y" alt="checkmark icon" />
               </div>
@@ -126,12 +126,12 @@
         </div>
 
         <!-- Countries to Exclude -->
-        <div class="form-field" :class="{ 'disabled': !isExcludeInputEnabled, 'is-correction': isCorrected('countries_excluded') }">
+        <div class="form-field" :class="{ 'disabled': !isExcludeInputEnabled,  }">
           <div class="title">Welche Länder möchtest du ausschliessen?</div>
           <!-- Auto mode: no excluded countries -->
           <div v-if="isAllCountriesModeForExclude" class="search-box" @mouseenter="isExcludeHovered = true" @mouseleave="isExcludeHovered = false">
             <div class="section-input has-checkmark enabled">
-              <input type="text" class="input-field" v-model="noCountriesText" @input="handleAllCountriesInput('exclude')" />
+              <input type="text" class="input-field" :class="{'is-correction': isCorrected('countries_excluded')}" v-model="noCountriesText" @input="handleAllCountriesInput('exclude')" />
               <div v-if="noCountriesText" class="checkmark">
                 <img src="/icon/y.png" class="icon-y" alt="checkmark icon" />
               </div>

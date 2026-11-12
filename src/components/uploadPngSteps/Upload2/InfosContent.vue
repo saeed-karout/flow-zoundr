@@ -273,7 +273,7 @@
      @dragenter.prevent="handleDragEnter"
      @dragleave.prevent="handleDragLeave"
      @drop.prevent="handleFileDrop"
-     :class="{ 'drag-over': isDragOver, 'is-correction': isSongCorrected('song_file') }">
+     :class="{ 'drag-over': isDragOver, }">
   <div 
     v-if="!formData.fileUploaded" 
     class="upload-file" 
@@ -300,14 +300,14 @@
         </div>
       </div>
     </div>
-    <input type="file" accept=".wav" class="file-input" ref="fileInput" @change="handleFileSelect" hidden />
+    <input type="file" accept=".wav" class="file-input"  ref="fileInput" @change="handleFileSelect" hidden />
     <div class="play" :class="{ visible: isHoveredBox }"
       @click="openVideoPopup('fileUpload')">
       <img :src="iconPlay" class="icon" alt="play icon" />
     </div>
   </div>
 
-  <div v-if="formData.fileUploaded && !isLyricsExpanded" class="song-form">
+  <div v-if="formData.fileUploaded && !isLyricsExpanded" class="song-form" >
     <!-- Audio Loading Indicator -->
     <div v-if="isAudioLoading" class="audio-loading-indicator">
       <div class="audio-loading-spinner"></div>
@@ -316,7 +316,8 @@
     <div 
       v-show="!isAudioLoading" 
       class="waveform-container" 
-      :class="{ 'is-correction': isSongCorrected('preview_start') || isSongCorrected('preview_file') }"
+      :class="{ 'is-correction': isSongCorrected('preview_start') || isSongCorrected('preview_file') ,'is-correction': isSongCorrected('song_file')}"
+    
       :style="{ 
         visibility: isAudioLoading ? 'hidden' : 'visible',
         opacity: isAudioLoading ? 0 : 1

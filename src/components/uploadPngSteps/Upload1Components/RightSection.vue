@@ -86,13 +86,13 @@
                             </div>
                             <div class="platforms">
                                 <div class="platform-column">
-                                    <div v-if="result.spotify && result.spotify.id" 
-                                        class="platform-icon-container"
-                                        @mouseenter="showTooltip(result.spotify.id, 'spotify', resultIndex)"
-                                        @mouseleave="hideTooltip(resultIndex, 'spotify')"
-                                        @click.stop="openProfile(result.spotify.href, 'spotify')">
-                                        <div class="spotify-icon"></div>
-                                    </div>
+                                   <div v-if="result.spotify && result.spotify.id" 
+    class="platform-icon-container"
+    @mouseenter="showTooltip(result.spotify.id, 'spotify', resultIndex)"
+    @mouseleave="hideTooltip(resultIndex, 'spotify')"
+    @click.stop="openSpotifyProfile(result.spotify.id)">
+    <div class="spotify-icon"></div>
+</div>
                                     <div v-else class="platform-icon-placeholder"></div>
                                 </div>
                                 <div class="platform-column">
@@ -259,7 +259,15 @@ const showTooltip = (id, platform, index) => {
     activeTooltip.value = tooltipKey;
     console.log(`🎯 Show tooltip for ${platform}:`, id);
 };
-
+// فتح بروفايل Spotify بالشكل: https://open.spotify.com/artist/{id}
+const openSpotifyProfile = (id) => {
+    if (!id) {
+        
+        return;
+    }
+    const url = `https://open.spotify.com/artist/${encodeURIComponent(id)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+};
 const hideTooltip = (index, platform) => {
     const tooltipKey = `${platform}-${index}`;
     
